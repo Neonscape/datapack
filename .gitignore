@@ -1,0 +1,11 @@
+build/bin
+node_modules
+frontend/dist
+
+# Generated datapack exports
+exports/
+
+# Local/editor
+.env
+*.swp
+.DS_Store

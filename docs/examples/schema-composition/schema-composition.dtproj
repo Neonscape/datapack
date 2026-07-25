@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "tableRoots": ["tables"],
+  "schemaRoots": ["schema"],
+  "exclude": ["exports"],
+  "export": {
+    "directory": "exports",
+    "targets": ["csv"]
+  }
+}

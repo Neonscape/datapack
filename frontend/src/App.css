@@ -1,0 +1,201 @@
+.app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    color: #20272f;
+    background: #f6f7f8;
+}
+
+.app-header {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 14px;
+    border-bottom: 1px solid #d9dee3;
+    background: #ffffff;
+}
+
+.brand {
+    color: #183a4a;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.header-divider {
+    width: 1px;
+    height: 18px;
+    background: #d9dee3;
+}
+
+.project-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #55616c;
+    font-size: 13px;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+}
+
+.open-button {
+    border: 1px solid #126c7b;
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: #ffffff;
+    background: #126c7b;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.open-button:hover {
+    background: #0c5865;
+}
+
+.build-mode {
+    padding: 3px 7px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.build-mode-auto {
+    color: #11633c;
+    background: #e2f4e9;
+}
+
+.build-mode-manual {
+    color: #805a0a;
+    background: #fff3d6;
+}
+
+.workbench {
+    min-height: 0;
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(210px, 280px) 1fr;
+}
+
+.project-explorer {
+    min-width: 0;
+    border-right: 1px solid #d9dee3;
+    background: #fbfcfc;
+}
+
+.panel-title {
+    padding: 12px;
+    border-bottom: 1px solid #e5e9ec;
+    color: #53616c;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.tree {
+    padding: 8px 0;
+    overflow: auto;
+}
+
+.tree-row {
+    height: 26px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding-right: 8px;
+    color: #35424c;
+    font-size: 13px;
+}
+
+.tree-file {
+    color: #5b6973;
+}
+
+.node-icon {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 auto;
+    border-radius: 1px;
+    background: #a7b2b9;
+}
+
+.node-project { background: #126c7b; border-radius: 50%; }
+.node-group { background: #d3911c; }
+.node-directory { background: #ddae51; }
+.node-tableFile { background: #4f8fb0; }
+.node-schemaFile { background: #7587ba; }
+
+.editor-placeholder,
+.welcome {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 28px;
+    text-align: center;
+}
+
+.editor-placeholder h1,
+.welcome h1 {
+    margin: 12px 0 6px;
+    color: #26333d;
+    font-size: 19px;
+    font-weight: 650;
+}
+
+.editor-placeholder p,
+.welcome p {
+    max-width: 420px;
+    margin: 0;
+    color: #687580;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.welcome-mark {
+    display: grid;
+    width: 56px;
+    height: 56px;
+    place-items: center;
+    border: 1px solid #b9d4d9;
+    border-radius: 6px;
+    color: #126c7b;
+    background: #e9f4f5;
+    font-size: 18px;
+    font-weight: 750;
+}
+
+.open-button-large {
+    margin-top: 20px;
+    padding: 8px 14px;
+}
+
+.error-toast {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    max-width: min(440px, calc(100vw - 32px));
+    padding: 10px 12px;
+    border: 1px solid #e5b8b8;
+    border-radius: 4px;
+    color: #812c2c;
+    background: #fff4f4;
+    font-size: 13px;
+}
+
+@media (max-width: 600px) {
+    .workbench {
+        grid-template-columns: 160px 1fr;
+    }
+
+    .build-mode {
+        display: none;
+    }
+}
