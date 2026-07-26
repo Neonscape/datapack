@@ -34,6 +34,10 @@ export function OpenProject(arg1) {
   return window['go']['main']['App']['OpenProject'](arg1);
 }
 
+export function RenameColumn(arg1) {
+  return window['go']['main']['App']['RenameColumn'](arg1);
+}
+
 export function RenameRow(arg1) {
   return window['go']['main']['App']['RenameRow'](arg1);
 }

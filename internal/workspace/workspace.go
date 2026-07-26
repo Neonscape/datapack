@@ -96,6 +96,17 @@ type ColumnDeleteResult struct {
 	Workspace View           `json:"workspace"`
 }
 
+type ColumnRename struct {
+	Path    string `json:"path"`
+	OldName string `json:"oldName"`
+	NewName string `json:"newName"`
+}
+
+type ColumnRenameResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
 func NewService(configRoot string) *Service {
 	return &Service{configRoot: configRoot}
 }
@@ -344,6 +355,24 @@ func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) 
 		return ColumnDeleteResult{}, err
 	}
 	return ColumnDeleteResult{Table: table, Workspace: view}, nil
+}
+
+func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) {
+	if s.current == nil {
+		return ColumnRenameResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, rename.Path) {
+		return ColumnRenameResult{}, fmt.Errorf("table %q is not part of the open project", rename.Path)
+	}
+	table, err := document.RenameColumn(rename.Path, rename.OldName, rename.NewName)
+	if err != nil {
+		return ColumnRenameResult{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return ColumnRenameResult{}, err
+	}
+	return ColumnRenameResult{Table: table, Workspace: view}, nil
 }
 
 func exportDirectory(project Project) (string, error) {

@@ -155,6 +155,32 @@ func DeleteColumn(path, name string) (Table, error) {
 	return validateAndReplace(path, candidate)
 }
 
+// RenameColumn updates a column and all same-table metadata that identifies it.
+func RenameColumn(path, oldName, newName string) (Table, error) {
+	if !validIdentifier(newName) {
+		return Table{}, fmt.Errorf("column %q must be a valid CUE identifier", newName)
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	if err := renameColumn(file, oldName, newName); err != nil {
+		return Table{}, err
+	}
+	candidate, err := format.Node(file)
+	if err != nil {
+		return Table{}, fmt.Errorf("format updated table: %w", err)
+	}
+	if err := validateAllRows(path, candidate); err != nil {
+		return Table{}, err
+	}
+	return validateAndReplace(path, candidate)
+}
+
 func replaceCell(file *ast.File, rowID, column string, value ast.Expr) error {
 	fields := fieldsOfFile(file)
 	rowSchema := requiredField(fields, "#Row")
@@ -267,6 +293,41 @@ func removeColumn(file *ast.File, name string) error {
 	return nil
 }
 
+func renameColumn(file *ast.File, oldName, newName string) error {
+	fields := fieldsOfFile(file)
+	rowSchema := requiredField(fields, "#Row")
+	if _, exists := fieldsOfStruct(rowSchema.Value)[newName]; exists {
+		return fmt.Errorf("column %q already exists", newName)
+	}
+	if !renameNamedField(rowSchema.Value, oldName, newName) {
+		return fmt.Errorf("column %q does not exist", oldName)
+	}
+	rows := requiredField(fields, "rows")
+	for _, row := range orderedStructFields(rows.Value) {
+		renameNamedField(row.Value, oldName, newName)
+	}
+	tool := fields["_tool"]
+	if tool != nil {
+		toolFields := fieldsOfStruct(tool.Value)
+		if foreignKeys := toolFields["foreignKeys"]; foreignKeys != nil {
+			renameNamedField(foreignKeys.Value, oldName, newName)
+		}
+		if formulas := toolFields["formulas"]; formulas != nil {
+			renameNamedField(formulas.Value, oldName, newName)
+		}
+	}
+	if export := fields["_export"]; export != nil {
+		exportFields := fieldsOfStruct(export.Value)
+		if csv := exportFields["csv"]; csv != nil {
+			csvFields := fieldsOfStruct(csv.Value)
+			if columns := csvFields["columns"]; columns != nil {
+				renameStringListValue(columns.Value, oldName, newName)
+			}
+		}
+	}
+	return nil
+}
+
 func removeNamedField(expression ast.Expr, name string) bool {
 	structLiteral, ok := expression.(*ast.StructLit)
 	if !ok {
@@ -282,6 +343,21 @@ func removeNamedField(expression ast.Expr, name string) bool {
 	return false
 }
 
+func renameNamedField(expression ast.Expr, oldName, newName string) bool {
+	structLiteral, ok := expression.(*ast.StructLit)
+	if !ok {
+		return false
+	}
+	for _, element := range structLiteral.Elts {
+		field, ok := element.(*ast.Field)
+		if ok && labelOf(field) == oldName {
+			field.Label = ast.NewIdent(newName)
+			return true
+		}
+	}
+	return false
+}
+
 func removeStringListValue(expression ast.Expr, value string) {
 	list, ok := expression.(*ast.ListLit)
 	if !ok {
@@ -290,6 +366,19 @@ func removeStringListValue(expression ast.Expr, value string) {
 	for index := 0; index < len(list.Elts); index++ {
 		if matchesString(list.Elts[index], value) {
 			list.Elts = append(list.Elts[:index], list.Elts[index+1:]...)
+			return
+		}
+	}
+}
+
+func renameStringListValue(expression ast.Expr, oldValue, newValue string) {
+	list, ok := expression.(*ast.ListLit)
+	if !ok {
+		return
+	}
+	for index, element := range list.Elts {
+		if matchesString(element, oldValue) {
+			list.Elts[index] = stringLiteral(newValue)
 			return
 		}
 	}

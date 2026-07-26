@@ -278,6 +278,26 @@ _export: {csv: {enabled: true, columns: ["id", "name", "effectID"]}}`)
 	}
 }
 
+func TestRenameColumnUpdatesValuesAndMetadata(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {effectID: string}
+rows: {sword: {effectID: "burn"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table: "rpg.effect"}}, formulas: {effectID: "ignored"}}
+_export: {csv: {enabled: true, columns: ["id", "effectID"]}}`)
+
+	table, err := RenameColumn(path, "effectID", "effectKey")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.Columns[0].Name != "effectKey" || table.Rows[0].Values["effectKey"].Display != "burn" {
+		t.Fatalf("table = %#v", table)
+	}
+	if table.ForeignKeys[0].Column != "effectKey" || table.CSVExport.Columns[1] != "effectKey" {
+		t.Fatalf("metadata = %#v", table)
+	}
+}
+
 func writeSource(t *testing.T, name, source string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)

@@ -98,3 +98,8 @@ func (a *App) AddColumn(add workspace.ColumnAdd) (workspace.ColumnAddResult, err
 func (a *App) DeleteColumn(delete workspace.ColumnDelete) (workspace.ColumnDeleteResult, error) {
 	return a.workspace.DeleteColumn(delete)
 }
+
+// RenameColumn changes a column and updates its same-table metadata.
+func (a *App) RenameColumn(rename workspace.ColumnRename) (workspace.ColumnRenameResult, error) {
+	return a.workspace.RenameColumn(rename)
+}

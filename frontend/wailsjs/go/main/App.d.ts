@@ -19,6 +19,8 @@ export function GetTable(arg1:string):Promise<document.Table>;
 
 export function OpenProject(arg1:string):Promise<workspace.View>;
 
+export function RenameColumn(arg1:workspace.ColumnRename):Promise<workspace.ColumnRenameResult>;
+
 export function RenameRow(arg1:workspace.RowRename):Promise<workspace.RowRenameResult>;
 
 export function SelectProject():Promise<workspace.View>;
