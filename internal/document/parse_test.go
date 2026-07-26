@@ -239,6 +239,25 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestAddColumnInitializesAndValidatesEveryRow(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}, potion: {name: "Potion"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	table, err := AddColumn(path, "price", "int & >=0", "10")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(table.Columns) != 2 || table.Rows[0].Values["price"].Expression != "10" || table.Rows[1].Values["price"].Expression != "10" {
+		t.Fatalf("table = %#v", table)
+	}
+	if _, err := AddColumn(path, "invalid", "int & >=0", "-1"); err == nil {
+		t.Fatal("AddColumn() accepted an invalid initial value")
+	}
+}
+
 func writeSource(t *testing.T, name, source string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)

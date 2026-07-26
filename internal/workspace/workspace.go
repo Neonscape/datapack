@@ -74,6 +74,18 @@ type ExportResult struct {
 	Files []string `json:"files"`
 }
 
+type ColumnAdd struct {
+	Path              string `json:"path"`
+	Name              string `json:"name"`
+	SchemaExpression  string `json:"schemaExpression"`
+	InitialExpression string `json:"initialExpression"`
+}
+
+type ColumnAddResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
 func NewService(configRoot string) *Service {
 	return &Service{configRoot: configRoot}
 }
@@ -286,6 +298,24 @@ func (s *Service) Export() (ExportResult, error) {
 		return ExportResult{}, err
 	}
 	return ExportResult{Files: result.Files}, nil
+}
+
+func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
+	if s.current == nil {
+		return ColumnAddResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, add.Path) {
+		return ColumnAddResult{}, fmt.Errorf("table %q is not part of the open project", add.Path)
+	}
+	table, err := document.AddColumn(add.Path, add.Name, add.SchemaExpression, add.InitialExpression)
+	if err != nil {
+		return ColumnAddResult{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return ColumnAddResult{}, err
+	}
+	return ColumnAddResult{Table: table, Workspace: view}, nil
 }
 
 func exportDirectory(project Project) (string, error) {

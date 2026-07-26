@@ -95,6 +95,42 @@ func DeleteRow(path, rowID string) (Table, error) {
 	return validateAndReplace(path, candidate)
 }
 
+// AddColumn adds a required column and initializes every existing row with one
+// CUE expression. New columns are intentionally not added to export or foreign
+// key metadata; those are explicit follow-up configuration changes.
+func AddColumn(path, name, schemaExpression, initialExpression string) (Table, error) {
+	if !validIdentifier(name) {
+		return Table{}, fmt.Errorf("column %q must be a valid CUE identifier", name)
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	schema, err := parser.ParseExpr(path, schemaExpression)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse column Schema: %w", err)
+	}
+	value, err := parser.ParseExpr(path, initialExpression)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse initial column value: %w", err)
+	}
+	if err := insertColumn(file, name, schema, value); err != nil {
+		return Table{}, err
+	}
+	candidate, err := format.Node(file)
+	if err != nil {
+		return Table{}, fmt.Errorf("format updated table: %w", err)
+	}
+	if err := validateAllRows(path, candidate); err != nil {
+		return Table{}, err
+	}
+	return validateAndReplace(path, candidate)
+}
+
 func replaceCell(file *ast.File, rowID, column string, value ast.Expr) error {
 	fields := fieldsOfFile(file)
 	rowSchema := requiredField(fields, "#Row")
@@ -153,6 +189,40 @@ func removeRow(file *ast.File, rowID string) error {
 	return fmt.Errorf("row %q does not exist", rowID)
 }
 
+func insertColumn(file *ast.File, name string, schema, value ast.Expr) error {
+	fields := fieldsOfFile(file)
+	rowSchema := requiredField(fields, "#Row")
+	rowSchemaValue, ok := rowSchema.Value.(*ast.StructLit)
+	if !ok {
+		return fmt.Errorf("#Row must be a struct")
+	}
+	if _, exists := fieldsOfStruct(rowSchema.Value)[name]; exists {
+		return fmt.Errorf("column %q already exists", name)
+	}
+	rows := requiredField(fields, "rows")
+	for _, row := range orderedStructFields(rows.Value) {
+		rowValues, ok := row.Value.(*ast.StructLit)
+		if !ok {
+			return fmt.Errorf("row %q is not a struct", labelOf(row))
+		}
+		rowValues.Elts = append(rowValues.Elts, &ast.Field{Label: ast.NewIdent(name), Value: cloneExpression(value)})
+	}
+	rowSchemaValue.Elts = append(rowSchemaValue.Elts, &ast.Field{Label: ast.NewIdent(name), Value: schema})
+	return nil
+}
+
+func cloneExpression(expression ast.Expr) ast.Expr {
+	formatted, err := format.Node(expression)
+	if err != nil {
+		return expression
+	}
+	clone, err := parser.ParseExpr("column-value.cue", formatted)
+	if err != nil {
+		return expression
+	}
+	return clone
+}
+
 func validIdentifier(value string) bool {
 	if value == "" {
 		return false
@@ -172,6 +242,23 @@ func validIdentifier(value string) bool {
 }
 
 func validateCellValue(path string, source []byte, rowID string) error {
+	return validateRows(path, source, []string{rowID})
+}
+
+func validateAllRows(path string, source []byte) error {
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return fmt.Errorf("parse updated table: %w", err)
+	}
+	rows := requiredField(fieldsOfFile(file), "rows")
+	rowIDs := make([]string, 0, len(orderedStructFields(rows.Value)))
+	for _, row := range orderedStructFields(rows.Value) {
+		rowIDs = append(rowIDs, labelOf(row))
+	}
+	return validateRows(path, source, rowIDs)
+}
+
+func validateRows(path string, source []byte, rowIDs []string) error {
 	instances := load.Instances([]string{"."}, &load.Config{
 		Dir:     filepath.Dir(path),
 		Overlay: map[string]load.Source{path: load.FromBytes(source)},
@@ -185,9 +272,11 @@ func validateCellValue(path string, source []byte, rowID string) error {
 		return fmt.Errorf("load updated table package: %w", err)
 	}
 	rowSchema := packageValue.LookupPath(cue.MakePath(cue.Def("Row")))
-	row := packageValue.LookupPath(cue.MakePath(cue.Str("rows"), cue.Str(rowID)))
-	if err := rowSchema.Unify(row).Validate(cue.Concrete(true)); err != nil {
-		return fmt.Errorf("validate row %q: %w", rowID, err)
+	for _, rowID := range rowIDs {
+		row := packageValue.LookupPath(cue.MakePath(cue.Str("rows"), cue.Str(rowID)))
+		if err := rowSchema.Unify(row).Validate(cue.Concrete(true)); err != nil {
+			return fmt.Errorf("validate row %q: %w", rowID, err)
+		}
 	}
 	return nil
 }

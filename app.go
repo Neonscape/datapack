@@ -88,3 +88,8 @@ func (a *App) RenameRow(rename workspace.RowRename) (workspace.RowRenameResult, 
 func (a *App) Export() (workspace.ExportResult, error) {
 	return a.workspace.Export()
 }
+
+// AddColumn adds a column and initializes its value for every existing row.
+func (a *App) AddColumn(add workspace.ColumnAdd) (workspace.ColumnAddResult, error) {
+	return a.workspace.AddColumn(add)
+}
