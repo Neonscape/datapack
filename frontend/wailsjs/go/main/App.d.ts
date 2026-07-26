@@ -4,8 +4,6 @@ import {workspace} from '../models';
 
 export function CurrentWorkspace():Promise<workspace.View|boolean>;
 
-export function Greet(arg1:string):Promise<string>;
-
 export function OpenProject(arg1:string):Promise<workspace.View>;
 
 export function SelectProject():Promise<workspace.View>;

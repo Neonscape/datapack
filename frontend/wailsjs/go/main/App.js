@@ -6,10 +6,6 @@ export function CurrentWorkspace() {
   return window['go']['main']['App']['CurrentWorkspace']();
 }
 
-export function Greet(arg1) {
-  return window['go']['main']['App']['Greet'](arg1);
-}
-
 export function OpenProject(arg1) {
   return window['go']['main']['App']['OpenProject'](arg1);
 }

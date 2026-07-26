@@ -18,9 +18,17 @@ func TestOpenProjectLoadsSettingsAndSourceTree(t *testing.T) {
   "exclude": ["tables/generated"],
   "export": {"directory": "exports", "targets": ["csv"]}
 }`)
-	writeFile(t, filepath.Join(projectRoot, "tables", "items", "item.cue"), "package item\n")
+	writeFile(t, filepath.Join(projectRoot, "tables", "items", "item.cue"), `package item
+	#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: "sword"}
+_tool: {table: {namespace: "rpg", name: "item"}}
+`)
 	writeFile(t, filepath.Join(projectRoot, "tables", "generated", "ignored.cue"), "package generated\n")
-	writeFile(t, filepath.Join(projectRoot, "schema", "common", "common.cue"), "package common\n")
+	writeFile(t, filepath.Join(projectRoot, "schema", "common", "common.cue"), `package common
+#GameID: string
+_schema: {definitions: {GameID: {kind: "type", type: "string"}}}
+`)
 
 	configRoot := t.TempDir()
 	writeFile(t, SettingsPath(configRoot), `{
@@ -35,14 +43,53 @@ func TestOpenProjectLoadsSettingsAndSourceTree(t *testing.T) {
 	if view.Settings.Build.Mode != "manual" {
 		t.Fatalf("build mode = %q, want manual", view.Settings.Build.Mode)
 	}
-	if got := findNode(view.Tree.Root, "item.cue"); got == nil || got.Kind != projecttree.NodeTableFile {
+	if got := findNode(view.Tree.Root, "rpg.item"); got == nil || got.Kind != projecttree.NodeTable {
 		t.Fatalf("table source was not discovered: %#v", view.Tree)
 	}
-	if got := findNode(view.Tree.Root, "common.cue"); got == nil || got.Kind != projecttree.NodeSchemaFile {
+	if got := findNodeByKind(view.Tree.Root, "common", projecttree.NodeSchemaFile); got == nil {
 		t.Fatalf("schema source was not discovered: %#v", view.Tree)
 	}
 	if got := findNode(view.Tree.Root, "ignored.cue"); got != nil {
 		t.Fatalf("excluded source was discovered: %#v", got)
+	}
+	if len(view.Schemas.Definitions) != 1 || view.Schemas.Definitions[0].ID != "common.#GameID" {
+		t.Fatalf("schema index = %#v", view.Schemas)
+	}
+}
+
+func TestOpenProjectIndexesSchemaDiagnosticsAndUsages(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{
+  "version": 1,
+  "tableRoots": ["tables"],
+  "schemaRoots": ["schema"],
+  "export": {"directory": "exports", "targets": ["csv"]}
+}`)
+	writeFile(t, filepath.Join(projectRoot, "schema", "common.cue"), `package common
+#GameID: string
+#Positive: >0
+_schema: {definitions: {
+  GameID: {kind: "type", type: "string"}
+  Positive: {kind: "constraint", appliesTo: ["integer", "number"]}
+}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
+#PrimaryKey: common.#GameID
+#Row: {price: string & common.#Positive}
+rows: {sword: "sword"}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	view, err := NewService(t.TempDir()).OpenProject(filepath.Join(projectRoot, "game.dtproj"))
+	if err != nil {
+		t.Fatalf("OpenProject() error = %v", err)
+	}
+	if len(view.Schemas.Definitions) != 2 {
+		t.Fatalf("definitions = %#v", view.Schemas.Definitions)
+	}
+	if len(view.Schemas.Diagnostics) != 1 || view.Schemas.Diagnostics[0].Field != "price" {
+		t.Fatalf("diagnostics = %#v", view.Schemas.Diagnostics)
+	}
+	if got := view.Schemas.Definitions[0].Usages; len(got) != 1 || got[0].Field != "#PrimaryKey" {
+		t.Fatalf("GameID usages = %#v", got)
 	}
 }
 
@@ -88,6 +135,18 @@ func findNode(node projecttree.Node, name string) *projecttree.Node {
 	}
 	for _, child := range node.Children {
 		if found := findNode(child, name); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func findNodeByKind(node projecttree.Node, name string, kind projecttree.NodeKind) *projecttree.Node {
+	if node.Name == name && node.Kind == kind {
+		return &node
+	}
+	for _, child := range node.Children {
+		if found := findNodeByKind(child, name, kind); found != nil {
 			return found
 		}
 	}

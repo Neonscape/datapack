@@ -7,38 +7,45 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"datapack/internal/cuesource"
 )
 
 type NodeKind string
 
 const (
-	NodeProject    NodeKind = "project"
-	NodeGroup      NodeKind = "group"
-	NodeDirectory  NodeKind = "directory"
-	NodeTableFile  NodeKind = "tableFile"
-	NodeSchemaFile NodeKind = "schemaFile"
+	NodeProject     NodeKind = "project"
+	NodeGroup       NodeKind = "group"
+	NodeDirectory   NodeKind = "directory"
+	NodeTable       NodeKind = "table"
+	NodeTableData   NodeKind = "tableData"
+	NodeLocalSchema NodeKind = "localSchema"
+	NodeSchemaFile  NodeKind = "schemaFile"
+	NodeSchemaDef   NodeKind = "schemaDefinition"
+	NodeDamaged     NodeKind = "damaged"
 )
 
 // Node is a physical source-tree node. Table and Schema files are refined into
 // logical views after CUE parsing is available.
 type Node struct {
-	Kind     NodeKind `json:"kind"`
-	Name     string   `json:"name"`
-	Path     string   `json:"path,omitempty"`
-	Children []Node   `json:"children,omitempty"`
+	Kind        NodeKind               `json:"kind"`
+	Name        string                 `json:"name"`
+	Path        string                 `json:"path,omitempty"`
+	Diagnostics []cuesource.Diagnostic `json:"diagnostics,omitempty"`
+	Children    []Node                 `json:"children,omitempty"`
 }
 
 type Tree struct {
 	Root Node `json:"root"`
 }
 
-// Scan discovers CUE files declared by the project. It deliberately does not
-// infer table metadata from CUE yet; that belongs to the source parser.
+// Scan discovers CUE files declared by the project and turns valid table files
+// into logical table and local-schema nodes.
 func Scan(projectPath string, tableRoots, schemaRoots, excludes []string) (Tree, error) {
 	root := filepath.Dir(projectPath)
 	projectName := strings.TrimSuffix(filepath.Base(projectPath), filepath.Ext(projectPath))
 
-	tableNodes, err := scanRoots(root, tableRoots, excludes, NodeTableFile)
+	tableNodes, err := scanRoots(root, tableRoots, excludes, NodeTable)
 	if err != nil {
 		return Tree{}, err
 	}
@@ -108,11 +115,77 @@ func scanDirectory(projectRoot, directory string, excludes []string, fileKind No
 			continue
 		}
 		if filepath.Ext(entry.Name()) == ".cue" {
-			node.Children = append(node.Children, Node{Kind: fileKind, Name: entry.Name(), Path: path})
+			if fileKind == NodeTable {
+				node.Children = append(node.Children, tableNode(path))
+			} else if fileKind == NodeSchemaFile {
+				node.Children = append(node.Children, schemaNode(path))
+			} else {
+				node.Children = append(node.Children, Node{Kind: fileKind, Name: entry.Name(), Path: path})
+			}
 		}
 	}
 	sortNodes(node.Children)
 	return node, nil
+}
+
+func tableNode(path string) Node {
+	table := cuesource.ParseTableFile(path)
+	if len(table.Diagnostics) > 0 {
+		return Node{
+			Kind:        NodeDamaged,
+			Name:        filepath.Base(path),
+			Path:        path,
+			Diagnostics: table.Diagnostics,
+		}
+	}
+	return Node{
+		Kind: NodeTable,
+		Name: table.LogicalName(),
+		Path: path,
+		Children: []Node{
+			{Kind: NodeTableData, Name: "table", Path: path},
+			{
+				Kind:     NodeLocalSchema,
+				Name:     "local_schema",
+				Path:     path,
+				Children: definitionNodes(path, table.LocalDefinitions),
+			},
+		},
+	}
+}
+
+func definitionNodes(path string, definitions []string) []Node {
+	nodes := make([]Node, 0, len(definitions))
+	for _, definition := range definitions {
+		nodes = append(nodes, Node{Kind: NodeLocalSchema, Name: "#" + definition, Path: path})
+	}
+	return nodes
+}
+
+func schemaNode(path string) Node {
+	schema := cuesource.ParseSchemaFile(path)
+	if len(schema.Diagnostics) > 0 {
+		return Node{
+			Kind:        NodeDamaged,
+			Name:        filepath.Base(path),
+			Path:        path,
+			Diagnostics: schema.Diagnostics,
+		}
+	}
+	children := make([]Node, 0, len(schema.Definitions))
+	for _, definition := range schema.Definitions {
+		children = append(children, Node{
+			Kind: NodeSchemaDef,
+			Name: "#" + definition.Name,
+			Path: path,
+		})
+	}
+	return Node{
+		Kind:     NodeSchemaFile,
+		Name:     schema.Package,
+		Path:     path,
+		Children: children,
+	}
 }
 
 func resolveProjectPath(projectRoot, configuredPath string) (string, error) {

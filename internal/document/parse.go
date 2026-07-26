@@ -1,0 +1,251 @@
+package document
+
+import (
+	"fmt"
+	"os"
+	"sort"
+	"strconv"
+
+	"cuelang.org/go/cue/ast"
+	"cuelang.org/go/cue/parser"
+	"cuelang.org/go/cue/token"
+	"datapack/internal/schemamodel"
+)
+
+// LoadTable parses a valid restricted table document into its editable model.
+// Structural file diagnostics remain the responsibility of cuesource; callers
+// use this only after the file has passed that first structural check.
+func LoadTable(path string) (Table, error) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	fields := fieldsOfFile(file)
+	document := Table{Path: path}
+	if packageDecl := packageOfFile(file); packageDecl != nil && packageDecl.Name != nil {
+		document.Package = packageDecl.Name.Name
+	}
+
+	toolFields := fieldsOfStruct(requiredField(fields, "_tool").Value)
+	identityFields := fieldsOfStruct(requiredField(toolFields, "table").Value)
+	document.Namespace = stringOf(requiredField(identityFields, "namespace").Value)
+	document.Name = stringOf(requiredField(identityFields, "name").Value)
+
+	primaryKey, err := schemamodel.Parse(requiredField(fields, "#PrimaryKey").Value)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse #PrimaryKey: %w", err)
+	}
+	document.PrimaryKey = primaryKey
+
+	rowSchema := requiredField(fields, "#Row")
+	for _, field := range orderedStructFields(rowSchema.Value) {
+		schema, err := schemamodel.Parse(field.Value)
+		if err != nil {
+			return Table{}, fmt.Errorf("parse column %q: %w", labelOf(field), err)
+		}
+		document.Columns = append(document.Columns, Column{
+			Name:     labelOf(field),
+			Optional: field.Constraint == token.OPTION,
+			Schema:   schema,
+		})
+	}
+
+	rows := requiredField(fields, "rows")
+	for _, field := range orderedStructFields(rows.Value) {
+		document.Rows = append(document.Rows, Row{ID: labelOf(field)})
+	}
+
+	localDefinitions := localDefinitionKinds(fields)
+	if local := fields["_local"]; local != nil {
+		for _, field := range orderedStructFields(local.Value) {
+			name := labelOf(field)
+			if len(name) < 2 || name[0] != '#' {
+				continue
+			}
+			schema, err := schemamodel.Parse(field.Value)
+			if err != nil {
+				return Table{}, fmt.Errorf("parse local schema %q: %w", name, err)
+			}
+			document.LocalSchema = append(document.LocalSchema, SchemaDefinition{
+				Name:      name[1:],
+				Kind:      localDefinitions[name[1:]].Kind,
+				AppliesTo: localDefinitions[name[1:]].AppliesTo,
+				Schema:    schema,
+			})
+		}
+	}
+	sort.Slice(document.LocalSchema, func(i, j int) bool { return document.LocalSchema[i].Name < document.LocalSchema[j].Name })
+	return document, nil
+}
+
+// LoadPublicSchema parses a public Schema document. Its metadata defines the
+// kind; the actual CUE definition determines the structured SchemaNode.
+func LoadPublicSchema(path string) (PublicSchema, error) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return PublicSchema{}, fmt.Errorf("read schema source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return PublicSchema{}, fmt.Errorf("parse schema source: %w", err)
+	}
+	fields := fieldsOfFile(file)
+	document := PublicSchema{Path: path}
+	if packageDecl := packageOfFile(file); packageDecl != nil && packageDecl.Name != nil {
+		document.Package = packageDecl.Name.Name
+	}
+
+	metadata := fieldsOfStruct(requiredField(fields, "_schema").Value)
+	definitions := fieldsOfStruct(requiredField(metadata, "definitions").Value)
+	for _, metadataField := range orderedFields(definitions) {
+		name := labelOf(metadataField)
+		definition := requiredField(fields, "#"+name)
+		schema, err := schemamodel.Parse(definition.Value)
+		if err != nil {
+			return PublicSchema{}, fmt.Errorf("parse schema %q: %w", name, err)
+		}
+		definitionMetadata := fieldsOfStruct(metadataField.Value)
+		document.Definitions = append(document.Definitions, SchemaDefinition{
+			Name:      name,
+			Kind:      stringOf(requiredField(definitionMetadata, "kind").Value),
+			AppliesTo: stringListOf(definitionMetadata["appliesTo"]),
+			Schema:    schema,
+		})
+	}
+	return document, nil
+}
+
+type definitionMetadata struct {
+	Kind      string
+	AppliesTo []string
+}
+
+func localDefinitionKinds(fields map[string]*ast.Field) map[string]definitionMetadata {
+	result := map[string]definitionMetadata{}
+	metadata := fields["_schema"]
+	if metadata == nil {
+		return result
+	}
+	metadataFields := fieldsOfStruct(metadata.Value)
+	localDefinitions := metadataFields["localDefinitions"]
+	if localDefinitions == nil {
+		return result
+	}
+	for _, field := range orderedStructFields(localDefinitions.Value) {
+		definition := fieldsOfStruct(field.Value)
+		if kind := definition["kind"]; kind != nil {
+			result[labelOf(field)] = definitionMetadata{
+				Kind:      stringOf(kind.Value),
+				AppliesTo: stringListOf(definition["appliesTo"]),
+			}
+		}
+	}
+	return result
+}
+
+func stringListOf(field *ast.Field) []string {
+	if field == nil {
+		return nil
+	}
+	list, ok := field.Value.(*ast.ListLit)
+	if !ok {
+		return nil
+	}
+	values := make([]string, 0, len(list.Elts))
+	for _, element := range list.Elts {
+		values = append(values, stringOf(element))
+	}
+	return values
+}
+
+func requiredField(fields map[string]*ast.Field, name string) *ast.Field {
+	field := fields[name]
+	if field == nil {
+		panic("restricted CUE source was not structurally validated: missing " + name)
+	}
+	return field
+}
+
+func fieldsOfFile(file *ast.File) map[string]*ast.Field {
+	fields := map[string]*ast.Field{}
+	for _, declaration := range file.Decls {
+		if field, ok := declaration.(*ast.Field); ok {
+			fields[labelOf(field)] = field
+		}
+	}
+	return fields
+}
+
+func fieldsOfStruct(expression ast.Expr) map[string]*ast.Field {
+	fields := map[string]*ast.Field{}
+	structLiteral, ok := expression.(*ast.StructLit)
+	if !ok {
+		return fields
+	}
+	for _, declaration := range structLiteral.Elts {
+		if field, ok := declaration.(*ast.Field); ok {
+			fields[labelOf(field)] = field
+		}
+	}
+	return fields
+}
+
+func orderedStructFields(expression ast.Expr) []*ast.Field {
+	structLiteral, ok := expression.(*ast.StructLit)
+	if !ok {
+		return nil
+	}
+	fields := make([]*ast.Field, 0, len(structLiteral.Elts))
+	for _, declaration := range structLiteral.Elts {
+		if field, ok := declaration.(*ast.Field); ok {
+			fields = append(fields, field)
+		}
+	}
+	return fields
+}
+
+func orderedFields(fields map[string]*ast.Field) []*ast.Field {
+	names := make([]string, 0, len(fields))
+	for name := range fields {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	result := make([]*ast.Field, 0, len(names))
+	for _, name := range names {
+		result = append(result, fields[name])
+	}
+	return result
+}
+
+func packageOfFile(file *ast.File) *ast.Package {
+	for _, declaration := range file.Decls {
+		if packageDecl, ok := declaration.(*ast.Package); ok {
+			return packageDecl
+		}
+	}
+	return nil
+}
+
+func labelOf(field *ast.Field) string {
+	name, _, err := ast.LabelName(field.Label)
+	if err != nil {
+		panic(fmt.Sprintf("unsupported restricted CUE label: %v", err))
+	}
+	return name
+}
+
+func stringOf(expression ast.Expr) string {
+	literal, ok := expression.(*ast.BasicLit)
+	if !ok || literal.Kind != token.STRING {
+		panic("restricted CUE source was not structurally validated: expected string")
+	}
+	value, err := strconv.Unquote(literal.Value)
+	if err != nil {
+		panic(fmt.Sprintf("invalid CUE string: %v", err))
+	}
+	return value
+}
