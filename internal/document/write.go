@@ -181,6 +181,31 @@ func RenameColumn(path, oldName, newName string) (Table, error) {
 	return validateAndReplace(path, candidate)
 }
 
+// MoveColumn changes a column's zero-based position in #Row and the configured
+// CSV column order. Row field order is left intact because it has no semantic
+// meaning and changing it would create unnecessary source churn.
+func MoveColumn(path, name string, position int) (Table, error) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	if err := moveColumn(file, name, position); err != nil {
+		return Table{}, err
+	}
+	candidate, err := format.Node(file)
+	if err != nil {
+		return Table{}, fmt.Errorf("format updated table: %w", err)
+	}
+	if err := validateAllRows(path, candidate); err != nil {
+		return Table{}, err
+	}
+	return validateAndReplace(path, candidate)
+}
+
 func replaceCell(file *ast.File, rowID, column string, value ast.Expr) error {
 	fields := fieldsOfFile(file)
 	rowSchema := requiredField(fields, "#Row")
@@ -328,6 +353,56 @@ func renameColumn(file *ast.File, oldName, newName string) error {
 	return nil
 }
 
+func moveColumn(file *ast.File, name string, position int) error {
+	fields := fieldsOfFile(file)
+	rowSchema := requiredField(fields, "#Row")
+	rowSchemaValue, ok := rowSchema.Value.(*ast.StructLit)
+	if !ok {
+		return fmt.Errorf("#Row must be a struct")
+	}
+	index := indexOfNamedField(rowSchemaValue, name)
+	if index < 0 {
+		return fmt.Errorf("column %q does not exist", name)
+	}
+	if position < 0 || position >= len(rowSchemaValue.Elts) {
+		return fmt.Errorf("column position %d is out of range", position)
+	}
+	moveElement(rowSchemaValue.Elts, index, position)
+	if export := fields["_export"]; export != nil {
+		exportFields := fieldsOfStruct(export.Value)
+		if csv := exportFields["csv"]; csv != nil {
+			csvFields := fieldsOfStruct(csv.Value)
+			if columns := csvFields["columns"]; columns != nil {
+				moveStringListValue(columns.Value, name, position)
+			}
+		}
+	}
+	return nil
+}
+
+func indexOfNamedField(structLiteral *ast.StructLit, name string) int {
+	for index, element := range structLiteral.Elts {
+		field, ok := element.(*ast.Field)
+		if ok && labelOf(field) == name {
+			return index
+		}
+	}
+	return -1
+}
+
+func moveElement(elements []ast.Decl, from, to int) {
+	if from == to {
+		return
+	}
+	element := elements[from]
+	if from < to {
+		copy(elements[from:to], elements[from+1:to+1])
+	} else {
+		copy(elements[to+1:from+1], elements[to:from])
+	}
+	elements[to] = element
+}
+
 func removeNamedField(expression ast.Expr, name string) bool {
 	structLiteral, ok := expression.(*ast.StructLit)
 	if !ok {
@@ -382,6 +457,45 @@ func renameStringListValue(expression ast.Expr, oldValue, newValue string) {
 			return
 		}
 	}
+}
+
+func moveStringListValue(expression ast.Expr, value string, position int) {
+	list, ok := expression.(*ast.ListLit)
+	if !ok {
+		return
+	}
+	from := -1
+	for index, element := range list.Elts {
+		if matchesString(element, value) {
+			from = index
+			break
+		}
+	}
+	if from < 0 {
+		return
+	}
+	// The export list may omit columns. Preserve its special id column at the
+	// start when present, then clamp the table position to this list.
+	if len(list.Elts) > 0 && matchesString(list.Elts[0], "id") {
+		position++
+	}
+	if position >= len(list.Elts) {
+		position = len(list.Elts) - 1
+	}
+	moveExpression(list.Elts, from, position)
+}
+
+func moveExpression(elements []ast.Expr, from, to int) {
+	if from == to {
+		return
+	}
+	element := elements[from]
+	if from < to {
+		copy(elements[from:to], elements[from+1:to+1])
+	} else {
+		copy(elements[to+1:from+1], elements[to:from])
+	}
+	elements[to] = element
 }
 
 func cloneExpression(expression ast.Expr) ast.Expr {

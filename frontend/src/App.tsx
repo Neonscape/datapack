@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {DataEditor, GridCellKind, type GridCell, type GridColumn, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddColumn, AddRow, DeleteColumn, DeleteRow, Export, GetTable, RenameColumn, RenameRow, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, AddRow, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, RenameColumn, RenameRow, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
 
 type TreeNode = {
     kind: "project" | "group" | "directory" | "table" | "tableData" | "localSchema" | "schemaFile" | "schemaDefinition" | "damaged";
@@ -85,7 +85,7 @@ function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; 
 
 type CellError = { rowID: string; column: string; message: string };
 
-function TableGrid({table, error, onAddColumn, onAddRow, onDeleteColumn, onDeleteRow, onRenameColumn, onRenameRow, onUpdate}: { table: TableDocument; error: CellError | null; onAddColumn: () => void; onAddRow: () => void; onDeleteColumn: () => void; onDeleteRow: (rowID: string) => void; onRenameColumn: () => void; onRenameRow: (rowID: string) => void; onUpdate: (rowID: string, column: string, expression: string) => void }) {
+function TableGrid({table, error, onAddColumn, onAddRow, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onRenameRow, onUpdate}: { table: TableDocument; error: CellError | null; onAddColumn: () => void; onAddRow: () => void; onDeleteColumn: () => void; onDeleteRow: (rowID: string) => void; onMoveColumn: () => void; onRenameColumn: () => void; onRenameRow: (rowID: string) => void; onUpdate: (rowID: string, column: string, expression: string) => void }) {
     const [selectedRow, setSelectedRow] = useState<number | null>(null);
     const columns: GridColumn[] = [
         {id: "id", title: "ID", width: 160, style: "highlight"},
@@ -121,6 +121,7 @@ function TableGrid({table, error, onAddColumn, onAddRow, onDeleteColumn, onDelet
             <div className="table-actions">
                 <button className="table-action" onClick={onAddColumn}>Add column</button>
                 <button className="table-action" onClick={onRenameColumn}>Rename column</button>
+                <button className="table-action" onClick={onMoveColumn}>Move column</button>
                 <button className="table-action table-action-danger" onClick={onDeleteColumn}>Delete column</button>
                 <button className="table-action" onClick={onAddRow}>Add row</button>
                 <button className="table-action" disabled={selectedRow === null} onClick={() => {
@@ -287,6 +288,28 @@ function App() {
         }
     }
 
+    async function moveColumn() {
+        if (!table) return;
+        const name = window.prompt("Column name to move");
+        if (!name) return;
+        const positionText = window.prompt(`New zero-based position (0-${table.columns.length - 1})`, "0");
+        if (positionText === null) return;
+        const position = Number(positionText);
+        if (!Number.isInteger(position)) {
+            setError("Column position must be an integer");
+            return;
+        }
+        setError("");
+        setCellError(null);
+        try {
+            const result = await MoveColumn({path: table.path, name, position});
+            setTable(result.table as TableDocument);
+            setWorkspace(result.workspace as WorkspaceView);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
     async function deleteRow(rowID: string) {
         if (!table || !window.confirm(`Delete row ${rowID}?`)) {
             return;
@@ -352,7 +375,7 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className="editor-placeholder">
-                        {table ? <TableGrid table={table} error={cellError} onAddColumn={addColumn} onAddRow={addRow} onDeleteColumn={deleteColumn} onDeleteRow={deleteRow} onRenameColumn={renameColumn} onRenameRow={renameRow} onUpdate={updateCell}/> : selectedSchema ? <>
+                        {table ? <TableGrid table={table} error={cellError} onAddColumn={addColumn} onAddRow={addRow} onDeleteColumn={deleteColumn} onDeleteRow={deleteRow} onMoveColumn={moveColumn} onRenameColumn={renameColumn} onRenameRow={renameRow} onUpdate={updateCell}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>

@@ -107,6 +107,17 @@ type ColumnRenameResult struct {
 	Workspace View           `json:"workspace"`
 }
 
+type ColumnMove struct {
+	Path     string `json:"path"`
+	Name     string `json:"name"`
+	Position int    `json:"position"`
+}
+
+type ColumnMoveResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
 func NewService(configRoot string) *Service {
 	return &Service{configRoot: configRoot}
 }
@@ -373,6 +384,24 @@ func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) 
 		return ColumnRenameResult{}, err
 	}
 	return ColumnRenameResult{Table: table, Workspace: view}, nil
+}
+
+func (s *Service) MoveColumn(move ColumnMove) (ColumnMoveResult, error) {
+	if s.current == nil {
+		return ColumnMoveResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, move.Path) {
+		return ColumnMoveResult{}, fmt.Errorf("table %q is not part of the open project", move.Path)
+	}
+	table, err := document.MoveColumn(move.Path, move.Name, move.Position)
+	if err != nil {
+		return ColumnMoveResult{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return ColumnMoveResult{}, err
+	}
+	return ColumnMoveResult{Table: table, Workspace: view}, nil
 }
 
 func exportDirectory(project Project) (string, error) {

@@ -298,6 +298,23 @@ _export: {csv: {enabled: true, columns: ["id", "effectID"]}}`)
 	}
 }
 
+func TestMoveColumnReordersSchemaAndCSVExport(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {name: string, price: int, rarity: string}
+rows: {sword: {name: "Sword", price: 10, rarity: "N"}}
+_tool: {table: {namespace: "rpg", name: "item"}}
+_export: {csv: {enabled: true, columns: ["id", "name", "price", "rarity"]}}`)
+
+	table, err := MoveColumn(path, "rarity", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.Columns[0].Name != "rarity" || table.CSVExport.Columns[0] != "id" || table.CSVExport.Columns[1] != "rarity" {
+		t.Fatalf("table = %#v", table)
+	}
+}
+
 func writeSource(t *testing.T, name, source string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)

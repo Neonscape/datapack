@@ -103,3 +103,8 @@ func (a *App) DeleteColumn(delete workspace.ColumnDelete) (workspace.ColumnDelet
 func (a *App) RenameColumn(rename workspace.ColumnRename) (workspace.ColumnRenameResult, error) {
 	return a.workspace.RenameColumn(rename)
 }
+
+// MoveColumn changes a column's position in the table Schema.
+func (a *App) MoveColumn(move workspace.ColumnMove) (workspace.ColumnMoveResult, error) {
+	return a.workspace.MoveColumn(move)
+}
