@@ -258,6 +258,26 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestDeleteColumnRemovesValuesAndMetadata(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {name: string, effectID: string}
+rows: {sword: {name: "Sword", effectID: "burn"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table: "rpg.effect"}}, formulas: {effectID: "ignored"}}
+_export: {csv: {enabled: true, columns: ["id", "name", "effectID"]}}`)
+
+	table, err := DeleteColumn(path, "effectID")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(table.Columns) != 1 || table.Columns[0].Name != "name" || table.Rows[0].Values["effectID"].Expression != "" {
+		t.Fatalf("table = %#v", table)
+	}
+	if len(table.ForeignKeys) != 0 || len(table.CSVExport.Columns) != 2 || table.CSVExport.Columns[1] != "name" {
+		t.Fatalf("metadata = %#v", table)
+	}
+}
+
 func writeSource(t *testing.T, name, source string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)

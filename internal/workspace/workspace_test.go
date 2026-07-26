@@ -329,6 +329,31 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestDeleteColumnRefreshesCurrentWorkspace(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {name: string, price: int}
+rows: {sword: {name: "Sword", price: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.DeleteColumn(ColumnDelete{Path: path, Name: "price"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Table.Columns) != 1 || result.Table.Columns[0].Name != "name" {
+		t.Fatalf("table = %#v", result.Table)
+	}
+}
+
 func TestRenameRowUpdatesForeignKeyReferences(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)

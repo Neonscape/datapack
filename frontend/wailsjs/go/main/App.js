@@ -14,6 +14,10 @@ export function CurrentWorkspace() {
   return window['go']['main']['App']['CurrentWorkspace']();
 }
 
+export function DeleteColumn(arg1) {
+  return window['go']['main']['App']['DeleteColumn'](arg1);
+}
+
 export function DeleteRow(arg1) {
   return window['go']['main']['App']['DeleteRow'](arg1);
 }

@@ -86,6 +86,16 @@ type ColumnAddResult struct {
 	Workspace View           `json:"workspace"`
 }
 
+type ColumnDelete struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+}
+
+type ColumnDeleteResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
 func NewService(configRoot string) *Service {
 	return &Service{configRoot: configRoot}
 }
@@ -316,6 +326,24 @@ func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 		return ColumnAddResult{}, err
 	}
 	return ColumnAddResult{Table: table, Workspace: view}, nil
+}
+
+func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) {
+	if s.current == nil {
+		return ColumnDeleteResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, delete.Path) {
+		return ColumnDeleteResult{}, fmt.Errorf("table %q is not part of the open project", delete.Path)
+	}
+	table, err := document.DeleteColumn(delete.Path, delete.Name)
+	if err != nil {
+		return ColumnDeleteResult{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return ColumnDeleteResult{}, err
+	}
+	return ColumnDeleteResult{Table: table, Workspace: view}, nil
 }
 
 func exportDirectory(project Project) (string, error) {

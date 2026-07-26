@@ -93,3 +93,8 @@ func (a *App) Export() (workspace.ExportResult, error) {
 func (a *App) AddColumn(add workspace.ColumnAdd) (workspace.ColumnAddResult, error) {
 	return a.workspace.AddColumn(add)
 }
+
+// DeleteColumn removes a column and its associated row values and metadata.
+func (a *App) DeleteColumn(delete workspace.ColumnDelete) (workspace.ColumnDeleteResult, error) {
+	return a.workspace.DeleteColumn(delete)
+}

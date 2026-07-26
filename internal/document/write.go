@@ -131,6 +131,30 @@ func AddColumn(path, name, schemaExpression, initialExpression string) (Table, e
 	return validateAndReplace(path, candidate)
 }
 
+// DeleteColumn removes a column definition, its values, and same-table tool
+// metadata that would otherwise reference the removed column.
+func DeleteColumn(path, name string) (Table, error) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	if err := removeColumn(file, name); err != nil {
+		return Table{}, err
+	}
+	candidate, err := format.Node(file)
+	if err != nil {
+		return Table{}, fmt.Errorf("format updated table: %w", err)
+	}
+	if err := validateAllRows(path, candidate); err != nil {
+		return Table{}, err
+	}
+	return validateAndReplace(path, candidate)
+}
+
 func replaceCell(file *ast.File, rowID, column string, value ast.Expr) error {
 	fields := fieldsOfFile(file)
 	rowSchema := requiredField(fields, "#Row")
@@ -209,6 +233,66 @@ func insertColumn(file *ast.File, name string, schema, value ast.Expr) error {
 	}
 	rowSchemaValue.Elts = append(rowSchemaValue.Elts, &ast.Field{Label: ast.NewIdent(name), Value: schema})
 	return nil
+}
+
+func removeColumn(file *ast.File, name string) error {
+	fields := fieldsOfFile(file)
+	rowSchema := requiredField(fields, "#Row")
+	if !removeNamedField(rowSchema.Value, name) {
+		return fmt.Errorf("column %q does not exist", name)
+	}
+	rows := requiredField(fields, "rows")
+	for _, row := range orderedStructFields(rows.Value) {
+		removeNamedField(row.Value, name)
+	}
+	tool := fields["_tool"]
+	if tool != nil {
+		toolFields := fieldsOfStruct(tool.Value)
+		if foreignKeys := toolFields["foreignKeys"]; foreignKeys != nil {
+			removeNamedField(foreignKeys.Value, name)
+		}
+		if formulas := toolFields["formulas"]; formulas != nil {
+			removeNamedField(formulas.Value, name)
+		}
+	}
+	if export := fields["_export"]; export != nil {
+		exportFields := fieldsOfStruct(export.Value)
+		if csv := exportFields["csv"]; csv != nil {
+			csvFields := fieldsOfStruct(csv.Value)
+			if columns := csvFields["columns"]; columns != nil {
+				removeStringListValue(columns.Value, name)
+			}
+		}
+	}
+	return nil
+}
+
+func removeNamedField(expression ast.Expr, name string) bool {
+	structLiteral, ok := expression.(*ast.StructLit)
+	if !ok {
+		return false
+	}
+	for index, element := range structLiteral.Elts {
+		field, ok := element.(*ast.Field)
+		if ok && labelOf(field) == name {
+			structLiteral.Elts = append(structLiteral.Elts[:index], structLiteral.Elts[index+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+func removeStringListValue(expression ast.Expr, value string) {
+	list, ok := expression.(*ast.ListLit)
+	if !ok {
+		return
+	}
+	for index := 0; index < len(list.Elts); index++ {
+		if matchesString(list.Elts[index], value) {
+			list.Elts = append(list.Elts[:index], list.Elts[index+1:]...)
+			return
+		}
+	}
 }
 
 func cloneExpression(expression ast.Expr) ast.Expr {

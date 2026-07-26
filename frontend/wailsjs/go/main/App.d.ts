@@ -9,6 +9,8 @@ export function AddRow(arg1:workspace.RowAdd):Promise<workspace.RowAddResult>;
 
 export function CurrentWorkspace():Promise<workspace.View|boolean>;
 
+export function DeleteColumn(arg1:workspace.ColumnDelete):Promise<workspace.ColumnDeleteResult>;
+
 export function DeleteRow(arg1:workspace.RowDelete):Promise<workspace.RowDeleteResult>;
 
 export function Export():Promise<workspace.ExportResult>;
