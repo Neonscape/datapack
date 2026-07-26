@@ -223,6 +223,32 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestDeleteRowRejectsForeignKeyReference(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "effect.cue"), `package effect
+#PrimaryKey: string
+#Row: {name: string}
+rows: {burn: {name: "Burn"}}
+_tool: {table: {namespace: "rpg", name: "effect"}, foreignKeys: {}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {effectIDs: [...string]}
+rows: {sword: {effectIDs: ["burn"]}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectIDs: {table: "rpg.effect"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.DeleteRow(RowDelete{Path: filepath.Join(projectRoot, "tables", "effect.cue"), RowID: "burn"}); err == nil {
+		t.Fatal("DeleteRow() accepted a referenced target row")
+	}
+}
+
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"datapack/internal/document"
+	"datapack/internal/foreignkey"
 	"datapack/internal/projecttree"
 	"datapack/internal/schemaregistry"
 )
@@ -176,7 +177,14 @@ func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
 	if !containsTable(s.current.Tree.Root, delete.Path) {
 		return RowDeleteResult{}, fmt.Errorf("table %q is not part of the open project", delete.Path)
 	}
-	table, err := document.DeleteRow(delete.Path, delete.RowID)
+	table, err := document.LoadTable(delete.Path)
+	if err != nil {
+		return RowDeleteResult{}, fmt.Errorf("load table: %w", err)
+	}
+	if usage := foreignKeyUsage(s.current.Tree, table, delete.RowID); usage != nil {
+		return RowDeleteResult{}, fmt.Errorf("row %q is referenced by %s.%s.%s", delete.RowID, usage.Table, usage.RowID, usage.Column)
+	}
+	table, err = document.DeleteRow(delete.Path, delete.RowID)
 	if err != nil {
 		return RowDeleteResult{}, err
 	}
@@ -185,6 +193,31 @@ func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
 		return RowDeleteResult{}, err
 	}
 	return RowDeleteResult{Table: table, Workspace: view}, nil
+}
+
+func foreignKeyUsage(tree projecttree.Tree, target document.Table, rowID string) *foreignkey.Usage {
+	var tables []document.Table
+	collectTables(tree.Root, &tables)
+	targetName := target.Name
+	if target.Namespace != "" {
+		targetName = target.Namespace + "." + target.Name
+	}
+	usages := foreignkey.Build(tables).Usages[foreignkey.Target{Table: targetName, RowID: rowID}]
+	if len(usages) == 0 {
+		return nil
+	}
+	return &usages[0]
+}
+
+func collectTables(node projecttree.Node, tables *[]document.Table) {
+	if node.Kind == projecttree.NodeTable {
+		if table, err := document.LoadTable(node.Path); err == nil {
+			*tables = append(*tables, table)
+		}
+	}
+	for _, child := range node.Children {
+		collectTables(child, tables)
+	}
 }
 
 func (s *Service) refreshCurrentView() (View, error) {

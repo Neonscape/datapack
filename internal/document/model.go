@@ -11,6 +11,7 @@ type Table struct {
 	PrimaryKey  schemamodel.Node   `json:"primaryKey"`
 	Columns     []Column           `json:"columns"`
 	Rows        []Row              `json:"rows"`
+	ForeignKeys []ForeignKey       `json:"foreignKeys,omitempty"`
 	LocalSchema []SchemaDefinition `json:"localSchema"`
 }
 
@@ -30,6 +31,11 @@ type Row struct {
 type Cell struct {
 	Expression string `json:"expression"`
 	Display    string `json:"display"`
+}
+
+type ForeignKey struct {
+	Column string `json:"column"`
+	Table  string `json:"table"`
 }
 
 type SchemaDefinition struct {

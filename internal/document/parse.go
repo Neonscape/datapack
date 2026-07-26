@@ -35,6 +35,16 @@ func LoadTable(path string) (Table, error) {
 	identityFields := fieldsOfStruct(requiredField(toolFields, "table").Value)
 	document.Namespace = stringOf(requiredField(identityFields, "namespace").Value)
 	document.Name = stringOf(requiredField(identityFields, "name").Value)
+	if foreignKeys := toolFields["foreignKeys"]; foreignKeys != nil {
+		for _, field := range orderedStructFields(foreignKeys.Value) {
+			metadata := fieldsOfStruct(field.Value)
+			target := metadata["table"]
+			if target == nil {
+				return Table{}, fmt.Errorf("parse foreign key %q: table is required", labelOf(field))
+			}
+			document.ForeignKeys = append(document.ForeignKeys, ForeignKey{Column: labelOf(field), Table: stringOf(target.Value)})
+		}
+	}
 
 	primaryKey, err := schemamodel.Parse(requiredField(fields, "#PrimaryKey").Value)
 	if err != nil {
