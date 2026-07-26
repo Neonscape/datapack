@@ -58,6 +58,38 @@ _export: {csv: {enabled: true, columns: ["id", "price"]}}`)
 	}
 }
 
+func TestExportCalculatesFormulaValuesBeforeValidation(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "growth.cue")
+	writeFile(t, path, `package growth
+#PrimaryKey: string
+#Row: {baseAttack: int, attack: int & >=0}
+rows: {
+    level_01: {baseAttack: 10}
+    level_10: {baseAttack: 20}
+}
+_tool: {
+    table: {namespace: "combat", name: "growth"}
+    formulas: {
+        level_01: {attack: "baseAttack * 2"}
+        level_10: {attack: "combat.growth.level_01.attack + baseAttack"}
+    }
+}
+_export: {csv: {enabled: true, columns: ["id", "baseAttack", "attack"]}}`)
+	table, err := document.LoadTable(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := Export(filepath.Join(root, "exports"), []document.Table{table})
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(result.Files[0])
+	if err != nil || string(contents) != "id,baseAttack,attack\nlevel_01,10,20\nlevel_10,20,40\n" {
+		t.Fatalf("CSV = %q, error = %v", contents, err)
+	}
+}
+
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

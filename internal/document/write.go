@@ -34,12 +34,37 @@ func SetCellValue(path, rowID, column, expression string) (Table, error) {
 	if err := replaceCell(file, rowID, column, value); err != nil {
 		return Table{}, err
 	}
+	removeFormula(file, rowID, column)
 	candidate, err := format.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
-	if err := validateCellValue(path, candidate, rowID); err != nil {
+	if err := validateCellValue(path, candidate, rowID, column); err != nil {
 		return Table{}, err
+	}
+	return validateAndReplace(path, candidate)
+}
+
+// SetCellFormula stores an expr-lang/expr expression and removes the fixed
+// source value. Formula evaluation supplies the value during preview and export.
+func SetCellFormula(path, rowID, column, expression string) (Table, error) {
+	if strings.TrimSpace(expression) == "" {
+		return Table{}, fmt.Errorf("formula expression must not be empty")
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	if err := setFormula(file, rowID, column, expression); err != nil {
+		return Table{}, err
+	}
+	candidate, err := format.Node(file)
+	if err != nil {
+		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
 	return validateAndReplace(path, candidate)
 }
@@ -69,7 +94,7 @@ func AddRow(path, rowID, expression string) (Table, error) {
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
-	if err := validateCellValue(path, candidate, rowID); err != nil {
+	if err := validateRows(path, candidate, []string{rowID}); err != nil {
 		return Table{}, err
 	}
 	return validateAndReplace(path, candidate)
@@ -220,12 +245,76 @@ func replaceCell(file *ast.File, rowID, column string, value ast.Expr) error {
 	if _, ok := row.Value.(*ast.StructLit); !ok {
 		return fmt.Errorf("row %q is not a struct", rowID)
 	}
+	rowValues := row.Value.(*ast.StructLit)
 	cell, exists := fieldsOfStruct(row.Value)[column]
-	if !exists {
-		return fmt.Errorf("row %q has no value for column %q", rowID, column)
+	if exists {
+		cell.Value = value
+		return nil
 	}
-	cell.Value = value
+	rowValues.Elts = append(rowValues.Elts, &ast.Field{Label: ast.NewIdent(column), Value: value})
 	return nil
+}
+
+func setFormula(file *ast.File, rowID, column, expression string) error {
+	fields := fieldsOfFile(file)
+	if _, exists := fieldsOfStruct(requiredField(fields, "#Row").Value)[column]; !exists {
+		return fmt.Errorf("column %q does not exist", column)
+	}
+	rows := requiredField(fields, "rows")
+	row, exists := fieldsOfStruct(rows.Value)[rowID]
+	if !exists {
+		return fmt.Errorf("row %q does not exist", rowID)
+	}
+	removeNamedField(row.Value, column)
+	tool := requiredField(fields, "_tool")
+	toolValue, ok := tool.Value.(*ast.StructLit)
+	if !ok {
+		return fmt.Errorf("_tool must be a struct")
+	}
+	toolFields := fieldsOfStruct(tool.Value)
+	formulas := toolFields["formulas"]
+	if formulas == nil {
+		formulas = &ast.Field{Label: ast.NewIdent("formulas"), Value: &ast.StructLit{}}
+		toolValue.Elts = append(toolValue.Elts, formulas)
+	}
+	formulaValues, ok := formulas.Value.(*ast.StructLit)
+	if !ok {
+		return fmt.Errorf("_tool.formulas must be a struct")
+	}
+	formulaRow := fieldsOfStruct(formulas.Value)[rowID]
+	if formulaRow == nil {
+		formulaRow = &ast.Field{Label: ast.NewIdent(rowID), Value: &ast.StructLit{}}
+		formulaValues.Elts = append(formulaValues.Elts, formulaRow)
+	}
+	formulaRowValues, ok := formulaRow.Value.(*ast.StructLit)
+	if !ok {
+		return fmt.Errorf("formula row %q must be a struct", rowID)
+	}
+	if existing := fieldsOfStruct(formulaRow.Value)[column]; existing != nil {
+		existing.Value = stringLiteral(expression)
+		return nil
+	}
+	formulaRowValues.Elts = append(formulaRowValues.Elts, &ast.Field{Label: ast.NewIdent(column), Value: stringLiteral(expression)})
+	return nil
+}
+
+func removeFormula(file *ast.File, rowID, column string) {
+	tool := fieldsOfFile(file)["_tool"]
+	if tool == nil {
+		return
+	}
+	formulas := fieldsOfStruct(tool.Value)["formulas"]
+	if formulas == nil {
+		return
+	}
+	formulaRow := fieldsOfStruct(formulas.Value)[rowID]
+	if formulaRow == nil {
+		return
+	}
+	removeNamedField(formulaRow.Value, column)
+	if len(orderedStructFields(formulaRow.Value)) == 0 {
+		removeNamedField(formulas.Value, rowID)
+	}
 }
 
 func insertRow(file *ast.File, rowID string, value *ast.StructLit) error {
@@ -528,8 +617,25 @@ func validIdentifier(value string) bool {
 	return true
 }
 
-func validateCellValue(path string, source []byte, rowID string) error {
-	return validateRows(path, source, []string{rowID})
+func validateCellValue(path string, source []byte, rowID, column string) error {
+	instances := load.Instances([]string{"."}, &load.Config{
+		Dir:     filepath.Dir(path),
+		Overlay: map[string]load.Source{path: load.FromBytes(source)},
+	})
+	if len(instances) != 1 {
+		return fmt.Errorf("load updated table package: expected one package, found %d", len(instances))
+	}
+	context := cuecontext.New()
+	packageValue := context.BuildInstance(instances[0])
+	if err := packageValue.Err(); err != nil {
+		return fmt.Errorf("load updated table package: %w", err)
+	}
+	fieldSchema := packageValue.LookupPath(cue.MakePath(cue.Def("Row"), cue.Str(column)))
+	value := packageValue.LookupPath(cue.MakePath(cue.Str("rows"), cue.Str(rowID), cue.Str(column)))
+	if err := fieldSchema.Unify(value).Validate(cue.Concrete(true)); err != nil {
+		return fmt.Errorf("validate row %q column %q: %w", rowID, column, err)
+	}
+	return nil
 }
 
 func validateAllRows(path string, source []byte) error {

@@ -45,6 +45,17 @@ func LoadTable(path string) (Table, error) {
 			document.ForeignKeys = append(document.ForeignKeys, ForeignKey{Column: labelOf(field), Table: stringOf(target.Value)})
 		}
 	}
+	if formulas := toolFields["formulas"]; formulas != nil {
+		for _, row := range orderedStructFields(formulas.Value) {
+			for _, formula := range orderedStructFields(row.Value) {
+				expression, ok := formulaExpression(formula.Value)
+				if !ok {
+					return Table{}, fmt.Errorf("parse formula %q.%q: expression must be a string", labelOf(row), labelOf(formula))
+				}
+				document.Formulas = append(document.Formulas, Formula{RowID: labelOf(row), Column: labelOf(formula), Expression: expression})
+			}
+		}
+	}
 	if export := fields["_export"]; export != nil {
 		exportFields := fieldsOfStruct(export.Value)
 		if csv := exportFields["csv"]; csv != nil {
@@ -285,6 +296,15 @@ func stringOf(expression ast.Expr) string {
 		panic(fmt.Sprintf("invalid CUE string: %v", err))
 	}
 	return value
+}
+
+func formulaExpression(expression ast.Expr) (string, bool) {
+	literal, ok := expression.(*ast.BasicLit)
+	if !ok || literal.Kind != token.STRING {
+		return "", false
+	}
+	value, err := strconv.Unquote(literal.Value)
+	return value, err == nil
 }
 
 func boolOf(expression ast.Expr) bool {

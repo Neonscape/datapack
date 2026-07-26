@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	cuelang.org/go v0.17.1
+	github.com/expr-lang/expr v1.17.6
 	github.com/wailsapp/wails/v2 v2.13.0
 )
 

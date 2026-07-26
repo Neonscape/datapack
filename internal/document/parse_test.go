@@ -75,6 +75,25 @@ _export: {csv: {enabled: true, columns: ["id", "name"]}}`)
 	}
 }
 
+func TestLoadTableReadsFormulas(t *testing.T) {
+	path := writeSource(t, "growth.cue", `package growth
+#PrimaryKey: string
+#Row: {baseAttack: int, attack: int}
+rows: {level_01: {baseAttack: 10}}
+_tool: {
+    table: {namespace: "combat", name: "growth"}
+    formulas: {level_01: {attack: "baseAttack * 2"}}
+}`)
+
+	table, err := LoadTable(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(table.Formulas) != 1 || table.Formulas[0] != (Formula{RowID: "level_01", Column: "attack", Expression: "baseAttack * 2"}) {
+		t.Fatalf("formulas = %#v", table.Formulas)
+	}
+}
+
 func TestSetCellValueReplacesExistingCellWithCueExpression(t *testing.T) {
 	path := writeSource(t, "item.cue", `package item
 #PrimaryKey: string
@@ -92,6 +111,36 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	reloaded, err := LoadTable(path)
 	if err != nil || reloaded.Rows[0].Values["price"].Expression != "125" {
 		t.Fatalf("reloaded table = %#v, error = %v", reloaded, err)
+	}
+}
+
+func TestSetCellFormulaReplacesFixedValueAndFixedValueRemovesFormula(t *testing.T) {
+	path := writeSource(t, "growth.cue", `package growth
+#PrimaryKey: string
+#Row: {baseAttack: int, attack: int}
+rows: {level_01: {baseAttack: 10, attack: 20}}
+_tool: {table: {namespace: "combat", name: "growth"}}`)
+
+	table, err := SetCellFormula(path, "level_01", "attack", "baseAttack * 2")
+	if err != nil || len(table.Formulas) != 1 || table.Rows[0].Values["attack"].Expression != "" {
+		t.Fatalf("SetCellFormula() = %#v, %v", table, err)
+	}
+	table, err = SetCellValue(path, "level_01", "attack", "25")
+	if err != nil || len(table.Formulas) != 0 || table.Rows[0].Values["attack"].Expression != "25" {
+		t.Fatalf("SetCellValue() = %#v, %v", table, err)
+	}
+}
+
+func TestSetCellValueAllowsEditingFormulaDependencies(t *testing.T) {
+	path := writeSource(t, "growth.cue", `package growth
+#PrimaryKey: string
+#Row: {baseAttack: int, attack: int}
+rows: {level_01: {baseAttack: 10}}
+_tool: {table: {namespace: "combat", name: "growth"}, formulas: {level_01: {attack: "baseAttack * 2"}}}`)
+
+	table, err := SetCellValue(path, "level_01", "baseAttack", "15")
+	if err != nil || table.Rows[0].Values["baseAttack"].Expression != "15" {
+		t.Fatalf("SetCellValue() = %#v, %v", table, err)
 	}
 }
 

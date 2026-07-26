@@ -50,6 +50,10 @@ export function SelectProject() {
   return window['go']['main']['App']['SelectProject']();
 }
 
+export function SetCellFormula(arg1) {
+  return window['go']['main']['App']['SetCellFormula'](arg1);
+}
+
 export function UpdateCell(arg1) {
   return window['go']['main']['App']['UpdateCell'](arg1);
 }

@@ -144,6 +144,28 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestGetTableIncludesFormulaPreview(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "growth.cue")
+	writeFile(t, path, `package growth
+#PrimaryKey: string
+#Row: {baseAttack: int, attack: int}
+rows: {level_01: {baseAttack: 10}}
+_tool: {table: {namespace: "combat", name: "growth"}, formulas: {level_01: {attack: "baseAttack * 2"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	table, err := service.GetTable(path)
+	if err != nil || table.Rows[0].Values["attack"].Display != "20" || !table.Rows[0].Values["attack"].Formula {
+		t.Fatalf("GetTable() = %#v, %v", table, err)
+	}
+}
+
 func TestUpdateCellRefreshesCurrentWorkspace(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)

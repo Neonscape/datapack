@@ -27,4 +27,6 @@ export function RenameRow(arg1:workspace.RowRename):Promise<workspace.RowRenameR
 
 export function SelectProject():Promise<workspace.View>;
 
+export function SetCellFormula(arg1:workspace.FormulaSet):Promise<workspace.FormulaSetResult>;
+
 export function UpdateCell(arg1:workspace.CellUpdate):Promise<workspace.CellUpdateResult>;

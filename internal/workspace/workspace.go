@@ -9,6 +9,7 @@ import (
 	"datapack/internal/document"
 	"datapack/internal/export/csv"
 	"datapack/internal/foreignkey"
+	"datapack/internal/formula"
 	"datapack/internal/projecttree"
 	"datapack/internal/schemaregistry"
 )
@@ -34,6 +35,18 @@ type CellUpdate struct {
 }
 
 type CellUpdateResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
+type FormulaSet struct {
+	Path       string `json:"path"`
+	RowID      string `json:"rowID"`
+	Column     string `json:"column"`
+	Expression string `json:"expression"`
+}
+
+type FormulaSetResult struct {
 	Table     document.Table `json:"table"`
 	Workspace View           `json:"workspace"`
 }
@@ -208,7 +221,7 @@ func (s *Service) GetTable(path string) (document.Table, error) {
 	if err != nil {
 		return document.Table{}, fmt.Errorf("load table: %w", err)
 	}
-	return table, nil
+	return withFormulaPreview(table), nil
 }
 
 // UpdateCell applies one CUE expression to an existing table cell, then
@@ -228,7 +241,25 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 	if err != nil {
 		return CellUpdateResult{}, err
 	}
-	return CellUpdateResult{Table: table, Workspace: view}, nil
+	return CellUpdateResult{Table: withFormulaPreview(table), Workspace: view}, nil
+}
+
+func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
+	if s.current == nil {
+		return FormulaSetResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, set.Path) {
+		return FormulaSetResult{}, fmt.Errorf("table %q is not part of the open project", set.Path)
+	}
+	table, err := document.SetCellFormula(set.Path, set.RowID, set.Column, set.Expression)
+	if err != nil {
+		return FormulaSetResult{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return FormulaSetResult{}, err
+	}
+	return FormulaSetResult{Table: withFormulaPreview(table), Workspace: view}, nil
 }
 
 func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
@@ -459,4 +490,23 @@ func containsTable(node projecttree.Node, path string) bool {
 		}
 	}
 	return false
+}
+
+func withFormulaPreview(table document.Table) document.Table {
+	evaluated := formula.Evaluate(table)
+	for _, formula := range table.Formulas {
+		for index := range table.Rows {
+			if table.Rows[index].ID != formula.RowID {
+				continue
+			}
+			value, ok := evaluated.Rows[formula.RowID][formula.Column]
+			display := "<formula error>"
+			if ok {
+				display = fmt.Sprint(value)
+			}
+			table.Rows[index].Values[formula.Column] = document.Cell{Expression: formula.Expression, Display: display, Formula: true}
+			break
+		}
+	}
+	return table
 }

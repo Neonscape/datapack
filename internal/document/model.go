@@ -12,6 +12,7 @@ type Table struct {
 	Columns     []Column           `json:"columns"`
 	Rows        []Row              `json:"rows"`
 	ForeignKeys []ForeignKey       `json:"foreignKeys,omitempty"`
+	Formulas    []Formula          `json:"formulas,omitempty"`
 	CSVExport   *CSVExport         `json:"csvExport,omitempty"`
 	LocalSchema []SchemaDefinition `json:"localSchema"`
 }
@@ -32,11 +33,18 @@ type Row struct {
 type Cell struct {
 	Expression string `json:"expression"`
 	Display    string `json:"display"`
+	Formula    bool   `json:"formula,omitempty"`
 }
 
 type ForeignKey struct {
 	Column string `json:"column"`
 	Table  string `json:"table"`
+}
+
+type Formula struct {
+	RowID      string `json:"rowID"`
+	Column     string `json:"column"`
+	Expression string `json:"expression"`
 }
 
 type CSVExport struct {

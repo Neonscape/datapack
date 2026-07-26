@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {DataEditor, GridCellKind, type GridCell, type GridColumn, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddColumn, AddRow, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, RenameColumn, RenameRow, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, AddRow, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, RenameColumn, RenameRow, SelectProject, SetCellFormula, UpdateCell} from "../wailsjs/go/main/App";
 
 type TreeNode = {
     kind: "project" | "group" | "directory" | "table" | "tableData" | "localSchema" | "schemaFile" | "schemaDefinition" | "damaged";
@@ -66,7 +66,7 @@ type TableDocument = {
     namespace: string;
     name: string;
     columns: { name: string }[];
-    rows: { id: string; values: Record<string, { expression: string; display: string }> }[];
+    rows: { id: string; values: Record<string, { expression: string; display: string; formula?: boolean }> }[];
 };
 
 function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; onOpenTable: (path: string) => void }) {
@@ -85,7 +85,7 @@ function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; 
 
 type CellError = { rowID: string; column: string; message: string };
 
-function TableGrid({table, error, onAddColumn, onAddRow, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onRenameRow, onUpdate}: { table: TableDocument; error: CellError | null; onAddColumn: () => void; onAddRow: () => void; onDeleteColumn: () => void; onDeleteRow: (rowID: string) => void; onMoveColumn: () => void; onRenameColumn: () => void; onRenameRow: (rowID: string) => void; onUpdate: (rowID: string, column: string, expression: string) => void }) {
+function TableGrid({table, error, onAddColumn, onAddRow, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onRenameRow, onSetFormula, onUpdate}: { table: TableDocument; error: CellError | null; onAddColumn: () => void; onAddRow: () => void; onDeleteColumn: () => void; onDeleteRow: (rowID: string) => void; onMoveColumn: () => void; onRenameColumn: () => void; onRenameRow: (rowID: string) => void; onSetFormula: (rowID: string, column: string, expression: string) => void; onUpdate: (rowID: string, column: string, expression: string) => void }) {
     const [selectedRow, setSelectedRow] = useState<number | null>(null);
     const columns: GridColumn[] = [
         {id: "id", title: "ID", width: 160, style: "highlight"},
@@ -97,9 +97,9 @@ function TableGrid({table, error, onAddColumn, onAddRow, onDeleteColumn, onDelet
         return {
             kind: GridCellKind.Text,
             data: cell?.expression ?? "",
-            displayData: cell?.display ?? "",
+            displayData: cell?.formula ? `fx ${cell.display}` : cell?.display ?? "",
             allowOverlay: column !== 0,
-            readonly: column === 0,
+            readonly: column === 0 || cell?.formula === true,
             themeOverride: error?.rowID === source.id && error.column === table.columns[column - 1]?.name ? {
                 bgCell: "#fff1f1",
                 textDark: "#8a3030",
@@ -124,6 +124,15 @@ function TableGrid({table, error, onAddColumn, onAddRow, onDeleteColumn, onDelet
                 <button className="table-action" onClick={onMoveColumn}>Move column</button>
                 <button className="table-action table-action-danger" onClick={onDeleteColumn}>Delete column</button>
                 <button className="table-action" onClick={onAddRow}>Add row</button>
+                <button className="table-action" disabled={selectedRow === null} onClick={() => {
+                    if (selectedRow === null) return;
+                    const row = table.rows[selectedRow];
+                    const column = window.prompt("Column name for formula");
+                    if (!column) return;
+                    const existing = row.values[column];
+                    const expression = window.prompt("Formula expression", existing?.formula ? existing.expression : "");
+                    if (expression) onSetFormula(row.id, column, expression);
+                }}>Set formula</button>
                 <button className="table-action" disabled={selectedRow === null} onClick={() => {
                     if (selectedRow !== null) {
                         onRenameRow(table.rows[selectedRow].id);
@@ -196,6 +205,21 @@ function App() {
         setCellError(null);
         try {
             const result = await UpdateCell({path: table.path, rowID, column, expression});
+            setTable(result.table as TableDocument);
+            setWorkspace(result.workspace as WorkspaceView);
+        } catch (reason) {
+            const message = reason instanceof Error ? reason.message : String(reason);
+            setError(message);
+            setCellError({rowID, column, message});
+        }
+    }
+
+    async function setFormula(rowID: string, column: string, expression: string) {
+        if (!table) return;
+        setError("");
+        setCellError(null);
+        try {
+            const result = await SetCellFormula({path: table.path, rowID, column, expression});
             setTable(result.table as TableDocument);
             setWorkspace(result.workspace as WorkspaceView);
         } catch (reason) {
@@ -375,7 +399,7 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className="editor-placeholder">
-                        {table ? <TableGrid table={table} error={cellError} onAddColumn={addColumn} onAddRow={addRow} onDeleteColumn={deleteColumn} onDeleteRow={deleteRow} onMoveColumn={moveColumn} onRenameColumn={renameColumn} onRenameRow={renameRow} onUpdate={updateCell}/> : selectedSchema ? <>
+                        {table ? <TableGrid table={table} error={cellError} onAddColumn={addColumn} onAddRow={addRow} onDeleteColumn={deleteColumn} onDeleteRow={deleteRow} onMoveColumn={moveColumn} onRenameColumn={renameColumn} onRenameRow={renameRow} onSetFormula={setFormula} onUpdate={updateCell}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>

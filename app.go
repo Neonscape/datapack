@@ -69,6 +69,11 @@ func (a *App) UpdateCell(update workspace.CellUpdate) (workspace.CellUpdateResul
 	return a.workspace.UpdateCell(update)
 }
 
+// SetCellFormula assigns an expr-lang/expr formula to one table cell.
+func (a *App) SetCellFormula(set workspace.FormulaSet) (workspace.FormulaSetResult, error) {
+	return a.workspace.SetCellFormula(set)
+}
+
 // AddRow inserts a new table row using a complete CUE struct expression.
 func (a *App) AddRow(add workspace.RowAdd) (workspace.RowAddResult, error) {
 	return a.workspace.AddRow(add)

@@ -13,6 +13,7 @@ import (
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/load"
 	"datapack/internal/document"
+	"datapack/internal/formula"
 )
 
 type Result struct {
@@ -23,10 +24,18 @@ type Result struct {
 // table passes its row Schema validation. The destination is replaced as a
 // directory, so callers never observe a partially written export set.
 func Export(destination string, tables []document.Table) (Result, error) {
+	evaluatedRows := make(map[string]map[string]map[string]any, len(tables))
 	for _, table := range tables {
-		if err := validateTable(table); err != nil {
+		evaluated := formula.Evaluate(table)
+		if len(evaluated.Diagnostics) > 0 {
+			diagnostic := evaluated.Diagnostics[0]
+			return Result{}, fmt.Errorf("validate table %s formula %q.%q: %s", tableName(table), diagnostic.RowID, diagnostic.Column, diagnostic.Message)
+		}
+		rows, err := validateTable(table, evaluated.Rows)
+		if err != nil {
 			return Result{}, err
 		}
+		evaluatedRows[table.Path] = rows
 	}
 	temporary, err := os.MkdirTemp(filepath.Dir(destination), ".datapack-export-*")
 	if err != nil {
@@ -39,7 +48,7 @@ func Export(destination string, tables []document.Table) (Result, error) {
 			continue
 		}
 		file := filepath.Join(temporary, tableName(table)+".csv")
-		if err := writeTable(file, table); err != nil {
+		if err := writeTable(file, table, evaluatedRows[table.Path]); err != nil {
 			return Result{}, err
 		}
 		result.Files = append(result.Files, filepath.Join(destination, filepath.Base(file)))
@@ -51,27 +60,33 @@ func Export(destination string, tables []document.Table) (Result, error) {
 	return result, nil
 }
 
-func validateTable(table document.Table) error {
+func validateTable(table document.Table, rows map[string]map[string]any) (map[string]map[string]any, error) {
 	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path)})
 	if len(instances) != 1 {
-		return fmt.Errorf("validate table %s: expected one package, found %d", tableName(table), len(instances))
+		return nil, fmt.Errorf("validate table %s: expected one package, found %d", tableName(table), len(instances))
 	}
 	context := cuecontext.New()
 	value := context.BuildInstance(instances[0])
 	if err := value.Err(); err != nil {
-		return fmt.Errorf("validate table %s: %w", tableName(table), err)
+		return nil, fmt.Errorf("validate table %s: %w", tableName(table), err)
 	}
 	rowSchema := value.LookupPath(cue.MakePath(cue.Def("Row")))
+	finalRows := make(map[string]map[string]any, len(table.Rows))
 	for _, row := range table.Rows {
-		candidate := rowSchema.Unify(value.LookupPath(cue.MakePath(cue.Str("rows"), cue.Str(row.ID))))
+		candidate := rowSchema.Unify(context.Encode(rows[row.ID]))
 		if err := candidate.Validate(cue.Concrete(true)); err != nil {
-			return fmt.Errorf("validate table %s row %q: %w", tableName(table), row.ID, err)
+			return nil, fmt.Errorf("validate table %s row %q: %w", tableName(table), row.ID, err)
 		}
+		var decoded map[string]any
+		if err := candidate.Decode(&decoded); err != nil {
+			return nil, fmt.Errorf("decode table %s row %q: %w", tableName(table), row.ID, err)
+		}
+		finalRows[row.ID] = decoded
 	}
-	return nil
+	return finalRows, nil
 }
 
-func writeTable(path string, table document.Table) error {
+func writeTable(path string, table document.Table, rows map[string]map[string]any) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create CSV %s: %w", tableName(table), err)
@@ -88,15 +103,15 @@ func writeTable(path string, table document.Table) error {
 				record = append(record, row.ID)
 				continue
 			}
-			cell, exists := row.Values[column]
+			value, exists := rows[row.ID][column]
 			if !exists {
 				return fmt.Errorf("export table %s row %q: column %q has no value", tableName(table), row.ID, column)
 			}
-			value, err := encodeCell(cell.Expression)
+			encoded, err := encodeValue(value)
 			if err != nil {
 				return fmt.Errorf("export table %s row %q column %q: %w", tableName(table), row.ID, column, err)
 			}
-			record = append(record, value)
+			record = append(record, encoded)
 		}
 		if err := writer.Write(record); err != nil {
 			return fmt.Errorf("write CSV row: %w", err)
@@ -109,19 +124,11 @@ func writeTable(path string, table document.Table) error {
 	return nil
 }
 
-func encodeCell(expression string) (string, error) {
-	value := cuecontext.New().CompileString(expression)
-	if err := value.Validate(cue.Concrete(true)); err != nil {
-		return "", err
-	}
-	var decoded any
-	if err := value.Decode(&decoded); err != nil {
-		return "", err
-	}
-	if stringValue, ok := decoded.(string); ok {
+func encodeValue(value any) (string, error) {
+	if stringValue, ok := value.(string); ok {
 		return stringValue, nil
 	}
-	encoded, err := json.Marshal(decoded)
+	encoded, err := json.Marshal(value)
 	if err != nil {
 		return "", err
 	}

@@ -38,6 +38,7 @@ export namespace document {
 	export class Cell {
 	    expression: string;
 	    display: string;
+	    formula?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Cell(source);
@@ -47,6 +48,7 @@ export namespace document {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.expression = source["expression"];
 	        this.display = source["display"];
+	        this.formula = source["formula"];
 	    }
 	}
 	export class Column {
@@ -95,6 +97,22 @@ export namespace document {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.column = source["column"];
 	        this.table = source["table"];
+	    }
+	}
+	export class Formula {
+	    rowID: string;
+	    column: string;
+	    expression: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Formula(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rowID = source["rowID"];
+	        this.column = source["column"];
+	        this.expression = source["expression"];
 	    }
 	}
 	export class Row {
@@ -174,6 +192,7 @@ export namespace document {
 	    columns: Column[];
 	    rows: Row[];
 	    foreignKeys?: ForeignKey[];
+	    formulas?: Formula[];
 	    csvExport?: CSVExport;
 	    localSchema: SchemaDefinition[];
 	
@@ -191,6 +210,7 @@ export namespace document {
 	        this.columns = this.convertValues(source["columns"], Column);
 	        this.rows = this.convertValues(source["rows"], Row);
 	        this.foreignKeys = this.convertValues(source["foreignKeys"], ForeignKey);
+	        this.formulas = this.convertValues(source["formulas"], Formula);
 	        this.csvExport = this.convertValues(source["csvExport"], CSVExport);
 	        this.localSchema = this.convertValues(source["localSchema"], SchemaDefinition);
 	    }
@@ -996,6 +1016,56 @@ export namespace workspace {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.files = source["files"];
 	    }
+	}
+	export class FormulaSet {
+	    path: string;
+	    rowID: string;
+	    column: string;
+	    expression: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FormulaSet(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.rowID = source["rowID"];
+	        this.column = source["column"];
+	        this.expression = source["expression"];
+	    }
+	}
+	export class FormulaSetResult {
+	    table: document.Table;
+	    workspace: View;
+	
+	    static createFrom(source: any = {}) {
+	        return new FormulaSetResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = this.convertValues(source["table"], document.Table);
+	        this.workspace = this.convertValues(source["workspace"], View);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	
 	
