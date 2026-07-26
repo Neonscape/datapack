@@ -7,6 +7,8 @@ export function AddRow(arg1:workspace.RowAdd):Promise<workspace.RowAddResult>;
 
 export function CurrentWorkspace():Promise<workspace.View|boolean>;
 
+export function DeleteRow(arg1:workspace.RowDelete):Promise<workspace.RowDeleteResult>;
+
 export function GetTable(arg1:string):Promise<document.Table>;
 
 export function OpenProject(arg1:string):Promise<workspace.View>;

@@ -10,6 +10,10 @@ export function CurrentWorkspace() {
   return window['go']['main']['App']['CurrentWorkspace']();
 }
 
+export function DeleteRow(arg1) {
+  return window['go']['main']['App']['DeleteRow'](arg1);
+}
+
 export function GetTable(arg1) {
   return window['go']['main']['App']['GetTable'](arg1);
 }

@@ -75,6 +75,26 @@ func AddRow(path, rowID, expression string) (Table, error) {
 	return validateAndReplace(path, candidate)
 }
 
+// DeleteRow removes an existing table row.
+func DeleteRow(path, rowID string) (Table, error) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	if err := removeRow(file, rowID); err != nil {
+		return Table{}, err
+	}
+	candidate, err := format.Node(file)
+	if err != nil {
+		return Table{}, fmt.Errorf("format updated table: %w", err)
+	}
+	return validateAndReplace(path, candidate)
+}
+
 func replaceCell(file *ast.File, rowID, column string, value ast.Expr) error {
 	fields := fieldsOfFile(file)
 	rowSchema := requiredField(fields, "#Row")
@@ -113,6 +133,24 @@ func insertRow(file *ast.File, rowID string, value *ast.StructLit) error {
 	}
 	rowsValue.Elts = append(rowsValue.Elts, &ast.Field{Label: ast.NewIdent(rowID), Value: value})
 	return nil
+}
+
+func removeRow(file *ast.File, rowID string) error {
+	fields := fieldsOfFile(file)
+	rows := requiredField(fields, "rows")
+	rowsValue, ok := rows.Value.(*ast.StructLit)
+	if !ok {
+		return fmt.Errorf("rows must be a struct")
+	}
+	for index, element := range rowsValue.Elts {
+		field, ok := element.(*ast.Field)
+		if !ok || labelOf(field) != rowID {
+			continue
+		}
+		rowsValue.Elts = append(rowsValue.Elts[:index], rowsValue.Elts[index+1:]...)
+		return nil
+	}
+	return fmt.Errorf("row %q does not exist", rowID)
 }
 
 func validIdentifier(value string) bool {

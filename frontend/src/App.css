@@ -215,6 +215,12 @@
     font-size: 12px;
 }
 
+.table-actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+}
+
 .table-action {
     border: 1px solid #cfd7dc;
     border-radius: 4px;
@@ -228,6 +234,22 @@
 
 .table-action:hover {
     background: #eef4f5;
+}
+
+.table-action:disabled {
+    color: #9aa6ad;
+    border-color: #e1e6e8;
+    background: #f7f8f9;
+    cursor: default;
+}
+
+.table-action-danger:not(:disabled) {
+    color: #873737;
+    border-color: #e2c2c2;
+}
+
+.table-action-danger:not(:disabled):hover {
+    background: #fff3f3;
 }
 
 .table-document-header::after {

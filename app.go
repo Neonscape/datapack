@@ -73,3 +73,8 @@ func (a *App) UpdateCell(update workspace.CellUpdate) (workspace.CellUpdateResul
 func (a *App) AddRow(add workspace.RowAdd) (workspace.RowAddResult, error) {
 	return a.workspace.AddRow(add)
 }
+
+// DeleteRow removes an existing table row.
+func (a *App) DeleteRow(delete workspace.RowDelete) (workspace.RowDeleteResult, error) {
+	return a.workspace.DeleteRow(delete)
+}

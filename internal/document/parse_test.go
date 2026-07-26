@@ -169,6 +169,28 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestDeleteRowRemovesExistingRow(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {
+    sword: {name: "Sword"}
+    potion: {name: "Potion"}
+}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	table, err := DeleteRow(path, "sword")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(table.Rows) != 1 || table.Rows[0].ID != "potion" {
+		t.Fatalf("table rows = %#v", table.Rows)
+	}
+	if _, err := DeleteRow(path, "sword"); err == nil {
+		t.Fatal("DeleteRow() accepted a missing row")
+	}
+}
+
 func writeSource(t *testing.T, name, source string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)

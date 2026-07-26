@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {DataEditor, GridCellKind, type GridCell, type GridColumn, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddRow, GetTable, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
+import {AddRow, DeleteRow, GetTable, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
 
 type TreeNode = {
     kind: "project" | "group" | "directory" | "table" | "tableData" | "localSchema" | "schemaFile" | "schemaDefinition" | "damaged";
@@ -80,7 +80,8 @@ function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; 
 
 type CellError = { rowID: string; column: string; message: string };
 
-function TableGrid({table, error, onAddRow, onUpdate}: { table: TableDocument; error: CellError | null; onAddRow: () => void; onUpdate: (rowID: string, column: string, expression: string) => void }) {
+function TableGrid({table, error, onAddRow, onDeleteRow, onUpdate}: { table: TableDocument; error: CellError | null; onAddRow: () => void; onDeleteRow: (rowID: string) => void; onUpdate: (rowID: string, column: string, expression: string) => void }) {
+    const [selectedRow, setSelectedRow] = useState<number | null>(null);
     const columns: GridColumn[] = [
         {id: "id", title: "ID", width: 160, style: "highlight"},
         ...table.columns.map((column) => ({id: column.name, title: column.name, width: 170})),
@@ -112,7 +113,14 @@ function TableGrid({table, error, onAddRow, onUpdate}: { table: TableDocument; e
                 <div className="table-eyebrow">CUE expression editing</div>
                 <h1>{table.namespace}.{table.name}</h1>
             </div>
-            <button className="table-action" onClick={onAddRow}>Add row</button>
+            <div className="table-actions">
+                <button className="table-action" onClick={onAddRow}>Add row</button>
+                <button className="table-action table-action-danger" disabled={selectedRow === null} onClick={() => {
+                    if (selectedRow !== null) {
+                        onDeleteRow(table.rows[selectedRow].id);
+                    }
+                }}>Delete row</button>
+            </div>
             <span>{table.rows.length} rows</span>
         </div>
         {error && <div className="table-validation-error"><code>{error.column}</code><span>{error.message}</span></div>}
@@ -127,6 +135,7 @@ function TableGrid({table, error, onAddRow, onUpdate}: { table: TableDocument; e
                 smoothScrollX
                 smoothScrollY
                 onCellEdited={editCell}
+                onCellClicked={([, row]) => setSelectedRow(row)}
             />
         </div>
     </div>;
@@ -205,6 +214,21 @@ function App() {
         }
     }
 
+    async function deleteRow(rowID: string) {
+        if (!table || !window.confirm(`Delete row ${rowID}?`)) {
+            return;
+        }
+        setError("");
+        setCellError(null);
+        try {
+            const result = await DeleteRow({path: table.path, rowID});
+            setTable(result.table as TableDocument);
+            setWorkspace(result.workspace as WorkspaceView);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
     return (
         <main className="app-shell">
             <header className="app-header">
@@ -224,7 +248,7 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className="editor-placeholder">
-                        {table ? <TableGrid table={table} error={cellError} onAddRow={addRow} onUpdate={updateCell}/> : selectedSchema ? <>
+                        {table ? <TableGrid table={table} error={cellError} onAddRow={addRow} onDeleteRow={deleteRow} onUpdate={updateCell}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>

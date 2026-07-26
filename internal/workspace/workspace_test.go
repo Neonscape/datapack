@@ -198,6 +198,31 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestDeleteRowRefreshesCurrentWorkspace(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}, potion: {name: "Potion"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.DeleteRow(RowDelete{Path: path, RowID: "sword"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Table.Rows) != 1 || result.Table.Rows[0].ID != "potion" {
+		t.Fatalf("rows = %#v", result.Table.Rows)
+	}
+}
+
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

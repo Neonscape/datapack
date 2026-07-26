@@ -44,6 +44,16 @@ type RowAddResult struct {
 	Workspace View           `json:"workspace"`
 }
 
+type RowDelete struct {
+	Path  string `json:"path"`
+	RowID string `json:"rowID"`
+}
+
+type RowDeleteResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
 func NewService(configRoot string) *Service {
 	return &Service{configRoot: configRoot}
 }
@@ -157,6 +167,24 @@ func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
 		return RowAddResult{}, err
 	}
 	return RowAddResult{Table: table, Workspace: view}, nil
+}
+
+func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
+	if s.current == nil {
+		return RowDeleteResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, delete.Path) {
+		return RowDeleteResult{}, fmt.Errorf("table %q is not part of the open project", delete.Path)
+	}
+	table, err := document.DeleteRow(delete.Path, delete.RowID)
+	if err != nil {
+		return RowDeleteResult{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return RowDeleteResult{}, err
+	}
+	return RowDeleteResult{Table: table, Workspace: view}, nil
 }
 
 func (s *Service) refreshCurrentView() (View, error) {
