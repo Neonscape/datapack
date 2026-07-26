@@ -26,6 +26,7 @@ type WorkspaceView = {
         root: TreeNode;
     };
     schemas: SchemaIndex;
+    foreignKeys: ForeignKeySummary;
 };
 
 type SchemaUsage = {
@@ -54,6 +55,10 @@ type SchemaDiagnostic = {
 type SchemaIndex = {
     definitions: SchemaDefinition[];
     diagnostics?: SchemaDiagnostic[];
+};
+
+type ForeignKeySummary = {
+    diagnostics?: { rowID: string; column: string; message: string }[];
 };
 
 type TableDocument = {
@@ -303,6 +308,12 @@ function App() {
                         {(workspace.schemas.diagnostics?.length ?? 0) > 0 && <div className="schema-diagnostics">
                             {workspace.schemas.diagnostics?.map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.path}:${diagnostic.field}:${diagnostic.message}`}>
                                 <code>{diagnostic.field}</code>
+                                <span>{diagnostic.message}</span>
+                            </div>)}
+                        </div>}
+                        {(workspace.foreignKeys.diagnostics?.length ?? 0) > 0 && <div className="schema-diagnostics">
+                            {workspace.foreignKeys.diagnostics?.map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.rowID}:${diagnostic.column}:${diagnostic.message}`}>
+                                <code>{diagnostic.rowID}.{diagnostic.column}</code>
                                 <span>{diagnostic.message}</span>
                             </div>)}
                         </div>}

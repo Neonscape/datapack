@@ -39,6 +39,15 @@ type Index struct {
 	Diagnostics []Diagnostic
 }
 
+// Summary is the JSON-safe foreign-key status included in a workspace view.
+type Summary struct {
+	Diagnostics []Diagnostic `json:"diagnostics,omitempty"`
+}
+
+func (i Index) Summary() Summary {
+	return Summary{Diagnostics: i.Diagnostics}
+}
+
 func Build(tables []document.Table) Index {
 	index := Index{Usages: map[Target][]Usage{}}
 	known := map[string]map[string]bool{}

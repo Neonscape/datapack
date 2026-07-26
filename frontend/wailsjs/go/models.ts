@@ -202,6 +202,61 @@ export namespace document {
 
 }
 
+export namespace foreignkey {
+	
+	export class Diagnostic {
+	    path: string;
+	    table: string;
+	    rowID: string;
+	    column: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Diagnostic(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.table = source["table"];
+	        this.rowID = source["rowID"];
+	        this.column = source["column"];
+	        this.message = source["message"];
+	    }
+	}
+	export class Summary {
+	    diagnostics?: Diagnostic[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Summary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.diagnostics = this.convertValues(source["diagnostics"], Diagnostic);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace projecttree {
 	
 	export class Node {
@@ -657,6 +712,7 @@ export namespace workspace {
 	    settings: EditorSettings;
 	    tree: projecttree.Tree;
 	    schemas: schemaregistry.Index;
+	    foreignKeys: foreignkey.Summary;
 	
 	    static createFrom(source: any = {}) {
 	        return new View(source);
@@ -668,6 +724,7 @@ export namespace workspace {
 	        this.settings = this.convertValues(source["settings"], EditorSettings);
 	        this.tree = this.convertValues(source["tree"], projecttree.Tree);
 	        this.schemas = this.convertValues(source["schemas"], schemaregistry.Index);
+	        this.foreignKeys = this.convertValues(source["foreignKeys"], foreignkey.Summary);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

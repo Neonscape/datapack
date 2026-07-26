@@ -11,10 +11,11 @@ import (
 )
 
 type View struct {
-	Project  Project              `json:"project"`
-	Settings EditorSettings       `json:"settings"`
-	Tree     projecttree.Tree     `json:"tree"`
-	Schemas  schemaregistry.Index `json:"schemas"`
+	Project     Project              `json:"project"`
+	Settings    EditorSettings       `json:"settings"`
+	Tree        projecttree.Tree     `json:"tree"`
+	Schemas     schemaregistry.Index `json:"schemas"`
+	ForeignKeys foreignkey.Summary   `json:"foreignKeys"`
 }
 
 type Service struct {
@@ -91,7 +92,7 @@ func (s *Service) OpenProject(path string) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	view := View{Project: project, Settings: settings, Tree: tree, Schemas: buildSchemaIndex(tree)}
+	view := buildView(project, settings, tree)
 	s.current = &view
 	return view, nil
 }
@@ -101,6 +102,22 @@ func buildSchemaIndex(tree projecttree.Tree) schemaregistry.Index {
 	var tables []document.Table
 	collectDocuments(tree.Root, &publicSchemas, &tables)
 	return schemaregistry.Build(publicSchemas, tables).Index()
+}
+
+func buildForeignKeyIndex(tree projecttree.Tree) foreignkey.Index {
+	var tables []document.Table
+	collectTables(tree.Root, &tables)
+	return foreignkey.Build(tables)
+}
+
+func buildView(project Project, settings EditorSettings, tree projecttree.Tree) View {
+	return View{
+		Project:     project,
+		Settings:    settings,
+		Tree:        tree,
+		Schemas:     buildSchemaIndex(tree),
+		ForeignKeys: buildForeignKeyIndex(tree).Summary(),
+	}
 }
 
 func collectDocuments(node projecttree.Node, publicSchemas *[]document.PublicSchema, tables *[]document.Table) {
@@ -270,7 +287,7 @@ func (s *Service) refreshCurrentView() (View, error) {
 	if err != nil {
 		return View{}, fmt.Errorf("refresh project tree: %w", err)
 	}
-	view := View{Project: project, Settings: s.current.Settings, Tree: tree, Schemas: buildSchemaIndex(tree)}
+	view := buildView(project, s.current.Settings, tree)
 	s.current = &view
 	return view, nil
 }

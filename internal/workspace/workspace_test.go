@@ -249,6 +249,26 @@ _tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectIDs: {table
 	}
 }
 
+func TestOpenProjectReturnsForeignKeyDiagnostics(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
+#PrimaryKey: string
+#Row: {effectID: string}
+rows: {sword: {effectID: "missing"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table: "rpg.effect"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	view, err := NewService(t.TempDir()).OpenProject(filepath.Join(projectRoot, "game.dtproj"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.ForeignKeys.Diagnostics) != 1 || view.ForeignKeys.Diagnostics[0].Column != "effectID" {
+		t.Fatalf("foreign key diagnostics = %#v", view.ForeignKeys.Diagnostics)
+	}
+}
+
 func TestRenameRowUpdatesForeignKeyReferences(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
