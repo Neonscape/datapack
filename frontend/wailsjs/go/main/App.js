@@ -14,6 +14,10 @@ export function DeleteRow(arg1) {
   return window['go']['main']['App']['DeleteRow'](arg1);
 }
 
+export function Export() {
+  return window['go']['main']['App']['Export']();
+}
+
 export function GetTable(arg1) {
   return window['go']['main']['App']['GetTable'](arg1);
 }

@@ -3,8 +3,11 @@ package workspace
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"datapack/internal/document"
+	"datapack/internal/export/csv"
 	"datapack/internal/foreignkey"
 	"datapack/internal/projecttree"
 	"datapack/internal/schemaregistry"
@@ -65,6 +68,10 @@ type RowRename struct {
 type RowRenameResult struct {
 	Table     document.Table `json:"table"`
 	Workspace View           `json:"workspace"`
+}
+
+type ExportResult struct {
+	Files []string `json:"files"`
 }
 
 func NewService(configRoot string) *Service {
@@ -254,6 +261,40 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 		return RowRenameResult{}, err
 	}
 	return RowRenameResult{Table: table, Workspace: view}, nil
+}
+
+// Export writes configured CSV files only when the current workspace has no
+// Schema or foreign-key diagnostics.
+func (s *Service) Export() (ExportResult, error) {
+	if s.current == nil {
+		return ExportResult{}, fmt.Errorf("no project is open")
+	}
+	if len(s.current.Schemas.Diagnostics) > 0 {
+		return ExportResult{}, fmt.Errorf("export blocked by %d Schema diagnostics", len(s.current.Schemas.Diagnostics))
+	}
+	if len(s.current.ForeignKeys.Diagnostics) > 0 {
+		return ExportResult{}, fmt.Errorf("export blocked by %d foreign key diagnostics", len(s.current.ForeignKeys.Diagnostics))
+	}
+	var tables []document.Table
+	collectTables(s.current.Tree.Root, &tables)
+	destination, err := exportDirectory(s.current.Project)
+	if err != nil {
+		return ExportResult{}, err
+	}
+	result, err := csv.Export(destination, tables)
+	if err != nil {
+		return ExportResult{}, err
+	}
+	return ExportResult{Files: result.Files}, nil
+}
+
+func exportDirectory(project Project) (string, error) {
+	destination := filepath.Clean(filepath.Join(project.Root, project.Config.Export.Directory))
+	relative, err := filepath.Rel(project.Root, destination)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("export directory %q escapes the project directory", project.Config.Export.Directory)
+	}
+	return destination, nil
 }
 
 func foreignKeyUsage(tree projecttree.Tree, target document.Table, rowID string) *foreignkey.Usage {

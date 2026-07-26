@@ -59,6 +59,21 @@
     background: #0c5865;
 }
 
+.export-button {
+    border: 1px solid #9eb8bf;
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: #285460;
+    background: #ffffff;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.export-button:hover {
+    background: #edf5f6;
+}
+
 .build-mode {
     padding: 3px 7px;
     border-radius: 3px;
@@ -415,6 +430,19 @@
     border-radius: 4px;
     color: #812c2c;
     background: #fff4f4;
+    font-size: 13px;
+}
+
+.notice-toast {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    max-width: min(440px, calc(100vw - 32px));
+    padding: 10px 12px;
+    border: 1px solid #b9d8c4;
+    border-radius: 4px;
+    color: #2f6b43;
+    background: #f2fbf4;
     font-size: 13px;
 }
 

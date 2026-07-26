@@ -61,6 +61,20 @@ _schema: {definitions: {
 	}
 }
 
+func TestLoadTableReadsEnabledCSVExport(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}
+_export: {csv: {enabled: true, columns: ["id", "name"]}}`)
+
+	table, err := LoadTable(path)
+	if err != nil || table.CSVExport == nil || len(table.CSVExport.Columns) != 2 {
+		t.Fatalf("CSV export = %#v, error = %v", table.CSVExport, err)
+	}
+}
+
 func TestSetCellValueReplacesExistingCellWithCueExpression(t *testing.T) {
 	path := writeSource(t, "item.cue", `package item
 #PrimaryKey: string

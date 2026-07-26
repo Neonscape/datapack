@@ -83,3 +83,8 @@ func (a *App) DeleteRow(delete workspace.RowDelete) (workspace.RowDeleteResult, 
 func (a *App) RenameRow(rename workspace.RowRename) (workspace.RowRenameResult, error) {
 	return a.workspace.RenameRow(rename)
 }
+
+// Export writes the current project's configured CSV output.
+func (a *App) Export() (workspace.ExportResult, error) {
+	return a.workspace.Export()
+}

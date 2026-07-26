@@ -23,6 +23,18 @@ export namespace cuesource {
 
 export namespace document {
 	
+	export class CSVExport {
+	    columns: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CSVExport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = source["columns"];
+	    }
+	}
 	export class Cell {
 	    expression: string;
 	    display: string;
@@ -162,6 +174,7 @@ export namespace document {
 	    columns: Column[];
 	    rows: Row[];
 	    foreignKeys?: ForeignKey[];
+	    csvExport?: CSVExport;
 	    localSchema: SchemaDefinition[];
 	
 	    static createFrom(source: any = {}) {
@@ -178,6 +191,7 @@ export namespace document {
 	        this.columns = this.convertValues(source["columns"], Column);
 	        this.rows = this.convertValues(source["rows"], Row);
 	        this.foreignKeys = this.convertValues(source["foreignKeys"], ForeignKey);
+	        this.csvExport = this.convertValues(source["csvExport"], CSVExport);
 	        this.localSchema = this.convertValues(source["localSchema"], SchemaDefinition);
 	    }
 	
@@ -779,6 +793,18 @@ export namespace workspace {
 	}
 	
 	
+	export class ExportResult {
+	    files: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.files = source["files"];
+	    }
+	}
 	
 	
 	export class RowAdd {

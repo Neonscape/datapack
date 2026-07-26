@@ -12,6 +12,7 @@ type Table struct {
 	Columns     []Column           `json:"columns"`
 	Rows        []Row              `json:"rows"`
 	ForeignKeys []ForeignKey       `json:"foreignKeys,omitempty"`
+	CSVExport   *CSVExport         `json:"csvExport,omitempty"`
 	LocalSchema []SchemaDefinition `json:"localSchema"`
 }
 
@@ -36,6 +37,10 @@ type Cell struct {
 type ForeignKey struct {
 	Column string `json:"column"`
 	Table  string `json:"table"`
+}
+
+type CSVExport struct {
+	Columns []string `json:"columns"`
 }
 
 type SchemaDefinition struct {

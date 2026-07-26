@@ -45,6 +45,20 @@ func LoadTable(path string) (Table, error) {
 			document.ForeignKeys = append(document.ForeignKeys, ForeignKey{Column: labelOf(field), Table: stringOf(target.Value)})
 		}
 	}
+	if export := fields["_export"]; export != nil {
+		exportFields := fieldsOfStruct(export.Value)
+		if csv := exportFields["csv"]; csv != nil {
+			csvFields := fieldsOfStruct(csv.Value)
+			enabled := csvFields["enabled"]
+			if enabled != nil && boolOf(enabled.Value) {
+				columns := stringListOf(csvFields["columns"])
+				if len(columns) == 0 {
+					return Table{}, fmt.Errorf("parse CSV export: columns must not be empty")
+				}
+				document.CSVExport = &CSVExport{Columns: columns}
+			}
+		}
+	}
 
 	primaryKey, err := schemamodel.Parse(requiredField(fields, "#PrimaryKey").Value)
 	if err != nil {
@@ -271,6 +285,11 @@ func stringOf(expression ast.Expr) string {
 		panic(fmt.Sprintf("invalid CUE string: %v", err))
 	}
 	return value
+}
+
+func boolOf(expression ast.Expr) bool {
+	literal, ok := expression.(*ast.BasicLit)
+	return ok && literal.Kind == token.TRUE
 }
 
 func expressionOf(expression ast.Expr) (string, error) {

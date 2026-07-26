@@ -9,6 +9,8 @@ export function CurrentWorkspace():Promise<workspace.View|boolean>;
 
 export function DeleteRow(arg1:workspace.RowDelete):Promise<workspace.RowDeleteResult>;
 
+export function Export():Promise<workspace.ExportResult>;
+
 export function GetTable(arg1:string):Promise<document.Table>;
 
 export function OpenProject(arg1:string):Promise<workspace.View>;

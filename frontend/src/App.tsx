@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {DataEditor, GridCellKind, type GridCell, type GridColumn, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddRow, DeleteRow, GetTable, RenameRow, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
+import {AddRow, DeleteRow, Export, GetTable, RenameRow, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
 
 type TreeNode = {
     kind: "project" | "group" | "directory" | "table" | "tableData" | "localSchema" | "schemaFile" | "schemaDefinition" | "damaged";
@@ -157,6 +157,7 @@ function App() {
     const [table, setTable] = useState<TableDocument | null>(null);
     const [cellError, setCellError] = useState<CellError | null>(null);
     const [error, setError] = useState("");
+    const [notice, setNotice] = useState("");
 
     async function selectProject() {
         setError("");
@@ -258,6 +259,17 @@ function App() {
         }
     }
 
+    async function exportProject() {
+        setError("");
+        setNotice("");
+        try {
+            const result = await Export();
+            setNotice(`Exported ${result.files.length} CSV file${result.files.length === 1 ? "" : "s"}`);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
     return (
         <main className="app-shell">
             <header className="app-header">
@@ -266,6 +278,7 @@ function App() {
                 <span className="project-name">{workspace?.tree.root.name ?? "No project open"}</span>
                 <div className="header-actions">
                     {workspace && <span className={`build-mode build-mode-${workspace.settings.build.mode}`}>{workspace.settings.build.mode === "auto" ? "Auto compile" : "Manual compile"}</span>}
+                    {workspace && <button className="export-button" onClick={exportProject}>Export CSV</button>}
                     <button className="open-button" onClick={selectProject}>Open project</button>
                 </div>
             </header>
@@ -328,6 +341,7 @@ function App() {
                 </section>
             )}
             {error && <div className="error-toast" role="alert">{error}</div>}
+            {notice && <div className="notice-toast" role="status">{notice}</div>}
         </main>
     )
 }

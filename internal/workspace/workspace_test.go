@@ -269,6 +269,41 @@ _tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table:
 	}
 }
 
+func TestExportWritesConfiguredTablesAndRejectsForeignKeyErrors(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {}}
+_export: {csv: {enabled: true, columns: ["id", "name"]}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.Export()
+	if err != nil || len(result.Files) != 1 {
+		t.Fatalf("Export() = %#v, %v", result, err)
+	}
+
+	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
+#PrimaryKey: string
+#Row: {effectID: string}
+rows: {sword: {effectID: "missing"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table: "rpg.effect"}}}
+_export: {csv: {enabled: true, columns: ["id", "effectID"]}}`)
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Export(); err == nil {
+		t.Fatal("Export() accepted foreign key diagnostics")
+	}
+}
+
 func TestRenameRowUpdatesForeignKeyReferences(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
