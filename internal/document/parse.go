@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"cuelang.org/go/cue/ast"
+	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/parser"
 	"cuelang.org/go/cue/token"
 	"datapack/internal/schemamodel"
@@ -56,7 +57,19 @@ func LoadTable(path string) (Table, error) {
 
 	rows := requiredField(fields, "rows")
 	for _, field := range orderedStructFields(rows.Value) {
-		document.Rows = append(document.Rows, Row{ID: labelOf(field)})
+		if _, ok := field.Value.(*ast.StructLit); !ok {
+			return Table{}, fmt.Errorf("parse row %q: row must be a struct", labelOf(field))
+		}
+		values := fieldsOfStruct(field.Value)
+		row := Row{ID: labelOf(field), Values: make(map[string]Cell, len(values))}
+		for name, value := range values {
+			expression, err := expressionOf(value.Value)
+			if err != nil {
+				return Table{}, fmt.Errorf("parse row %q column %q: %w", row.ID, name, err)
+			}
+			row.Values[name] = Cell{Expression: expression, Display: displayOf(value.Value, expression)}
+		}
+		document.Rows = append(document.Rows, row)
 	}
 
 	localDefinitions := localDefinitionKinds(fields)
@@ -248,4 +261,21 @@ func stringOf(expression ast.Expr) string {
 		panic(fmt.Sprintf("invalid CUE string: %v", err))
 	}
 	return value
+}
+
+func expressionOf(expression ast.Expr) (string, error) {
+	formatted, err := format.Node(expression)
+	if err != nil {
+		return "", fmt.Errorf("format expression: %w", err)
+	}
+	return string(formatted), nil
+}
+
+func displayOf(expression ast.Expr, fallback string) string {
+	if literal, ok := expression.(*ast.BasicLit); ok && literal.Kind == token.STRING {
+		if value, err := strconv.Unquote(literal.Value); err == nil {
+			return value
+		}
+	}
+	return fallback
 }

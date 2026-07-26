@@ -21,6 +21,171 @@ export namespace cuesource {
 
 }
 
+export namespace document {
+	
+	export class Cell {
+	    expression: string;
+	    display: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Cell(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.expression = source["expression"];
+	        this.display = source["display"];
+	    }
+	}
+	export class Column {
+	    name: string;
+	    optional: boolean;
+	    schema: schemamodel.Node;
+	
+	    static createFrom(source: any = {}) {
+	        return new Column(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.optional = source["optional"];
+	        this.schema = this.convertValues(source["schema"], schemamodel.Node);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Row {
+	    id: string;
+	    values: Record<string, Cell>;
+	
+	    static createFrom(source: any = {}) {
+	        return new Row(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.values = this.convertValues(source["values"], Cell, true);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SchemaDefinition {
+	    name: string;
+	    kind: string;
+	    appliesTo?: string[];
+	    schema: schemamodel.Node;
+	
+	    static createFrom(source: any = {}) {
+	        return new SchemaDefinition(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.kind = source["kind"];
+	        this.appliesTo = source["appliesTo"];
+	        this.schema = this.convertValues(source["schema"], schemamodel.Node);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Table {
+	    path: string;
+	    package: string;
+	    namespace: string;
+	    name: string;
+	    primaryKey: schemamodel.Node;
+	    columns: Column[];
+	    rows: Row[];
+	    localSchema: SchemaDefinition[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Table(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.package = source["package"];
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	        this.primaryKey = this.convertValues(source["primaryKey"], schemamodel.Node);
+	        this.columns = this.convertValues(source["columns"], Column);
+	        this.rows = this.convertValues(source["rows"], Row);
+	        this.localSchema = this.convertValues(source["localSchema"], SchemaDefinition);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace projecttree {
 	
 	export class Node {
@@ -91,6 +256,117 @@ export namespace projecttree {
 		    return a;
 		}
 	}
+
+}
+
+export namespace schemamodel {
+	
+	export class Requirement {
+	    expression: string;
+	    reference?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Requirement(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.expression = source["expression"];
+	        this.reference = source["reference"];
+	    }
+	}
+	export class Value {
+	    expression: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Value(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.expression = source["expression"];
+	    }
+	}
+	export class Node {
+	    kind: string;
+	    nullable: boolean;
+	    default?: Value;
+	    reference?: string;
+	    enumValues?: Value[];
+	    element?: Node;
+	    fields?: Field[];
+	    requirements?: Requirement[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Node(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.nullable = source["nullable"];
+	        this.default = this.convertValues(source["default"], Value);
+	        this.reference = source["reference"];
+	        this.enumValues = this.convertValues(source["enumValues"], Value);
+	        this.element = this.convertValues(source["element"], Node);
+	        this.fields = this.convertValues(source["fields"], Field);
+	        this.requirements = this.convertValues(source["requirements"], Requirement);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Field {
+	    name: string;
+	    optional: boolean;
+	    schema: Node;
+	
+	    static createFrom(source: any = {}) {
+	        return new Field(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.optional = source["optional"];
+	        this.schema = this.convertValues(source["schema"], Node);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
 
 }
 
@@ -224,6 +500,24 @@ export namespace workspace {
 	        this.autoCompileDebounceSeconds = source["autoCompileDebounceSeconds"];
 	    }
 	}
+	export class CellUpdate {
+	    path: string;
+	    rowID: string;
+	    column: string;
+	    expression: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CellUpdate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.rowID = source["rowID"];
+	        this.column = source["column"];
+	        this.expression = source["expression"];
+	    }
+	}
 	export class EditorSettings {
 	    version: number;
 	    build: BuildSettings;
@@ -342,7 +636,6 @@ export namespace workspace {
 		    return a;
 		}
 	}
-	
 	export class View {
 	    project: Project;
 	    settings: EditorSettings;
@@ -379,6 +672,42 @@ export namespace workspace {
 		    return a;
 		}
 	}
+	export class CellUpdateResult {
+	    table: document.Table;
+	    workspace: View;
+	
+	    static createFrom(source: any = {}) {
+	        return new CellUpdateResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = this.convertValues(source["table"], document.Table);
+	        this.workspace = this.convertValues(source["workspace"], View);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	
+	
 
 }
 

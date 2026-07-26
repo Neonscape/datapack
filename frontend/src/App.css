@@ -111,13 +111,29 @@
 }
 
 .tree-row {
+    width: 100%;
     height: 26px;
     display: flex;
     align-items: center;
     gap: 7px;
     padding-right: 8px;
+    border: 0;
     color: #35424c;
     font-size: 13px;
+    text-align: left;
+    background: transparent;
+}
+
+.tree-action {
+    cursor: pointer;
+}
+
+.tree-action:hover {
+    background: #e7f0f2;
+}
+
+.tree-row:disabled {
+    cursor: default;
 }
 
 .tree-file {
@@ -167,6 +183,77 @@
     color: #687580;
     font-size: 14px;
     line-height: 1.5;
+}
+
+.table-document {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+}
+
+.table-document-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid #dfe5e8;
+}
+
+.table-document-header h1 {
+    margin: 3px 0 0;
+    color: #26333d;
+    font-size: 18px;
+    font-weight: 650;
+}
+
+.table-document-header > span {
+    color: #687580;
+    font-size: 12px;
+}
+
+.table-document-header::after {
+    content: 'Edit values as CUE expressions';
+    margin-left: auto;
+    color: #687580;
+    font-size: 12px;
+}
+
+.table-document-header > span {
+    order: 1;
+}
+
+.table-eyebrow {
+    color: #63717c;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.table-grid {
+    min-height: 0;
+    flex: 1;
+}
+
+.table-validation-error {
+    display: flex;
+    gap: 9px;
+    align-items: baseline;
+    padding: 8px 22px;
+    border-bottom: 1px solid #e5c8c8;
+    color: #863e3e;
+    background: #fff7f7;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.table-validation-error code {
+    color: #6e2727;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .schema-kind {

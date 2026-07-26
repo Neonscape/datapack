@@ -1,6 +1,8 @@
 import {useState} from 'react';
+import {DataEditor, GridCellKind, type GridCell, type GridColumn, type Item} from '@glideapps/glide-data-grid';
+import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {SelectProject} from "../wailsjs/go/main/App";
+import {GetTable, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
 
 type TreeNode = {
     kind: "project" | "group" | "directory" | "table" | "tableData" | "localSchema" | "schemaFile" | "schemaDefinition" | "damaged";
@@ -54,22 +56,86 @@ type SchemaIndex = {
     diagnostics?: SchemaDiagnostic[];
 };
 
-function Tree({node, depth = 0}: { node: TreeNode; depth?: number }) {
+type TableDocument = {
+    path: string;
+    namespace: string;
+    name: string;
+    columns: { name: string }[];
+    rows: { id: string; values: Record<string, { expression: string; display: string }> }[];
+};
+
+function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; onOpenTable: (path: string) => void }) {
     const isFile = node.kind === "tableData" || node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "damaged";
+    const openTable = node.kind === "tableData" && node.path ? () => onOpenTable(node.path!) : undefined;
     return (
         <div className="tree-node">
-            <div className={`tree-row ${isFile ? "tree-file" : ""}`} style={{paddingLeft: `${12 + depth * 16}px`}}>
+            <button className={`tree-row ${isFile ? "tree-file" : ""} ${openTable ? "tree-action" : ""}`} style={{paddingLeft: `${12 + depth * 16}px`}} onClick={openTable} disabled={!openTable}>
                 <span className={`node-icon node-${node.kind}`} aria-hidden="true"/>
                 <span>{node.name}</span>
-            </div>
-            {node.children?.map((child) => <Tree key={`${child.kind}:${child.path ?? child.name}`} node={child} depth={depth + 1}/>) }
+            </button>
+            {node.children?.map((child) => <Tree key={`${child.kind}:${child.path ?? child.name}`} node={child} depth={depth + 1} onOpenTable={onOpenTable}/>) }
         </div>
     );
+}
+
+type CellError = { rowID: string; column: string; message: string };
+
+function TableGrid({table, error, onUpdate}: { table: TableDocument; error: CellError | null; onUpdate: (rowID: string, column: string, expression: string) => void }) {
+    const columns: GridColumn[] = [
+        {id: "id", title: "ID", width: 160, style: "highlight"},
+        ...table.columns.map((column) => ({id: column.name, title: column.name, width: 170})),
+    ];
+    const getCellContent = ([column, row]: Item): GridCell => {
+        const source = table.rows[row];
+        const cell = column === 0 ? {display: source.id, expression: source.id} : source.values[table.columns[column - 1].name];
+        return {
+            kind: GridCellKind.Text,
+            data: cell?.expression ?? "",
+            displayData: cell?.display ?? "",
+            allowOverlay: column !== 0,
+            readonly: column === 0,
+            themeOverride: error?.rowID === source.id && error.column === table.columns[column - 1]?.name ? {
+                bgCell: "#fff1f1",
+                textDark: "#8a3030",
+            } : undefined,
+        };
+    };
+    const editCell = ([column, row]: Item, value: GridCell) => {
+        if (column === 0 || value.kind !== GridCellKind.Text) {
+            return;
+        }
+        onUpdate(table.rows[row].id, table.columns[column - 1].name, value.data);
+    };
+    return <div className="table-document">
+        <div className="table-document-header">
+            <div>
+                <div className="table-eyebrow">CUE expression editing</div>
+                <h1>{table.namespace}.{table.name}</h1>
+            </div>
+            <span>{table.rows.length} rows</span>
+        </div>
+        {error && <div className="table-validation-error"><code>{error.column}</code><span>{error.message}</span></div>}
+        <div className="table-grid">
+            <DataEditor
+                columns={columns}
+                getCellContent={getCellContent}
+                rows={table.rows.length}
+                rowMarkers="clickable-number"
+                rowHeight={30}
+                headerHeight={34}
+                smoothScrollX
+                smoothScrollY
+                onCellEdited={editCell}
+            />
+        </div>
+    </div>;
 }
 
 function App() {
     const [workspace, setWorkspace] = useState<WorkspaceView | null>(null);
     const [selectedSchema, setSelectedSchema] = useState<SchemaDefinition | null>(null);
+    const [table, setTable] = useState<TableDocument | null>(null);
+    const [cellError, setCellError] = useState<CellError | null>(null);
     const [error, setError] = useState("");
 
     async function selectProject() {
@@ -79,9 +145,38 @@ function App() {
             if (view?.project?.path) {
                 setWorkspace(view);
                 setSelectedSchema(view.schemas.definitions[0] ?? null);
+                setTable(null);
+                setCellError(null);
             }
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
+    async function openTable(path: string) {
+        setError("");
+        try {
+            setTable(await GetTable(path) as TableDocument);
+            setCellError(null);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
+    async function updateCell(rowID: string, column: string, expression: string) {
+        if (!table) {
+            return;
+        }
+        setError("");
+        setCellError(null);
+        try {
+            const result = await UpdateCell({path: table.path, rowID, column, expression});
+            setTable(result.table as TableDocument);
+            setWorkspace(result.workspace as WorkspaceView);
+        } catch (reason) {
+            const message = reason instanceof Error ? reason.message : String(reason);
+            setError(message);
+            setCellError({rowID, column, message});
         }
     }
 
@@ -101,10 +196,10 @@ function App() {
                 <section className="workbench">
                     <aside className="project-explorer">
                         <div className="panel-title">Project</div>
-                        <div className="tree"><Tree node={workspace.tree.root}/></div>
+                        <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className="editor-placeholder">
-                        {selectedSchema ? <>
+                        {table ? <TableGrid table={table} error={cellError} onUpdate={updateCell}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>
@@ -125,7 +220,7 @@ function App() {
                             {workspace.schemas.definitions.map((definition) => <button
                                 className={`schema-row ${selectedSchema?.id === definition.id ? "schema-row-selected" : ""}`}
                                 key={definition.id}
-                                onClick={() => setSelectedSchema(definition)}
+                                onClick={() => { setSelectedSchema(definition); setTable(null); setCellError(null); }}
                             >
                                 <span className={`schema-kind-dot schema-kind-${definition.kind}`} aria-hidden="true"/>
                                 <span>{definition.id}</span>

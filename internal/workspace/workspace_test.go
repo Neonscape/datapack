@@ -21,7 +21,7 @@ func TestOpenProjectLoadsSettingsAndSourceTree(t *testing.T) {
 	writeFile(t, filepath.Join(projectRoot, "tables", "items", "item.cue"), `package item
 	#PrimaryKey: string
 #Row: {name: string}
-rows: {sword: "sword"}
+rows: {sword: {name: "Sword"}}
 _tool: {table: {namespace: "rpg", name: "item"}}
 `)
 	writeFile(t, filepath.Join(projectRoot, "tables", "generated", "ignored.cue"), "package generated\n")
@@ -75,7 +75,7 @@ _schema: {definitions: {
 	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
 #PrimaryKey: common.#GameID
 #Row: {price: string & common.#Positive}
-rows: {sword: "sword"}
+rows: {sword: {price: "invalid"}}
 _tool: {table: {namespace: "rpg", name: "item"}}`)
 
 	view, err := NewService(t.TempDir()).OpenProject(filepath.Join(projectRoot, "game.dtproj"))
@@ -116,6 +116,60 @@ func TestLoadProjectRejectsInvalidConfig(t *testing.T) {
 	_, err := LoadProject(path)
 	if err == nil || !strings.Contains(err.Error(), "escapes the project directory") {
 		t.Fatalf("LoadProject() error = %v, want path escape error", err)
+	}
+}
+
+func TestGetTableLoadsOnlyDiscoveredProjectTables(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	table, err := service.GetTable(path)
+	if err != nil || table.Rows[0].Values["name"].Display != "Sword" {
+		t.Fatalf("GetTable() = %#v, %v", table, err)
+	}
+	if _, err := service.GetTable(filepath.Join(projectRoot, "outside.cue")); err == nil {
+		t.Fatal("GetTable() accepted a path outside the project tree")
+	}
+}
+
+func TestUpdateCellRefreshesCurrentWorkspace(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.UpdateCell(CellUpdate{Path: path, RowID: "sword", Column: "name", Expression: `"Steel Sword"`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Table.Rows[0].Values["name"].Display; got != "Steel Sword" {
+		t.Fatalf("updated display = %q", got)
+	}
+	current, exists := service.Current()
+	if !exists || current.Tree.Root.Path != result.Workspace.Tree.Root.Path {
+		t.Fatalf("current workspace = %#v, exists = %v", current, exists)
 	}
 }
 

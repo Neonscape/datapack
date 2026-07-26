@@ -6,10 +6,18 @@ export function CurrentWorkspace() {
   return window['go']['main']['App']['CurrentWorkspace']();
 }
 
+export function GetTable(arg1) {
+  return window['go']['main']['App']['GetTable'](arg1);
+}
+
 export function OpenProject(arg1) {
   return window['go']['main']['App']['OpenProject'](arg1);
 }
 
 export function SelectProject() {
   return window['go']['main']['App']['SelectProject']();
+}
+
+export function UpdateCell(arg1) {
+  return window['go']['main']['App']['UpdateCell'](arg1);
 }

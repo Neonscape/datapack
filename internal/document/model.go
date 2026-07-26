@@ -21,7 +21,15 @@ type Column struct {
 }
 
 type Row struct {
-	ID string `json:"id"`
+	ID     string          `json:"id"`
+	Values map[string]Cell `json:"values"`
+}
+
+// Cell preserves the source expression while exposing a compact display value
+// for table views. Writes will use Expression rather than Display.
+type Cell struct {
+	Expression string `json:"expression"`
+	Display    string `json:"display"`
 }
 
 type SchemaDefinition struct {
