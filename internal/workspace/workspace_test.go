@@ -249,6 +249,40 @@ _tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectIDs: {table
 	}
 }
 
+func TestRenameRowUpdatesForeignKeyReferences(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "effect.cue")
+	writeFile(t, path, `package effect
+#PrimaryKey: string
+#Row: {name: string}
+rows: {burn: {name: "Burn"}}
+_tool: {table: {namespace: "rpg", name: "effect"}, foreignKeys: {}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
+#PrimaryKey: string
+#Row: {effectIDs: [...string]}
+rows: {sword: {effectIDs: ["burn"]}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectIDs: {table: "rpg.effect"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.RenameRow(RowRename{Path: path, OldID: "burn", NewID: "burn_large"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Table.Rows[0].ID != "burn_large" {
+		t.Fatalf("rows = %#v", result.Table.Rows)
+	}
+	item, err := service.GetTable(filepath.Join(projectRoot, "tables", "item.cue"))
+	if err != nil || item.Rows[0].Values["effectIDs"].Expression != `["burn_large"]` {
+		t.Fatalf("item = %#v, error = %v", item, err)
+	}
+}
+
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

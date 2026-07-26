@@ -13,6 +13,8 @@ export function GetTable(arg1:string):Promise<document.Table>;
 
 export function OpenProject(arg1:string):Promise<workspace.View>;
 
+export function RenameRow(arg1:workspace.RowRename):Promise<workspace.RowRenameResult>;
+
 export function SelectProject():Promise<workspace.View>;
 
 export function UpdateCell(arg1:workspace.CellUpdate):Promise<workspace.CellUpdateResult>;

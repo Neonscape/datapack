@@ -55,6 +55,17 @@ type RowDeleteResult struct {
 	Workspace View           `json:"workspace"`
 }
 
+type RowRename struct {
+	Path  string `json:"path"`
+	OldID string `json:"oldID"`
+	NewID string `json:"newID"`
+}
+
+type RowRenameResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
 func NewService(configRoot string) *Service {
 	return &Service{configRoot: configRoot}
 }
@@ -193,6 +204,39 @@ func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
 		return RowDeleteResult{}, err
 	}
 	return RowDeleteResult{Table: table, Workspace: view}, nil
+}
+
+func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
+	if s.current == nil {
+		return RowRenameResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, rename.Path) {
+		return RowRenameResult{}, fmt.Errorf("table %q is not part of the open project", rename.Path)
+	}
+	target, err := document.LoadTable(rename.Path)
+	if err != nil {
+		return RowRenameResult{}, fmt.Errorf("load table: %w", err)
+	}
+	var tables []document.Table
+	collectTables(s.current.Tree.Root, &tables)
+	targetName := target.Name
+	if target.Namespace != "" {
+		targetName = target.Namespace + "." + target.Name
+	}
+	usages := foreignkey.Build(tables).Usages[foreignkey.Target{Table: targetName, RowID: rename.OldID}]
+	references := make([]document.RowReference, 0, len(usages))
+	for _, usage := range usages {
+		references = append(references, document.RowReference{Path: usage.Path, RowID: usage.RowID, Column: usage.Column, Index: usage.Index, Array: usage.Array})
+	}
+	table, err := document.RenameRow(rename.Path, rename.OldID, rename.NewID, references)
+	if err != nil {
+		return RowRenameResult{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return RowRenameResult{}, err
+	}
+	return RowRenameResult{Table: table, Workspace: view}, nil
 }
 
 func foreignKeyUsage(tree projecttree.Tree, target document.Table, rowID string) *foreignkey.Usage {

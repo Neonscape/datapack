@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {DataEditor, GridCellKind, type GridCell, type GridColumn, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddRow, DeleteRow, GetTable, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
+import {AddRow, DeleteRow, GetTable, RenameRow, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
 
 type TreeNode = {
     kind: "project" | "group" | "directory" | "table" | "tableData" | "localSchema" | "schemaFile" | "schemaDefinition" | "damaged";
@@ -80,7 +80,7 @@ function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; 
 
 type CellError = { rowID: string; column: string; message: string };
 
-function TableGrid({table, error, onAddRow, onDeleteRow, onUpdate}: { table: TableDocument; error: CellError | null; onAddRow: () => void; onDeleteRow: (rowID: string) => void; onUpdate: (rowID: string, column: string, expression: string) => void }) {
+function TableGrid({table, error, onAddRow, onDeleteRow, onRenameRow, onUpdate}: { table: TableDocument; error: CellError | null; onAddRow: () => void; onDeleteRow: (rowID: string) => void; onRenameRow: (rowID: string) => void; onUpdate: (rowID: string, column: string, expression: string) => void }) {
     const [selectedRow, setSelectedRow] = useState<number | null>(null);
     const columns: GridColumn[] = [
         {id: "id", title: "ID", width: 160, style: "highlight"},
@@ -115,6 +115,11 @@ function TableGrid({table, error, onAddRow, onDeleteRow, onUpdate}: { table: Tab
             </div>
             <div className="table-actions">
                 <button className="table-action" onClick={onAddRow}>Add row</button>
+                <button className="table-action" disabled={selectedRow === null} onClick={() => {
+                    if (selectedRow !== null) {
+                        onRenameRow(table.rows[selectedRow].id);
+                    }
+                }}>Rename ID</button>
                 <button className="table-action table-action-danger" disabled={selectedRow === null} onClick={() => {
                     if (selectedRow !== null) {
                         onDeleteRow(table.rows[selectedRow].id);
@@ -229,6 +234,25 @@ function App() {
         }
     }
 
+    async function renameRow(oldID: string) {
+        if (!table) {
+            return;
+        }
+        const newID = window.prompt("New row ID", oldID);
+        if (!newID || newID === oldID) {
+            return;
+        }
+        setError("");
+        setCellError(null);
+        try {
+            const result = await RenameRow({path: table.path, oldID, newID});
+            setTable(result.table as TableDocument);
+            setWorkspace(result.workspace as WorkspaceView);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
     return (
         <main className="app-shell">
             <header className="app-header">
@@ -248,7 +272,7 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className="editor-placeholder">
-                        {table ? <TableGrid table={table} error={cellError} onAddRow={addRow} onDeleteRow={deleteRow} onUpdate={updateCell}/> : selectedSchema ? <>
+                        {table ? <TableGrid table={table} error={cellError} onAddRow={addRow} onDeleteRow={deleteRow} onRenameRow={renameRow} onUpdate={updateCell}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>

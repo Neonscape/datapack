@@ -78,3 +78,8 @@ func (a *App) AddRow(add workspace.RowAdd) (workspace.RowAddResult, error) {
 func (a *App) DeleteRow(delete workspace.RowDelete) (workspace.RowDeleteResult, error) {
 	return a.workspace.DeleteRow(delete)
 }
+
+// RenameRow changes a row ID and updates all declared foreign-key references.
+func (a *App) RenameRow(rename workspace.RowRename) (workspace.RowRenameResult, error) {
+	return a.workspace.RenameRow(rename)
+}

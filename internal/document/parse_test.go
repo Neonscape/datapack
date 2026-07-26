@@ -191,6 +191,40 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestRenameRowUpdatesScalarAndArrayReferences(t *testing.T) {
+	root := t.TempDir()
+	targetPath := filepath.Join(root, "effect.cue")
+	referencePath := filepath.Join(root, "item.cue")
+	writeModuleFile(t, targetPath, `package effect
+#PrimaryKey: string
+#Row: {name: string}
+rows: {burn: {name: "Burn"}}
+_tool: {table: {namespace: "rpg", name: "effect"}}`)
+	writeModuleFile(t, referencePath, `package item
+#PrimaryKey: string
+#Row: {effectID: string, effectIDs: [...string]}
+rows: {sword: {effectID: "burn", effectIDs: ["burn"]}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	table, err := RenameRow(targetPath, "burn", "burn_large", []RowReference{
+		{Path: referencePath, RowID: "sword", Column: "effectID"},
+		{Path: referencePath, RowID: "sword", Column: "effectIDs", Index: 0, Array: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(table.Rows) != 1 || table.Rows[0].ID != "burn_large" {
+		t.Fatalf("renamed rows = %#v", table.Rows)
+	}
+	references, err := LoadTable(referencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if references.Rows[0].Values["effectID"].Display != "burn_large" || references.Rows[0].Values["effectIDs"].Expression != `["burn_large"]` {
+		t.Fatalf("references = %#v", references.Rows[0].Values)
+	}
+}
+
 func writeSource(t *testing.T, name, source string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)

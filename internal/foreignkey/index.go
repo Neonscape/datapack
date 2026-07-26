@@ -23,6 +23,7 @@ type Usage struct {
 	RowID  string `json:"rowID"`
 	Column string `json:"column"`
 	Index  int    `json:"index,omitempty"`
+	Array  bool   `json:"array,omitempty"`
 }
 
 type Diagnostic struct {
@@ -57,8 +58,9 @@ func Build(tables []document.Table) Index {
 					index.Diagnostics = append(index.Diagnostics, Diagnostic{Path: table.Path, Table: name, RowID: row.ID, Column: key.Column, Message: err.Error()})
 					continue
 				}
+				array := isListExpression(row.Values[key.Column].Expression)
 				for position, value := range values {
-					usage := Usage{Path: table.Path, Table: name, RowID: row.ID, Column: key.Column, Index: position}
+					usage := Usage{Path: table.Path, Table: name, RowID: row.ID, Column: key.Column, Index: position, Array: array}
 					target := Target{Table: key.Table, RowID: value}
 					index.Usages[target] = append(index.Usages[target], usage)
 					if rows, exists := known[key.Table]; !exists || !rows[value] {
@@ -81,6 +83,15 @@ func Build(tables []document.Table) Index {
 		})
 	}
 	return index
+}
+
+func isListExpression(expression string) bool {
+	value, err := parser.ParseExpr("foreign-key.cue", expression)
+	if err != nil {
+		return false
+	}
+	_, ok := value.(*ast.ListLit)
+	return ok
 }
 
 func referenceValues(expression string) ([]string, error) {

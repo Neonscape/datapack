@@ -22,6 +22,10 @@ export function OpenProject(arg1) {
   return window['go']['main']['App']['OpenProject'](arg1);
 }
 
+export function RenameRow(arg1) {
+  return window['go']['main']['App']['RenameRow'](arg1);
+}
+
 export function SelectProject() {
   return window['go']['main']['App']['SelectProject']();
 }
