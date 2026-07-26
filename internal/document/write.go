@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"unicode"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/ast"
@@ -42,6 +44,37 @@ func SetCellValue(path, rowID, column, expression string) (Table, error) {
 	return validateAndReplace(path, candidate)
 }
 
+// AddRow inserts a new table row using a complete CUE struct expression.
+func AddRow(path, rowID, expression string) (Table, error) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	value, err := parser.ParseExpr(path, expression)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse row expression: %w", err)
+	}
+	rowValue, ok := value.(*ast.StructLit)
+	if !ok {
+		return Table{}, fmt.Errorf("row expression must be a struct")
+	}
+	if err := insertRow(file, rowID, rowValue); err != nil {
+		return Table{}, err
+	}
+	candidate, err := format.Node(file)
+	if err != nil {
+		return Table{}, fmt.Errorf("format updated table: %w", err)
+	}
+	if err := validateCellValue(path, candidate, rowID); err != nil {
+		return Table{}, err
+	}
+	return validateAndReplace(path, candidate)
+}
+
 func replaceCell(file *ast.File, rowID, column string, value ast.Expr) error {
 	fields := fieldsOfFile(file)
 	rowSchema := requiredField(fields, "#Row")
@@ -62,6 +95,42 @@ func replaceCell(file *ast.File, rowID, column string, value ast.Expr) error {
 	}
 	cell.Value = value
 	return nil
+}
+
+func insertRow(file *ast.File, rowID string, value *ast.StructLit) error {
+	rowID = strings.TrimSpace(rowID)
+	if !validIdentifier(rowID) {
+		return fmt.Errorf("row ID %q must be a valid CUE identifier", rowID)
+	}
+	fields := fieldsOfFile(file)
+	rows := requiredField(fields, "rows")
+	rowsValue, ok := rows.Value.(*ast.StructLit)
+	if !ok {
+		return fmt.Errorf("rows must be a struct")
+	}
+	if _, exists := fieldsOfStruct(rows.Value)[rowID]; exists {
+		return fmt.Errorf("row %q already exists", rowID)
+	}
+	rowsValue.Elts = append(rowsValue.Elts, &ast.Field{Label: ast.NewIdent(rowID), Value: value})
+	return nil
+}
+
+func validIdentifier(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index, r := range value {
+		if index == 0 {
+			if r != '_' && !unicode.IsLetter(r) {
+				return false
+			}
+			continue
+		}
+		if r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func validateCellValue(path string, source []byte, rowID string) error {

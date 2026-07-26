@@ -144,6 +144,31 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestAddRowInsertsAndValidatesCueStruct(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {name: string, price: int & >=0}
+rows: {sword: {name: "Sword", price: 100}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	table, err := AddRow(path, "potion", `{name: "Potion", price: 10}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(table.Rows) != 2 || table.Rows[1].ID != "potion" || table.Rows[1].Values["name"].Display != "Potion" {
+		t.Fatalf("table rows = %#v", table.Rows)
+	}
+	if _, err := AddRow(path, "potion", `{name: "Potion", price: 10}`); err == nil {
+		t.Fatal("AddRow() accepted a duplicate row ID")
+	}
+	if _, err := AddRow(path, "broken", `{name: "Broken", price: -1}`); err == nil {
+		t.Fatal("AddRow() accepted a row outside #Row")
+	}
+	if _, err := AddRow(path, "bad-id", `{name: "Broken", price: 1}`); err == nil {
+		t.Fatal("AddRow() accepted an invalid row ID")
+	}
+}
+
 func writeSource(t *testing.T, name, source string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)

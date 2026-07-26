@@ -33,6 +33,17 @@ type CellUpdateResult struct {
 	Workspace View           `json:"workspace"`
 }
 
+type RowAdd struct {
+	Path       string `json:"path"`
+	RowID      string `json:"rowID"`
+	Expression string `json:"expression"`
+}
+
+type RowAddResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
 func NewService(configRoot string) *Service {
 	return &Service{configRoot: configRoot}
 }
@@ -123,14 +134,40 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 	if err != nil {
 		return CellUpdateResult{}, err
 	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return CellUpdateResult{}, err
+	}
+	return CellUpdateResult{Table: table, Workspace: view}, nil
+}
+
+func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
+	if s.current == nil {
+		return RowAddResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, add.Path) {
+		return RowAddResult{}, fmt.Errorf("table %q is not part of the open project", add.Path)
+	}
+	table, err := document.AddRow(add.Path, add.RowID, add.Expression)
+	if err != nil {
+		return RowAddResult{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return RowAddResult{}, err
+	}
+	return RowAddResult{Table: table, Workspace: view}, nil
+}
+
+func (s *Service) refreshCurrentView() (View, error) {
 	project := s.current.Project
 	tree, err := projecttree.Scan(project.Path, project.Config.TableRoots, project.Config.SchemaRoots, project.Config.Exclude)
 	if err != nil {
-		return CellUpdateResult{}, fmt.Errorf("refresh project tree: %w", err)
+		return View{}, fmt.Errorf("refresh project tree: %w", err)
 	}
 	view := View{Project: project, Settings: s.current.Settings, Tree: tree, Schemas: buildSchemaIndex(tree)}
 	s.current = &view
-	return CellUpdateResult{Table: table, Workspace: view}, nil
+	return view, nil
 }
 
 func containsTable(node projecttree.Node, path string) bool {

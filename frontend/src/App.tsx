@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {DataEditor, GridCellKind, type GridCell, type GridColumn, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {GetTable, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
+import {AddRow, GetTable, SelectProject, UpdateCell} from "../wailsjs/go/main/App";
 
 type TreeNode = {
     kind: "project" | "group" | "directory" | "table" | "tableData" | "localSchema" | "schemaFile" | "schemaDefinition" | "damaged";
@@ -80,7 +80,7 @@ function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; 
 
 type CellError = { rowID: string; column: string; message: string };
 
-function TableGrid({table, error, onUpdate}: { table: TableDocument; error: CellError | null; onUpdate: (rowID: string, column: string, expression: string) => void }) {
+function TableGrid({table, error, onAddRow, onUpdate}: { table: TableDocument; error: CellError | null; onAddRow: () => void; onUpdate: (rowID: string, column: string, expression: string) => void }) {
     const columns: GridColumn[] = [
         {id: "id", title: "ID", width: 160, style: "highlight"},
         ...table.columns.map((column) => ({id: column.name, title: column.name, width: 170})),
@@ -112,6 +112,7 @@ function TableGrid({table, error, onUpdate}: { table: TableDocument; error: Cell
                 <div className="table-eyebrow">CUE expression editing</div>
                 <h1>{table.namespace}.{table.name}</h1>
             </div>
+            <button className="table-action" onClick={onAddRow}>Add row</button>
             <span>{table.rows.length} rows</span>
         </div>
         {error && <div className="table-validation-error"><code>{error.column}</code><span>{error.message}</span></div>}
@@ -180,6 +181,30 @@ function App() {
         }
     }
 
+    async function addRow() {
+        if (!table) {
+            return;
+        }
+        const rowID = window.prompt("Row ID");
+        if (!rowID) {
+            return;
+        }
+        const expression = window.prompt("Row CUE struct", `{${table.columns.map((column) => `${column.name}: `).join(", ")}}`);
+        if (!expression) {
+            return;
+        }
+        setError("");
+        setCellError(null);
+        try {
+            const result = await AddRow({path: table.path, rowID, expression});
+            setTable(result.table as TableDocument);
+            setWorkspace(result.workspace as WorkspaceView);
+        } catch (reason) {
+            const message = reason instanceof Error ? reason.message : String(reason);
+            setError(message);
+        }
+    }
+
     return (
         <main className="app-shell">
             <header className="app-header">
@@ -199,7 +224,7 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className="editor-placeholder">
-                        {table ? <TableGrid table={table} error={cellError} onUpdate={updateCell}/> : selectedSchema ? <>
+                        {table ? <TableGrid table={table} error={cellError} onAddRow={addRow} onUpdate={updateCell}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>

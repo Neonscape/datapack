@@ -3,6 +3,8 @@
 import {workspace} from '../models';
 import {document} from '../models';
 
+export function AddRow(arg1:workspace.RowAdd):Promise<workspace.RowAddResult>;
+
 export function CurrentWorkspace():Promise<workspace.View|boolean>;
 
 export function GetTable(arg1:string):Promise<document.Table>;

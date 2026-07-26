@@ -708,6 +708,54 @@ export namespace workspace {
 	
 	
 	
+	export class RowAdd {
+	    path: string;
+	    rowID: string;
+	    expression: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RowAdd(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.rowID = source["rowID"];
+	        this.expression = source["expression"];
+	    }
+	}
+	export class RowAddResult {
+	    table: document.Table;
+	    workspace: View;
+	
+	    static createFrom(source: any = {}) {
+	        return new RowAddResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = this.convertValues(source["table"], document.Table);
+	        this.workspace = this.convertValues(source["workspace"], View);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 

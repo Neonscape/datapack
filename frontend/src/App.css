@@ -215,6 +215,21 @@
     font-size: 12px;
 }
 
+.table-action {
+    border: 1px solid #cfd7dc;
+    border-radius: 4px;
+    padding: 5px 9px;
+    color: #33454f;
+    background: #ffffff;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.table-action:hover {
+    background: #eef4f5;
+}
+
 .table-document-header::after {
     content: 'Edit values as CUE expressions';
     margin-left: auto;
