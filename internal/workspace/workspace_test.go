@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"datapack/internal/document"
 	"datapack/internal/projecttree"
 )
 
@@ -164,6 +165,40 @@ _tool: {table: {namespace: "combat", name: "growth"}, formulas: {level_01: {atta
 	if err != nil || table.Rows[0].Values["attack"].Display != "20" || !table.Rows[0].Values["attack"].Formula {
 		t.Fatalf("GetTable() = %#v, %v", table, err)
 	}
+}
+
+func TestGetTableReportsSchemaErrorsAtTheirCells(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {price: int & >=0, rarity: "N" | "R"}
+rows: {sword: {price: -1, rarity: "X"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	table, err := service.GetTable(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasCellDiagnostic(table, "sword", "price") || !hasCellDiagnostic(table, "sword", "rarity") {
+		t.Fatalf("diagnostics = %#v", table.Diagnostics)
+	}
+}
+
+func hasCellDiagnostic(table document.Table, rowID, column string) bool {
+	for _, diagnostic := range table.Diagnostics {
+		if diagnostic.RowID == rowID && diagnostic.Column == column {
+			return true
+		}
+	}
+	return false
 }
 
 func TestUpdateCellRefreshesCurrentWorkspace(t *testing.T) {

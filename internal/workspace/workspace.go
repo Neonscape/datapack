@@ -589,6 +589,12 @@ func appendCueDiagnostics(table *document.Table, rows map[string]map[string]any)
 		if err := primaryKey.Unify(context.Encode(row.ID)).Validate(cue.Concrete(true)); err != nil {
 			table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: row.ID, Message: "invalid ID: " + err.Error()})
 		}
+		for column, value := range rows[row.ID] {
+			fieldSchema := rowSchema.LookupPath(cue.MakePath(cue.Str(column)))
+			if err := fieldSchema.Unify(context.Encode(value)).Validate(cue.Concrete(true)); err != nil {
+				table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: row.ID, Column: column, Message: err.Error()})
+			}
+		}
 		candidate := rowSchema.Unify(context.Encode(rows[row.ID]))
 		if err := candidate.Validate(cue.Concrete(true)); err != nil {
 			table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: row.ID, Message: err.Error()})
