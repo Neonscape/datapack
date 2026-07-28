@@ -85,6 +85,22 @@ export namespace document {
 		    return a;
 		}
 	}
+	export class Diagnostic {
+	    rowID: string;
+	    column?: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Diagnostic(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rowID = source["rowID"];
+	        this.column = source["column"];
+	        this.message = source["message"];
+	    }
+	}
 	export class ForeignKey {
 	    column: string;
 	    table: string;
@@ -193,6 +209,7 @@ export namespace document {
 	    rows: Row[];
 	    foreignKeys?: ForeignKey[];
 	    formulas?: Formula[];
+	    diagnostics?: Diagnostic[];
 	    csvExport?: CSVExport;
 	    localSchema: SchemaDefinition[];
 	
@@ -211,6 +228,7 @@ export namespace document {
 	        this.rows = this.convertValues(source["rows"], Row);
 	        this.foreignKeys = this.convertValues(source["foreignKeys"], ForeignKey);
 	        this.formulas = this.convertValues(source["formulas"], Formula);
+	        this.diagnostics = this.convertValues(source["diagnostics"], Diagnostic);
 	        this.csvExport = this.convertValues(source["csvExport"], CSVExport);
 	        this.localSchema = this.convertValues(source["localSchema"], SchemaDefinition);
 	    }
@@ -1091,6 +1109,56 @@ export namespace workspace {
 	
 	    static createFrom(source: any = {}) {
 	        return new RowAddResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = this.convertValues(source["table"], document.Table);
+	        this.workspace = this.convertValues(source["workspace"], View);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class RowCreate {
+	    path: string;
+	    rowID: string;
+	    values: Record<string, string>;
+	    formulas: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new RowCreate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.rowID = source["rowID"];
+	        this.values = source["values"];
+	        this.formulas = source["formulas"];
+	    }
+	}
+	export class RowCreateResult {
+	    table: document.Table;
+	    workspace: View;
+	
+	    static createFrom(source: any = {}) {
+	        return new RowCreateResult(source);
 	    }
 	
 	    constructor(source: any = {}) {

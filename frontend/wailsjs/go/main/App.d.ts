@@ -7,6 +7,10 @@ export function AddColumn(arg1:workspace.ColumnAdd):Promise<workspace.ColumnAddR
 
 export function AddRow(arg1:workspace.RowAdd):Promise<workspace.RowAddResult>;
 
+export function ClearCell(arg1:workspace.CellUpdate):Promise<workspace.CellUpdateResult>;
+
+export function CreateRow(arg1:workspace.RowCreate):Promise<workspace.RowCreateResult>;
+
 export function CurrentWorkspace():Promise<workspace.View|boolean>;
 
 export function DeleteColumn(arg1:workspace.ColumnDelete):Promise<workspace.ColumnDeleteResult>;

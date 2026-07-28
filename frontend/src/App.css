@@ -289,6 +289,38 @@
 .table-grid {
     min-height: 0;
     flex: 1;
+    position: relative;
+}
+
+.row-context-menu {
+    position: absolute;
+    z-index: 5;
+    min-width: 132px;
+    padding: 4px;
+    border: 1px solid #cbd5da;
+    border-radius: 4px;
+    background: #ffffff;
+    box-shadow: 0 8px 18px rgba(34, 50, 61, 0.18);
+}
+
+.row-context-menu button {
+    width: 100%;
+    border: 0;
+    padding: 7px 9px;
+    border-radius: 2px;
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.row-context-danger {
+    color: #8a3030;
+}
+
+.row-context-danger:hover {
+    background: #fff1f1;
 }
 
 .table-validation-error {

@@ -10,6 +10,14 @@ export function AddRow(arg1) {
   return window['go']['main']['App']['AddRow'](arg1);
 }
 
+export function ClearCell(arg1) {
+  return window['go']['main']['App']['ClearCell'](arg1);
+}
+
+export function CreateRow(arg1) {
+  return window['go']['main']['App']['CreateRow'](arg1);
+}
+
 export function CurrentWorkspace() {
   return window['go']['main']['App']['CurrentWorkspace']();
 }

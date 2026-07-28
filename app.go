@@ -74,6 +74,14 @@ func (a *App) SetCellFormula(set workspace.FormulaSet) (workspace.FormulaSetResu
 	return a.workspace.SetCellFormula(set)
 }
 
+func (a *App) CreateRow(create workspace.RowCreate) (workspace.RowCreateResult, error) {
+	return a.workspace.CreateRow(create)
+}
+
+func (a *App) ClearCell(update workspace.CellUpdate) (workspace.CellUpdateResult, error) {
+	return a.workspace.ClearCell(update)
+}
+
 // AddRow inserts a new table row using a complete CUE struct expression.
 func (a *App) AddRow(add workspace.RowAdd) (workspace.RowAddResult, error) {
 	return a.workspace.AddRow(add)

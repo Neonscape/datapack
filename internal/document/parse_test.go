@@ -166,29 +166,25 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
-func TestSetCellValueRejectsValuesOutsideColumnSchema(t *testing.T) {
+func TestSetCellValuePersistsValuesOutsideColumnSchema(t *testing.T) {
 	path := writeSource(t, "item.cue", `package item
 #PrimaryKey: string
 #Row: {price: int & >= 0, rarity: "N" | "R"}
 rows: {sword: {price: 100, rarity: "N"}}
 _tool: {table: {namespace: "rpg", name: "item"}}`)
-	original, err := os.ReadFile(path)
-	if err != nil {
+	if _, err := SetCellValue(path, "sword", "price", "-1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := SetCellValue(path, "sword", "price", "-1"); err == nil {
-		t.Fatal("SetCellValue() accepted a value outside an integer constraint")
+	if _, err := SetCellValue(path, "sword", "rarity", `"X"`); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := SetCellValue(path, "sword", "rarity", `"X"`); err == nil {
-		t.Fatal("SetCellValue() accepted a value outside an enum")
-	}
-	current, err := os.ReadFile(path)
-	if err != nil || string(current) != string(original) {
-		t.Fatalf("source changed after invalid schema update: %q, error = %v", current, err)
+	table, err := LoadTable(path)
+	if err != nil || table.Rows[0].Values["price"].Expression != "-1" || table.Rows[0].Values["rarity"].Expression != `"X"` {
+		t.Fatalf("table = %#v, error = %v", table, err)
 	}
 }
 
-func TestSetCellValueValidatesImportedSchema(t *testing.T) {
+func TestSetCellValuePersistsValuesOutsideImportedSchema(t *testing.T) {
 	root := t.TempDir()
 	writeModuleFile(t, filepath.Join(root, "cue.mod", "module.cue"), `module: "example.com/game"
 language: {version: "v0.9.0"}`)
@@ -202,8 +198,38 @@ import "example.com/game/schema:common"
 rows: {sword: {price: 100}}
 _tool: {table: {namespace: "rpg", name: "item"}}`)
 
-	if _, err := SetCellValue(path, "sword", "price", "-1"); err == nil {
-		t.Fatal("SetCellValue() accepted a value outside an imported constraint")
+	if _, err := SetCellValue(path, "sword", "price", "-1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCreateRowPersistsPartialValuesAndClearCellRemovesEmptyRow(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {name: string, price: int}
+rows: {}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	table, err := CreateRow(path, "sword", map[string]string{"name": `"Sword"`}, nil)
+	if err != nil || len(table.Rows) != 1 || table.Rows[0].Values["name"].Display != "Sword" {
+		t.Fatalf("CreateRow() = %#v, %v", table, err)
+	}
+	table, err = ClearCell(path, "sword", "name")
+	if err != nil || len(table.Rows) != 0 {
+		t.Fatalf("ClearCell() = %#v, %v", table, err)
+	}
+}
+
+func TestDeleteRowRemovesItsFormulas(t *testing.T) {
+	path := writeSource(t, "growth.cue", `package growth
+#PrimaryKey: string
+#Row: {attack: int}
+rows: {level_01: {}}
+_tool: {table: {namespace: "combat", name: "growth"}, formulas: {level_01: {attack: "1"}}}`)
+
+	table, err := DeleteRow(path, "level_01")
+	if err != nil || len(table.Rows) != 0 || len(table.Formulas) != 0 {
+		t.Fatalf("DeleteRow() = %#v, %v", table, err)
 	}
 }
 

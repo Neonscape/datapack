@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {DataEditor, GridCellKind, type GridCell, type GridColumn, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddColumn, AddRow, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, RenameColumn, RenameRow, SelectProject, SetCellFormula, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, CreateRow, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, RenameColumn, RenameRow, SelectProject, SetCellFormula, UpdateCell} from "../wailsjs/go/main/App";
 
 type TreeNode = {
     kind: "project" | "group" | "directory" | "table" | "tableData" | "localSchema" | "schemaFile" | "schemaDefinition" | "damaged";
@@ -67,6 +67,7 @@ type TableDocument = {
     name: string;
     columns: { name: string }[];
     rows: { id: string; values: Record<string, { expression: string; display: string; formula?: boolean }> }[];
+    diagnostics?: { rowID: string; column?: string; message: string }[];
 };
 
 function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; onOpenTable: (path: string) => void }) {
@@ -84,33 +85,78 @@ function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; 
 }
 
 type CellError = { rowID: string; column: string; message: string };
+type DraftRow = { id: string; values: Record<string, string> };
 
-function TableGrid({table, error, onAddColumn, onAddRow, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onRenameRow, onSetFormula, onUpdate}: { table: TableDocument; error: CellError | null; onAddColumn: () => void; onAddRow: () => void; onDeleteColumn: () => void; onDeleteRow: (rowID: string) => void; onMoveColumn: () => void; onRenameColumn: () => void; onRenameRow: (rowID: string) => void; onSetFormula: (rowID: string, column: string, expression: string) => void; onUpdate: (rowID: string, column: string, expression: string) => void }) {
-    const [selectedRow, setSelectedRow] = useState<number | null>(null);
+function TableGrid({table, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onSaveInput}: { table: TableDocument; onDeleteColumn: () => void; onDeleteRow: (rowID: string) => void; onMoveColumn: () => void; onRenameColumn: () => void; onSaveInput: (rowID: string, column: string, input: string) => Promise<void> }) {
+    const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
+    const [draftError, setDraftError] = useState("");
+    const [contextRow, setContextRow] = useState<number | null>(null);
+    const [menu, setMenu] = useState<{x: number; y: number} | null>(null);
     const columns: GridColumn[] = [
         {id: "id", title: "ID", width: 160, style: "highlight"},
         ...table.columns.map((column) => ({id: column.name, title: column.name, width: 170})),
     ];
+    const isDraft = (row: number) => row === table.rows.length;
+    const rowFor = (row: number): TableDocument["rows"][number] => isDraft(row) ? {id: draft.id, values: Object.fromEntries(Object.entries(draft.values).map(([name, expression]) => [name, {expression, display: expression, formula: false}]))} : table.rows[row];
+    const errorFor = (rowID: string, column: string) => table.diagnostics?.find((diagnostic) => diagnostic.rowID === rowID && (!diagnostic.column || diagnostic.column === column));
     const getCellContent = ([column, row]: Item): GridCell => {
-        const source = table.rows[row];
+        const source = rowFor(row);
         const cell = column === 0 ? {display: source.id, expression: source.id} : source.values[table.columns[column - 1].name];
+        const error = isDraft(row) ? draftError : errorFor(source.id, table.columns[column - 1]?.name ?? "");
         return {
             kind: GridCellKind.Text,
-            data: cell?.expression ?? "",
+            data: cell?.formula ? `=${cell.expression}` : cell?.expression ?? "",
             displayData: cell?.formula ? `fx ${cell.display}` : cell?.display ?? "",
-            allowOverlay: column !== 0,
-            readonly: column === 0 || cell?.formula === true,
-            themeOverride: error?.rowID === source.id && error.column === table.columns[column - 1]?.name ? {
+            allowOverlay: true,
+            themeOverride: error ? {
                 bgCell: "#fff1f1",
                 textDark: "#8a3030",
-            } : undefined,
+            } : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined,
         };
     };
-    const editCell = ([column, row]: Item, value: GridCell) => {
-        if (column === 0 || value.kind !== GridCellKind.Text) {
+    const editCell = async ([column, row]: Item, value: GridCell) => {
+        if (value.kind !== GridCellKind.Text) {
             return;
         }
-        onUpdate(table.rows[row].id, table.columns[column - 1].name, value.data);
+        const input = value.data.trim();
+        if (isDraft(row)) {
+            const next = column === 0 ? {id: input, values: draft.values} : {id: draft.id, values: {...draft.values, [table.columns[column - 1].name]: input}};
+            if (column !== 0 && input === "") delete next.values[table.columns[column - 1].name];
+            const duplicate = table.rows.some((existing) => existing.id === next.id);
+            if (next.id !== "" && (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(next.id) || duplicate)) {
+                setDraft(next);
+                setDraftError(duplicate ? "ID already exists" : "ID must be a valid CUE identifier");
+                return;
+            }
+            const hasValues = Object.values(next.values).some((entry) => entry !== "");
+            if (next.id !== "" && hasValues) {
+                const values: Record<string, string> = {};
+                const formulas: Record<string, string> = {};
+                for (const [name, expression] of Object.entries(next.values)) {
+                    if (expression.startsWith("=")) formulas[name] = expression.slice(1).trim();
+                    else values[name] = expression;
+                }
+                try {
+                    await onSaveInput(next.id, "__create__", JSON.stringify({values, formulas}));
+                    setDraft({id: "", values: {}});
+                    setDraftError("");
+                } catch (reason) {
+                    setDraft(next);
+                    setDraftError(reason instanceof Error ? reason.message : String(reason));
+                }
+                return;
+            }
+            setDraft(next);
+            setDraftError("");
+            return;
+        }
+        const source = table.rows[row];
+        const columnName = column === 0 ? "id" : table.columns[column - 1].name;
+        try {
+            await onSaveInput(source.id, columnName, input);
+        } catch {
+            // The parent reports the rejected source syntax alongside the cell.
+        }
     };
     return <div className="table-document">
         <div className="table-document-header">
@@ -119,47 +165,39 @@ function TableGrid({table, error, onAddColumn, onAddRow, onDeleteColumn, onDelet
                 <h1>{table.namespace}.{table.name}</h1>
             </div>
             <div className="table-actions">
-                <button className="table-action" onClick={onAddColumn}>Add column</button>
                 <button className="table-action" onClick={onRenameColumn}>Rename column</button>
                 <button className="table-action" onClick={onMoveColumn}>Move column</button>
                 <button className="table-action table-action-danger" onClick={onDeleteColumn}>Delete column</button>
-                <button className="table-action" onClick={onAddRow}>Add row</button>
-                <button className="table-action" disabled={selectedRow === null} onClick={() => {
-                    if (selectedRow === null) return;
-                    const row = table.rows[selectedRow];
-                    const column = window.prompt("Column name for formula");
-                    if (!column) return;
-                    const existing = row.values[column];
-                    const expression = window.prompt("Formula expression", existing?.formula ? existing.expression : "");
-                    if (expression) onSetFormula(row.id, column, expression);
-                }}>Set formula</button>
-                <button className="table-action" disabled={selectedRow === null} onClick={() => {
-                    if (selectedRow !== null) {
-                        onRenameRow(table.rows[selectedRow].id);
-                    }
-                }}>Rename ID</button>
-                <button className="table-action table-action-danger" disabled={selectedRow === null} onClick={() => {
-                    if (selectedRow !== null) {
-                        onDeleteRow(table.rows[selectedRow].id);
-                    }
-                }}>Delete row</button>
             </div>
-            <span>{table.rows.length} rows</span>
+            <span>{table.rows.length} rows + draft</span>
         </div>
-        {error && <div className="table-validation-error"><code>{error.column}</code><span>{error.message}</span></div>}
+        {draftError && <div className="table-validation-error"><code>draft</code><span>{draftError}</span></div>}
         <div className="table-grid">
             <DataEditor
                 columns={columns}
                 getCellContent={getCellContent}
-                rows={table.rows.length}
+                rows={table.rows.length + 1}
                 rowMarkers="clickable-number"
                 rowHeight={30}
                 headerHeight={34}
                 smoothScrollX
                 smoothScrollY
                 onCellEdited={editCell}
-                onCellClicked={([, row]) => setSelectedRow(row)}
+                cellActivationBehavior="double-click"
+                onCellContextMenu={([column, row], event) => {
+                    if (row === table.rows.length || column !== 0) return;
+                    event.preventDefault();
+                    setContextRow(row);
+                    setMenu({x: event.localEventX, y: event.localEventY});
+                }}
             />
+            {menu !== null && contextRow !== null && <div className="row-context-menu" style={{left: menu.x, top: menu.y}}>
+                <button className="row-context-danger" onClick={() => {
+                    onDeleteRow(table.rows[contextRow].id);
+                    setMenu(null);
+                    setContextRow(null);
+                }}>Delete row</button>
+            </div>}
         </div>
     </div>;
 }
@@ -197,59 +235,42 @@ function App() {
         }
     }
 
-    async function updateCell(rowID: string, column: string, expression: string) {
+    async function saveCellInput(rowID: string, column: string, input: string) {
         if (!table) {
             return;
         }
         setError("");
         setCellError(null);
         try {
-            const result = await UpdateCell({path: table.path, rowID, column, expression});
+            if (column === "__create__") {
+                const {values, formulas} = JSON.parse(input);
+                const result = await CreateRow({path: table.path, rowID, values, formulas});
+                setTable(result.table as TableDocument);
+                setWorkspace(result.workspace as WorkspaceView);
+                return;
+            }
+            if (column === "id") {
+                if (!input) throw new Error("ID must not be empty");
+                const result = await RenameRow({path: table.path, oldID: rowID, newID: input});
+                setTable(result.table as TableDocument);
+                setWorkspace(result.workspace as WorkspaceView);
+                return;
+            }
+            if (input === "") {
+                const result = await ClearCell({path: table.path, rowID, column, expression: ""});
+                setTable(result.table as TableDocument);
+                setWorkspace(result.workspace as WorkspaceView);
+                return;
+            }
+            const result = input.startsWith("=")
+                ? await SetCellFormula({path: table.path, rowID, column, expression: input.slice(1).trim()})
+                : await UpdateCell({path: table.path, rowID, column, expression: input});
             setTable(result.table as TableDocument);
             setWorkspace(result.workspace as WorkspaceView);
         } catch (reason) {
             const message = reason instanceof Error ? reason.message : String(reason);
             setError(message);
             setCellError({rowID, column, message});
-        }
-    }
-
-    async function setFormula(rowID: string, column: string, expression: string) {
-        if (!table) return;
-        setError("");
-        setCellError(null);
-        try {
-            const result = await SetCellFormula({path: table.path, rowID, column, expression});
-            setTable(result.table as TableDocument);
-            setWorkspace(result.workspace as WorkspaceView);
-        } catch (reason) {
-            const message = reason instanceof Error ? reason.message : String(reason);
-            setError(message);
-            setCellError({rowID, column, message});
-        }
-    }
-
-    async function addRow() {
-        if (!table) {
-            return;
-        }
-        const rowID = window.prompt("Row ID");
-        if (!rowID) {
-            return;
-        }
-        const expression = window.prompt("Row CUE struct", `{${table.columns.map((column) => `${column.name}: `).join(", ")}}`);
-        if (!expression) {
-            return;
-        }
-        setError("");
-        setCellError(null);
-        try {
-            const result = await AddRow({path: table.path, rowID, expression});
-            setTable(result.table as TableDocument);
-            setWorkspace(result.workspace as WorkspaceView);
-        } catch (reason) {
-            const message = reason instanceof Error ? reason.message : String(reason);
-            setError(message);
         }
     }
 
@@ -335,7 +356,7 @@ function App() {
     }
 
     async function deleteRow(rowID: string) {
-        if (!table || !window.confirm(`Delete row ${rowID}?`)) {
+        if (!table) {
             return;
         }
         setError("");
@@ -399,7 +420,7 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className="editor-placeholder">
-                        {table ? <TableGrid table={table} error={cellError} onAddColumn={addColumn} onAddRow={addRow} onDeleteColumn={deleteColumn} onDeleteRow={deleteRow} onMoveColumn={moveColumn} onRenameColumn={renameColumn} onRenameRow={renameRow} onSetFormula={setFormula} onUpdate={updateCell}/> : selectedSchema ? <>
+                        {table ? <TableGrid table={table} onDeleteColumn={deleteColumn} onDeleteRow={deleteRow} onMoveColumn={moveColumn} onRenameColumn={renameColumn} onSaveInput={saveCellInput}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>

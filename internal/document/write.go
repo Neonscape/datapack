@@ -13,11 +13,12 @@ import (
 	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/load"
 	"cuelang.org/go/cue/parser"
+	exprparser "github.com/expr-lang/expr/parser"
 )
 
-// SetCellValue replaces one existing table cell with a valid CUE expression.
-// The candidate is reloaded from a sibling temporary file before an atomic
-// rename makes it visible to the rest of the project.
+// SetCellValue replaces one cell with a syntactically valid CUE expression.
+// Schema errors are intentionally persisted as diagnostics so users can build a
+// row incrementally, like a spreadsheet.
 func SetCellValue(path, rowID, column, expression string) (Table, error) {
 	source, err := os.ReadFile(path)
 	if err != nil {
@@ -39,9 +40,6 @@ func SetCellValue(path, rowID, column, expression string) (Table, error) {
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
-	if err := validateCellValue(path, candidate, rowID, column); err != nil {
-		return Table{}, err
-	}
 	return validateAndReplace(path, candidate)
 }
 
@@ -50,6 +48,9 @@ func SetCellValue(path, rowID, column, expression string) (Table, error) {
 func SetCellFormula(path, rowID, column, expression string) (Table, error) {
 	if strings.TrimSpace(expression) == "" {
 		return Table{}, fmt.Errorf("formula expression must not be empty")
+	}
+	if _, err := exprparser.Parse(expression); err != nil {
+		return Table{}, fmt.Errorf("parse formula expression: %w", err)
 	}
 	source, err := os.ReadFile(path)
 	if err != nil {
@@ -61,6 +62,84 @@ func SetCellFormula(path, rowID, column, expression string) (Table, error) {
 	}
 	if err := setFormula(file, rowID, column, expression); err != nil {
 		return Table{}, err
+	}
+	candidate, err := format.Node(file)
+	if err != nil {
+		return Table{}, fmt.Errorf("format updated table: %w", err)
+	}
+	return validateAndReplace(path, candidate)
+}
+
+// CreateRow writes a partial row after its ID becomes a valid CUE identifier.
+// It intentionally accepts incomplete business data; compilation reports that
+// state back to the editor as cell diagnostics.
+func CreateRow(path, rowID string, values map[string]string, formulas map[string]string) (Table, error) {
+	if !validIdentifier(rowID) {
+		return Table{}, fmt.Errorf("row ID %q must be a valid CUE identifier", rowID)
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	fields := fieldsOfFile(file)
+	if _, exists := fieldsOfStruct(requiredField(fields, "rows").Value)[rowID]; exists {
+		return Table{}, fmt.Errorf("row %q already exists", rowID)
+	}
+	row := &ast.StructLit{}
+	if err := insertRow(file, rowID, row); err != nil {
+		return Table{}, err
+	}
+	for column, expression := range values {
+		value, err := parser.ParseExpr(path, expression)
+		if err != nil {
+			return Table{}, fmt.Errorf("parse row %q column %q: %w", rowID, column, err)
+		}
+		if err := replaceCell(file, rowID, column, value); err != nil {
+			return Table{}, err
+		}
+	}
+	for column, expression := range formulas {
+		if _, err := exprparser.Parse(expression); err != nil {
+			return Table{}, fmt.Errorf("parse formula %q.%q: %w", rowID, column, err)
+		}
+		if err := setFormula(file, rowID, column, expression); err != nil {
+			return Table{}, err
+		}
+	}
+	candidate, err := format.Node(file)
+	if err != nil {
+		return Table{}, fmt.Errorf("format updated table: %w", err)
+	}
+	return validateAndReplace(path, candidate)
+}
+
+// ClearCell removes both a fixed expression and formula from one cell. Empty
+// rows are removed to avoid persisting invisible placeholder objects.
+func ClearCell(path, rowID, column string) (Table, error) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	fields := fieldsOfFile(file)
+	rows := requiredField(fields, "rows")
+	row := fieldsOfStruct(rows.Value)[rowID]
+	if row == nil {
+		return Table{}, fmt.Errorf("row %q does not exist", rowID)
+	}
+	removeNamedField(row.Value, column)
+	removeFormula(file, rowID, column)
+	if len(orderedStructFields(row.Value)) == 0 && !hasFormulasForRow(file, rowID) {
+		if err := removeRow(file, rowID); err != nil {
+			return Table{}, err
+		}
 	}
 	candidate, err := format.Node(file)
 	if err != nil {
@@ -317,6 +396,19 @@ func removeFormula(file *ast.File, rowID, column string) {
 	}
 }
 
+func hasFormulasForRow(file *ast.File, rowID string) bool {
+	tool := fieldsOfFile(file)["_tool"]
+	if tool == nil {
+		return false
+	}
+	formulas := fieldsOfStruct(tool.Value)["formulas"]
+	if formulas == nil {
+		return false
+	}
+	row := fieldsOfStruct(formulas.Value)[rowID]
+	return row != nil && len(orderedStructFields(row.Value)) > 0
+}
+
 func insertRow(file *ast.File, rowID string, value *ast.StructLit) error {
 	rowID = strings.TrimSpace(rowID)
 	if !validIdentifier(rowID) {
@@ -348,9 +440,21 @@ func removeRow(file *ast.File, rowID string) error {
 			continue
 		}
 		rowsValue.Elts = append(rowsValue.Elts[:index], rowsValue.Elts[index+1:]...)
+		removeFormulaRow(file, rowID)
 		return nil
 	}
 	return fmt.Errorf("row %q does not exist", rowID)
+}
+
+func removeFormulaRow(file *ast.File, rowID string) {
+	tool := fieldsOfFile(file)["_tool"]
+	if tool == nil {
+		return
+	}
+	formulas := fieldsOfStruct(tool.Value)["formulas"]
+	if formulas != nil {
+		removeNamedField(formulas.Value, rowID)
+	}
 }
 
 func insertColumn(file *ast.File, name string, schema, value ast.Expr) error {

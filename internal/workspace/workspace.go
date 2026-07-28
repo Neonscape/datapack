@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"cuelang.org/go/cue"
+	"cuelang.org/go/cue/cuecontext"
+	"cuelang.org/go/cue/load"
 	"datapack/internal/document"
 	"datapack/internal/export/csv"
 	"datapack/internal/foreignkey"
@@ -47,6 +50,18 @@ type FormulaSet struct {
 }
 
 type FormulaSetResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
+type RowCreate struct {
+	Path     string            `json:"path"`
+	RowID    string            `json:"rowID"`
+	Values   map[string]string `json:"values"`
+	Formulas map[string]string `json:"formulas"`
+}
+
+type RowCreateResult struct {
 	Table     document.Table `json:"table"`
 	Workspace View           `json:"workspace"`
 }
@@ -221,7 +236,7 @@ func (s *Service) GetTable(path string) (document.Table, error) {
 	if err != nil {
 		return document.Table{}, fmt.Errorf("load table: %w", err)
 	}
-	return withFormulaPreview(table), nil
+	return withDiagnostics(table, *s.current), nil
 }
 
 // UpdateCell applies one CUE expression to an existing table cell, then
@@ -241,7 +256,7 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 	if err != nil {
 		return CellUpdateResult{}, err
 	}
-	return CellUpdateResult{Table: withFormulaPreview(table), Workspace: view}, nil
+	return CellUpdateResult{Table: withDiagnostics(table, view), Workspace: view}, nil
 }
 
 func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
@@ -259,7 +274,43 @@ func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
 	if err != nil {
 		return FormulaSetResult{}, err
 	}
-	return FormulaSetResult{Table: withFormulaPreview(table), Workspace: view}, nil
+	return FormulaSetResult{Table: withDiagnostics(table, view), Workspace: view}, nil
+}
+
+func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
+	if s.current == nil {
+		return RowCreateResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, create.Path) {
+		return RowCreateResult{}, fmt.Errorf("table %q is not part of the open project", create.Path)
+	}
+	table, err := document.CreateRow(create.Path, create.RowID, create.Values, create.Formulas)
+	if err != nil {
+		return RowCreateResult{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return RowCreateResult{}, err
+	}
+	return RowCreateResult{Table: withDiagnostics(table, view)}, nil
+}
+
+func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
+	if s.current == nil {
+		return CellUpdateResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, update.Path) {
+		return CellUpdateResult{}, fmt.Errorf("table %q is not part of the open project", update.Path)
+	}
+	table, err := document.ClearCell(update.Path, update.RowID, update.Column)
+	if err != nil {
+		return CellUpdateResult{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return CellUpdateResult{}, err
+	}
+	return CellUpdateResult{Table: withDiagnostics(table, view)}, nil
 }
 
 func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
@@ -492,8 +543,17 @@ func containsTable(node projecttree.Node, path string) bool {
 	return false
 }
 
-func withFormulaPreview(table document.Table) document.Table {
+func withDiagnostics(table document.Table, view View) document.Table {
 	evaluated := formula.Evaluate(table)
+	for _, diagnostic := range evaluated.Diagnostics {
+		table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: diagnostic.RowID, Column: diagnostic.Column, Message: diagnostic.Message})
+	}
+	appendCueDiagnostics(&table, evaluated.Rows)
+	for _, diagnostic := range view.ForeignKeys.Diagnostics {
+		if diagnostic.Path == table.Path {
+			table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: diagnostic.RowID, Column: diagnostic.Column, Message: diagnostic.Message})
+		}
+	}
 	for _, formula := range table.Formulas {
 		for index := range table.Rows {
 			if table.Rows[index].ID != formula.RowID {
@@ -509,4 +569,29 @@ func withFormulaPreview(table document.Table) document.Table {
 		}
 	}
 	return table
+}
+
+func appendCueDiagnostics(table *document.Table, rows map[string]map[string]any) {
+	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path)})
+	if len(instances) != 1 {
+		table.Diagnostics = append(table.Diagnostics, document.Diagnostic{Message: "load table package: expected one package"})
+		return
+	}
+	context := cuecontext.New()
+	packageValue := context.BuildInstance(instances[0])
+	if err := packageValue.Err(); err != nil {
+		table.Diagnostics = append(table.Diagnostics, document.Diagnostic{Message: err.Error()})
+		return
+	}
+	rowSchema := packageValue.LookupPath(cue.MakePath(cue.Def("Row")))
+	primaryKey := packageValue.LookupPath(cue.MakePath(cue.Def("PrimaryKey")))
+	for _, row := range table.Rows {
+		if err := primaryKey.Unify(context.Encode(row.ID)).Validate(cue.Concrete(true)); err != nil {
+			table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: row.ID, Message: "invalid ID: " + err.Error()})
+		}
+		candidate := rowSchema.Unify(context.Encode(rows[row.ID]))
+		if err := candidate.Validate(cue.Concrete(true)); err != nil {
+			table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: row.ID, Message: err.Error()})
+		}
+	}
 }

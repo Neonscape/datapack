@@ -13,6 +13,7 @@ type Table struct {
 	Rows        []Row              `json:"rows"`
 	ForeignKeys []ForeignKey       `json:"foreignKeys,omitempty"`
 	Formulas    []Formula          `json:"formulas,omitempty"`
+	Diagnostics []Diagnostic       `json:"diagnostics,omitempty"`
 	CSVExport   *CSVExport         `json:"csvExport,omitempty"`
 	LocalSchema []SchemaDefinition `json:"localSchema"`
 }
@@ -45,6 +46,14 @@ type Formula struct {
 	RowID      string `json:"rowID"`
 	Column     string `json:"column"`
 	Expression string `json:"expression"`
+}
+
+// Diagnostic describes a persisted business error that is shown in the table
+// without preventing users from continuing to complete the row.
+type Diagnostic struct {
+	RowID   string `json:"rowID"`
+	Column  string `json:"column,omitempty"`
+	Message string `json:"message"`
 }
 
 type CSVExport struct {
