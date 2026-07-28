@@ -1,5 +1,5 @@
-import {useState} from 'react';
-import {DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type GridCell, type GridColumn, type Item} from '@glideapps/glide-data-grid';
+import {useEffect, useRef, useState} from 'react';
+import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type GridCell, type GridColumn, type GridSelection, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
 import {AddColumn, ClearCell, CreateRow, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, RenameColumn, RenameRow, SelectProject, SetCellFormula, UpdateCell} from "../wailsjs/go/main/App";
@@ -87,6 +87,7 @@ function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; 
 type CellError = { rowID: string; column: string; message: string };
 type DraftRow = { id: string; values: Record<string, string> };
 type EnumCell = CustomCell<{kind: "enum"; value: string; options: string[]}>;
+type InlineEditor = { column: number; row: number; value: string; bounds: {x: number; y: number; width: number; height: number} };
 
 const enumRenderer: CustomRenderer<EnumCell> = {
     kind: GridCellKind.Custom,
@@ -97,16 +98,28 @@ const enumRenderer: CustomRenderer<EnumCell> = {
     </select>, disablePadding: true}),
 };
 
-function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onSaveInput}: { table: TableDocument; onAddColumn: () => void; onDeleteColumn: () => void; onDeleteRow: (rowID: string) => void; onMoveColumn: () => void; onRenameColumn: () => void; onSaveInput: (rowID: string, column: string, input: string) => Promise<void> }) {
+function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onSaveInput}: { table: TableDocument; onAddColumn: () => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onSaveInput: (rowID: string, column: string, input: string) => Promise<void> }) {
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
     const [draftError, setDraftError] = useState("");
     const [contextRow, setContextRow] = useState<number | null>(null);
     const [menu, setMenu] = useState<{x: number; y: number} | null>(null);
+    const [selectedColumn, setSelectedColumn] = useState<number | null>(null);
+    const [gridSelection, setGridSelection] = useState<GridSelection>({columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: undefined});
+    const [inlineEditor, setInlineEditor] = useState<InlineEditor | null>(null);
+    const editorRef = useRef<HTMLTextAreaElement | null>(null);
+    const gridRef = useRef<HTMLDivElement | null>(null);
+    const lastCellBounds = useRef<{cell: Item; bounds: {x: number; y: number; width: number; height: number}} | null>(null);
     const columns: GridColumn[] = [
         {id: "id", title: "ID", width: 160, style: "highlight"},
         ...table.columns.map((column) => ({id: column.name, title: column.name, width: 170})),
     ];
     const isDraft = (row: number) => row === table.rows.length;
+    const selectedColumnName = selectedColumn === null ? null : table.columns[selectedColumn - 1]?.name ?? null;
+    const columnWidth = (column: GridColumn) => "width" in column ? column.width : 170;
+    useEffect(() => {
+        editorRef.current?.focus();
+        editorRef.current?.select();
+    }, [inlineEditor]);
     const rowFor = (row: number): TableDocument["rows"][number] => isDraft(row) ? {id: draft.id, values: Object.fromEntries(Object.entries(draft.values).map(([name, expression]) => [name, {expression, display: expression, formula: false}]))} : table.rows[row];
     const errorFor = (rowID: string, column: string) => table.diagnostics?.find((diagnostic) => diagnostic.rowID === rowID && (!diagnostic.column || diagnostic.column === column));
     const getCellContent = ([column, row]: Item): GridCell => {
@@ -175,7 +188,21 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
             // The parent reports the rejected source syntax alongside the cell.
         }
     };
-    return <div className="table-document">
+    const finishInlineEdit = () => {
+        if (!inlineEditor || !editorRef.current) return;
+        const value = editorRef.current.value;
+        const target = inlineEditor;
+        setInlineEditor(null);
+        void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: value, displayData: value});
+    };
+    const openInlineAt = (column: number, row: number, bounds: {x: number; y: number; width: number; height: number}) => {
+        if (column < 0 || row < 0 || row >= table.rows.length + 1) return;
+        const source = rowFor(row);
+        const cell = column === 0 ? {expression: source.id, formula: false} : source.values[table.columns[column - 1].name];
+        if (cell?.formula || (column !== 0 && ["enum", "boolean"].includes(table.columns[column - 1].schema.kind))) return;
+        window.setTimeout(() => setInlineEditor({column, row, value: cell?.expression ?? "", bounds}), 0);
+    };
+    return <div className="table-document" data-inline-editor={inlineEditor ? "open" : "closed"}>
         <div className="table-document-header">
             <div>
                 <div className="table-eyebrow">CUE expression editing</div>
@@ -183,14 +210,14 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
             </div>
             <div className="table-actions">
                 <button className="table-action" onClick={onAddColumn}>Add column</button>
-                <button className="table-action" onClick={onRenameColumn}>Rename column</button>
-                <button className="table-action" onClick={onMoveColumn}>Move column</button>
-                <button className="table-action table-action-danger" onClick={onDeleteColumn}>Delete column</button>
+                <button className="table-action" disabled={selectedColumnName === null} onClick={() => selectedColumnName && onRenameColumn(selectedColumnName)}>Rename column</button>
+                <button className="table-action" disabled={selectedColumnName === null} onClick={() => selectedColumnName && onMoveColumn(selectedColumnName)}>Move column</button>
+                <button className="table-action table-action-danger" disabled={selectedColumnName === null} onClick={() => selectedColumnName && onDeleteColumn(selectedColumnName)}>Delete column</button>
             </div>
             <span>{table.rows.length} rows + draft</span>
         </div>
         {draftError && <div className="table-validation-error"><code>draft</code><span>{draftError}</span></div>}
-        <div className="table-grid">
+        <div ref={gridRef} className="table-grid">
             <DataEditor
                 columns={columns}
                 getCellContent={getCellContent}
@@ -201,10 +228,29 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
                 smoothScrollX
                 smoothScrollY
                 onCellEdited={editCell}
-                cellActivationBehavior="double-click"
                 customRenderers={[enumRenderer]}
+                gridSelection={gridSelection}
+                onGridSelectionChange={(selection) => {
+                    setGridSelection(selection);
+                    const selectedColumns = selection.columns.toArray();
+                    if (selectedColumns.length > 0) {
+                        setSelectedColumn(selectedColumns.length === 1 && selectedColumns[0] > 0 ? selectedColumns[0] : null);
+                    }
+                }}
+                onCellClicked={([column, row], event) => {
+                    setSelectedColumn(null);
+                    const gridBounds = gridRef.current?.getBoundingClientRect();
+                    const bounds = {x: event.bounds.x - (gridBounds?.x ?? 0), y: event.bounds.y - (gridBounds?.y ?? 0), width: event.bounds.width, height: event.bounds.height};
+                    lastCellBounds.current = {cell: [column, row], bounds};
+                    if (column >= 0) openInlineAt(column, row, bounds);
+                }}
+                onHeaderClicked={(column) => {
+                    setSelectedColumn(column === 0 ? null : column);
+                    setMenu(null);
+                    setContextRow(null);
+                }}
                 onCellContextMenu={([column, row], event) => {
-                    if (row === table.rows.length || column !== 0) return;
+                    if (row === table.rows.length || column !== -1) return;
                     event.preventDefault();
                     setContextRow(row);
                     setMenu({x: event.localEventX, y: event.localEventY});
@@ -217,6 +263,13 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
                     setContextRow(null);
                 }}>Delete row</button>
             </div>}
+            {inlineEditor && <textarea ref={editorRef} className="inline-cell-editor" defaultValue={inlineEditor.value} style={{left: inlineEditor.bounds.x, top: inlineEditor.bounds.y, width: inlineEditor.bounds.width, height: inlineEditor.bounds.height}} onBlur={finishInlineEdit} onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    finishInlineEdit();
+                }
+                if (event.key === "Escape") setInlineEditor(null);
+            }}/>}
         </div>
     </div>;
 }
@@ -372,8 +425,8 @@ function App() {
                         <div className="panel-title">Project</div>
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
-                    <section className="editor-placeholder">
-                        {table ? <TableGrid table={table} onAddColumn={() => setDialog({mode: "add", name: "", second: "", schema: "string", initial: `""`})} onDeleteColumn={() => setDialog({mode: "delete", name: "", second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onMoveColumn={() => setDialog({mode: "move", name: "", second: "0", schema: "", initial: ""})} onRenameColumn={() => setDialog({mode: "rename", name: "", second: "", schema: "", initial: ""})} onSaveInput={saveCellInput}/> : selectedSchema ? <>
+                    <section className={`editor-placeholder ${table ? "editor-table" : ""}`}>
+                        {table ? <TableGrid table={table} onAddColumn={() => setDialog({mode: "add", name: "", second: "", schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onSaveInput={saveCellInput}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>
