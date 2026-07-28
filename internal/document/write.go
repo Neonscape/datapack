@@ -253,9 +253,6 @@ func DeleteColumn(path, name string) (Table, error) {
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
-	if err := validateAllRows(path, candidate); err != nil {
-		return Table{}, err
-	}
 	return validateAndReplace(path, candidate)
 }
 
@@ -275,12 +272,12 @@ func RenameColumn(path, oldName, newName string) (Table, error) {
 	if err := renameColumn(file, oldName, newName); err != nil {
 		return Table{}, err
 	}
+	if err := renameFormulaColumnReferences(file, oldName, newName); err != nil {
+		return Table{}, err
+	}
 	candidate, err := format.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
-	}
-	if err := validateAllRows(path, candidate); err != nil {
-		return Table{}, err
 	}
 	return validateAndReplace(path, candidate)
 }

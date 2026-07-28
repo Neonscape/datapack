@@ -56,6 +56,9 @@ func RenameRow(path, oldID, newID string, references []RowReference) (Table, err
 	if err := renameRowID(target, oldID, newID); err != nil {
 		return Table{}, err
 	}
+	if err := renameFormulaRowReferences(target, oldID, newID); err != nil {
+		return Table{}, err
+	}
 	for _, reference := range references {
 		file, err := loadFile(reference.Path)
 		if err != nil {

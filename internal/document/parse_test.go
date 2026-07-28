@@ -3,6 +3,7 @@ package document
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"datapack/internal/schemamodel"
@@ -231,6 +232,53 @@ _tool: {table: {namespace: "combat", name: "growth"}, formulas: {level_01: {atta
 	if err != nil || len(table.Rows) != 0 || len(table.Formulas) != 0 {
 		t.Fatalf("DeleteRow() = %#v, %v", table, err)
 	}
+}
+
+func TestRenameRowUpdatesFormulaReferencesWithoutChangingStrings(t *testing.T) {
+	path := writeSource(t, "growth.cue", `package growth
+#PrimaryKey: string
+#Row: {label: string, attack: int}
+rows: {level_01: {}, level_02: {}}
+_tool: {table: {namespace: "combat", name: "growth"}, formulas: {
+    level_01: {attack: "1"}
+    level_02: {label: `+strconv.Quote(`"level_01"`)+`, attack: "combat.growth.level_01.attack + 1"}
+}}`)
+
+	table, err := RenameRow(path, "level_01", "level_03", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if formulaExpressionFor(table, "level_02", "label") != `"level_01"` || formulaExpressionFor(table, "level_02", "attack") != "combat.growth.level_03.attack + 1" || formulaExpressionFor(table, "level_03", "attack") != "1" {
+		t.Fatalf("formulas = %#v", table.Formulas)
+	}
+}
+
+func TestRenameColumnUpdatesFormulaReferences(t *testing.T) {
+	path := writeSource(t, "growth.cue", `package growth
+#PrimaryKey: string
+#Row: {baseAttack: int, attack: int}
+rows: {level_01: {}, level_02: {}}
+_tool: {table: {namespace: "combat", name: "growth"}, formulas: {
+    level_01: {attack: "baseAttack * 2"}
+    level_02: {attack: "combat.growth.level_01.attack + baseAttack"}
+}}`)
+
+	table, err := RenameColumn(path, "baseAttack", "power")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if formulaExpressionFor(table, "level_01", "attack") != "power * 2" || formulaExpressionFor(table, "level_02", "attack") != "combat.growth.level_01.attack + power" {
+		t.Fatalf("formulas = %#v", table.Formulas)
+	}
+}
+
+func formulaExpressionFor(table Table, rowID, column string) string {
+	for _, formula := range table.Formulas {
+		if formula.RowID == rowID && formula.Column == column {
+			return formula.Expression
+		}
+	}
+	return ""
 }
 
 func TestAddRowInsertsAndValidatesCueStruct(t *testing.T) {
