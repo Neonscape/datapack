@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {DataEditor, GridCellKind, type GridCell, type GridColumn, type Item} from '@glideapps/glide-data-grid';
+import {DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type GridCell, type GridColumn, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
 import {AddColumn, ClearCell, CreateRow, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, RenameColumn, RenameRow, SelectProject, SetCellFormula, UpdateCell} from "../wailsjs/go/main/App";
@@ -65,7 +65,7 @@ type TableDocument = {
     path: string;
     namespace: string;
     name: string;
-    columns: { name: string }[];
+    columns: { name: string; schema: { kind: string; enumValues?: { expression: string }[] } }[];
     rows: { id: string; values: Record<string, { expression: string; display: string; formula?: boolean }> }[];
     diagnostics?: { rowID: string; column?: string; message: string }[];
 };
@@ -86,6 +86,16 @@ function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; 
 
 type CellError = { rowID: string; column: string; message: string };
 type DraftRow = { id: string; values: Record<string, string> };
+type EnumCell = CustomCell<{kind: "enum"; value: string; options: string[]}>;
+
+const enumRenderer: CustomRenderer<EnumCell> = {
+    kind: GridCellKind.Custom,
+    isMatch: (cell): cell is EnumCell => (cell as EnumCell).data.kind === "enum",
+    draw: (args, cell) => drawTextCell(args, cell.data.value),
+    provideEditor: (cell) => ({editor: (props) => <select autoFocus value={props.value.data.value} onChange={(event) => props.onChange({...props.value, data: {...props.value.data, value: event.target.value}})} onBlur={() => props.onFinishedEditing(props.value)}>
+        {cell.data.options.map((option) => <option key={option} value={option}>{option}</option>)}
+    </select>, disablePadding: true}),
+};
 
 function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onSaveInput}: { table: TableDocument; onAddColumn: () => void; onDeleteColumn: () => void; onDeleteRow: (rowID: string) => void; onMoveColumn: () => void; onRenameColumn: () => void; onSaveInput: (rowID: string, column: string, input: string) => Promise<void> }) {
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
@@ -103,6 +113,11 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         const source = rowFor(row);
         const cell = column === 0 ? {display: source.id, expression: source.id} : source.values[table.columns[column - 1].name];
         const error = isDraft(row) ? draftError : errorFor(source.id, table.columns[column - 1]?.name ?? "");
+        const columnDefinition = table.columns[column - 1];
+        if (column !== 0 && columnDefinition.schema.kind === "enum" && !cell?.formula) {
+            const options = columnDefinition.schema.enumValues?.map((entry) => entry.expression.replace(/^"|"$/g, "")) ?? [];
+            return {kind: GridCellKind.Custom, allowOverlay: true, copyData: cell?.display ?? "", data: {kind: "enum", value: cell?.display ?? options[0] ?? "", options}, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined} as EnumCell;
+        }
         return {
             kind: GridCellKind.Text,
             data: cell?.formula ? `=${cell.expression}` : cell?.expression ?? "",
@@ -115,10 +130,9 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         };
     };
     const editCell = async ([column, row]: Item, value: GridCell) => {
-        if (value.kind !== GridCellKind.Text) {
-            return;
-        }
-        const input = value.data.trim();
+        const enumValue = value as EnumCell;
+        const input = value.kind === GridCellKind.Custom && enumValue.data.kind === "enum" ? JSON.stringify(enumValue.data.value) : value.kind === GridCellKind.Text ? value.data.trim() : null;
+        if (input === null) return;
         if (isDraft(row)) {
             const next = column === 0 ? {id: input, values: draft.values} : {id: draft.id, values: {...draft.values, [table.columns[column - 1].name]: input}};
             if (column !== 0 && input === "") delete next.values[table.columns[column - 1].name];
@@ -185,6 +199,7 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
                 smoothScrollY
                 onCellEdited={editCell}
                 cellActivationBehavior="double-click"
+                customRenderers={[enumRenderer]}
                 onCellContextMenu={([column, row], event) => {
                     if (row === table.rows.length || column !== 0) return;
                     event.preventDefault();
