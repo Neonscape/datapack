@@ -87,7 +87,7 @@ function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; 
 type CellError = { rowID: string; column: string; message: string };
 type DraftRow = { id: string; values: Record<string, string> };
 
-function TableGrid({table, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onSaveInput}: { table: TableDocument; onDeleteColumn: () => void; onDeleteRow: (rowID: string) => void; onMoveColumn: () => void; onRenameColumn: () => void; onSaveInput: (rowID: string, column: string, input: string) => Promise<void> }) {
+function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onSaveInput}: { table: TableDocument; onAddColumn: () => void; onDeleteColumn: () => void; onDeleteRow: (rowID: string) => void; onMoveColumn: () => void; onRenameColumn: () => void; onSaveInput: (rowID: string, column: string, input: string) => Promise<void> }) {
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
     const [draftError, setDraftError] = useState("");
     const [contextRow, setContextRow] = useState<number | null>(null);
@@ -165,6 +165,7 @@ function TableGrid({table, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameCo
                 <h1>{table.namespace}.{table.name}</h1>
             </div>
             <div className="table-actions">
+                <button className="table-action" onClick={onAddColumn}>Add column</button>
                 <button className="table-action" onClick={onRenameColumn}>Rename column</button>
                 <button className="table-action" onClick={onMoveColumn}>Move column</button>
                 <button className="table-action table-action-danger" onClick={onDeleteColumn}>Delete column</button>
@@ -202,6 +203,14 @@ function TableGrid({table, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameCo
     </div>;
 }
 
+type StructureDialog = {
+    mode: "add" | "rename" | "move" | "delete";
+    name: string;
+    second: string;
+    schema: string;
+    initial: string;
+};
+
 function App() {
     const [workspace, setWorkspace] = useState<WorkspaceView | null>(null);
     const [selectedSchema, setSelectedSchema] = useState<SchemaDefinition | null>(null);
@@ -209,6 +218,7 @@ function App() {
     const [cellError, setCellError] = useState<CellError | null>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const [dialog, setDialog] = useState<StructureDialog | null>(null);
 
     async function selectProject() {
         setError("");
@@ -274,82 +284,26 @@ function App() {
         }
     }
 
-    async function addColumn() {
-        if (!table) {
-            return;
-        }
-        const name = window.prompt("Column name");
-        if (!name) {
-            return;
-        }
-        const schemaExpression = window.prompt("Column CUE Schema", "string");
-        if (!schemaExpression) {
-            return;
-        }
-        const initialExpression = window.prompt("Initial CUE value for every row", `""`);
-        if (!initialExpression) {
-            return;
-        }
+    async function submitStructureDialog() {
+        if (!table || !dialog) return;
         setError("");
         setCellError(null);
         try {
-            const result = await AddColumn({path: table.path, name, schemaExpression, initialExpression});
+            let result;
+            if (dialog.mode === "add") {
+                result = await AddColumn({path: table.path, name: dialog.name, schemaExpression: dialog.schema, initialExpression: dialog.initial});
+            } else if (dialog.mode === "rename") {
+                result = await RenameColumn({path: table.path, oldName: dialog.name, newName: dialog.second});
+            } else if (dialog.mode === "move") {
+                const position = Number(dialog.second);
+                if (!Number.isInteger(position)) throw new Error("Column position must be an integer");
+                result = await MoveColumn({path: table.path, name: dialog.name, position});
+            } else {
+                result = await DeleteColumn({path: table.path, name: dialog.name});
+            }
             setTable(result.table as TableDocument);
             setWorkspace(result.workspace as WorkspaceView);
-        } catch (reason) {
-            setError(reason instanceof Error ? reason.message : String(reason));
-        }
-    }
-
-    async function deleteColumn() {
-        if (!table) return;
-        const name = window.prompt("Column name to delete");
-        if (!name || !window.confirm(`Delete column ${name} and all of its values?`)) return;
-        setError("");
-        setCellError(null);
-        try {
-            const result = await DeleteColumn({path: table.path, name});
-            setTable(result.table as TableDocument);
-            setWorkspace(result.workspace as WorkspaceView);
-        } catch (reason) {
-            setError(reason instanceof Error ? reason.message : String(reason));
-        }
-    }
-
-    async function renameColumn() {
-        if (!table) return;
-        const oldName = window.prompt("Current column name");
-        if (!oldName) return;
-        const newName = window.prompt("New column name", oldName);
-        if (!newName || newName === oldName) return;
-        setError("");
-        setCellError(null);
-        try {
-            const result = await RenameColumn({path: table.path, oldName, newName});
-            setTable(result.table as TableDocument);
-            setWorkspace(result.workspace as WorkspaceView);
-        } catch (reason) {
-            setError(reason instanceof Error ? reason.message : String(reason));
-        }
-    }
-
-    async function moveColumn() {
-        if (!table) return;
-        const name = window.prompt("Column name to move");
-        if (!name) return;
-        const positionText = window.prompt(`New zero-based position (0-${table.columns.length - 1})`, "0");
-        if (positionText === null) return;
-        const position = Number(positionText);
-        if (!Number.isInteger(position)) {
-            setError("Column position must be an integer");
-            return;
-        }
-        setError("");
-        setCellError(null);
-        try {
-            const result = await MoveColumn({path: table.path, name, position});
-            setTable(result.table as TableDocument);
-            setWorkspace(result.workspace as WorkspaceView);
+            setDialog(null);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         }
@@ -363,25 +317,6 @@ function App() {
         setCellError(null);
         try {
             const result = await DeleteRow({path: table.path, rowID});
-            setTable(result.table as TableDocument);
-            setWorkspace(result.workspace as WorkspaceView);
-        } catch (reason) {
-            setError(reason instanceof Error ? reason.message : String(reason));
-        }
-    }
-
-    async function renameRow(oldID: string) {
-        if (!table) {
-            return;
-        }
-        const newID = window.prompt("New row ID", oldID);
-        if (!newID || newID === oldID) {
-            return;
-        }
-        setError("");
-        setCellError(null);
-        try {
-            const result = await RenameRow({path: table.path, oldID, newID});
             setTable(result.table as TableDocument);
             setWorkspace(result.workspace as WorkspaceView);
         } catch (reason) {
@@ -420,7 +355,7 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className="editor-placeholder">
-                        {table ? <TableGrid table={table} onDeleteColumn={deleteColumn} onDeleteRow={deleteRow} onMoveColumn={moveColumn} onRenameColumn={renameColumn} onSaveInput={saveCellInput}/> : selectedSchema ? <>
+                        {table ? <TableGrid table={table} onAddColumn={() => setDialog({mode: "add", name: "", second: "", schema: "string", initial: `""`})} onDeleteColumn={() => setDialog({mode: "delete", name: "", second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onMoveColumn={() => setDialog({mode: "move", name: "", second: "0", schema: "", initial: ""})} onRenameColumn={() => setDialog({mode: "rename", name: "", second: "", schema: "", initial: ""})} onSaveInput={saveCellInput}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>
@@ -472,6 +407,20 @@ function App() {
             )}
             {error && <div className="error-toast" role="alert">{error}</div>}
             {notice && <div className="notice-toast" role="status">{notice}</div>}
+            {dialog && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setDialog(null)}>
+                <form className="structure-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); submitStructureDialog(); }}>
+                    <h2>{dialog.mode === "add" ? "Add column" : dialog.mode === "rename" ? "Rename column" : dialog.mode === "move" ? "Move column" : "Delete column"}</h2>
+                    <label>Column name<input autoFocus value={dialog.name} onChange={(event) => setDialog({...dialog, name: event.target.value})}/></label>
+                    {dialog.mode === "add" && <>
+                        <label>CUE Schema<input value={dialog.schema} onChange={(event) => setDialog({...dialog, schema: event.target.value})}/></label>
+                        <label>Initial CUE value<input value={dialog.initial} onChange={(event) => setDialog({...dialog, initial: event.target.value})}/></label>
+                    </>}
+                    {dialog.mode === "rename" && <label>New name<input value={dialog.second} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>}
+                    {dialog.mode === "move" && <label>New zero-based position<input type="number" min="0" value={dialog.second} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>}
+                    {dialog.mode === "delete" && <p>This removes the column, all row values, formulas, foreign-key metadata, and CSV export configuration that refer to it.</p>}
+                    <div className="dialog-actions"><button type="button" onClick={() => setDialog(null)}>Cancel</button><button className={dialog.mode === "delete" ? "dialog-danger" : ""} type="submit">{dialog.mode === "delete" ? "Delete column" : "Apply"}</button></div>
+                </form>
+            </div>}
         </main>
     )
 }
