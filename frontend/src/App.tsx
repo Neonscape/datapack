@@ -89,6 +89,36 @@ type DraftRow = { id: string; values: Record<string, string> };
 type EnumCell = CustomCell<{kind: "enum"; value: string; options: string[]}>;
 type InlineEditor = { column: number; row: number; value: string; bounds: {x: number; y: number; width: number; height: number} };
 type ForeignKeyEditor = InlineEditor & {options: string[]; target: string};
+type ArrayEditor = {column: number; row: number; entries: string[]; pasted: string};
+
+function arrayEntries(expression: string) {
+    const source = expression.trim();
+    if (!source.startsWith("[") || !source.endsWith("]")) return [];
+    const entries: string[] = [];
+    let start = 1;
+    let depth = 0;
+    let quote = "";
+    let escaped = false;
+    for (let index = 1; index < source.length - 1; index++) {
+        const character = source[index];
+        if (quote) {
+            if (!escaped && character === quote) quote = "";
+            escaped = !escaped && character === "\\";
+            continue;
+        }
+        if (character === `"` || character === "'") quote = character;
+        else if (character === "[" || character === "{") depth++;
+        else if (character === "]" || character === "}") depth--;
+        else if (character === "," && depth === 0) {
+            const entry = source.slice(start, index).trim();
+            if (entry) entries.push(entry);
+            start = index + 1;
+        }
+    }
+    const entry = source.slice(start, -1).trim();
+    if (entry) entries.push(entry);
+    return entries;
+}
 
 const enumRenderer: CustomRenderer<EnumCell> = {
     kind: GridCellKind.Custom,
@@ -108,6 +138,7 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
     const [gridSelection, setGridSelection] = useState<GridSelection>({columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: undefined});
     const [inlineEditor, setInlineEditor] = useState<InlineEditor | null>(null);
     const [foreignKeyEditor, setForeignKeyEditor] = useState<ForeignKeyEditor | null>(null);
+    const [arrayEditor, setArrayEditor] = useState<ArrayEditor | null>(null);
     const editorRef = useRef<HTMLTextAreaElement | null>(null);
     const foreignKeyEditorRef = useRef<HTMLInputElement | null>(null);
     const gridRef = useRef<HTMLDivElement | null>(null);
@@ -152,6 +183,9 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         const cell = column === 0 ? {display: source.id, expression: source.id} : source.values[table.columns[column - 1].name];
         const error = isDraft(row) ? draftError : errorFor(source.id, table.columns[column - 1]?.name ?? "");
         const columnDefinition = table.columns[column - 1];
+        if (column !== 0 && columnDefinition.schema.kind === "array" && !cell?.formula) {
+            return {kind: GridCellKind.Text, data: cell?.expression ?? "[]", displayData: cell?.display ?? "[]", allowOverlay: true, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined};
+        }
         if (column !== 0 && columnDefinition.foreignKeyTable && !cell?.formula) {
             return {kind: GridCellKind.Text, data: cell?.expression ?? "", displayData: cell?.display ?? "", allowOverlay: true, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined};
         }
@@ -228,6 +262,10 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         const source = rowFor(row);
         const cell = column === 0 ? {expression: source.id, formula: false} : source.values[table.columns[column - 1].name];
         const columnDefinition = table.columns[column - 1];
+        if (column !== 0 && columnDefinition.schema.kind === "array" && !cell?.formula) {
+            window.requestAnimationFrame(() => setArrayEditor({column, row, entries: arrayEntries(cell?.expression ?? "[]"), pasted: ""}));
+            return;
+        }
         if (column !== 0 && columnDefinition.foreignKeyTable && !cell?.formula) {
             window.requestAnimationFrame(() => setForeignKeyEditor({column, row, value: cell?.expression.replace(/^"|"$/g, "") ?? "", bounds, options: columnDefinition.foreignKeyOptions ?? [], target: columnDefinition.foreignKeyTable!}));
             return;
@@ -240,6 +278,12 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         const target = foreignKeyEditor;
         setForeignKeyEditor(null);
         void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: JSON.stringify(value), displayData: value});
+    };
+    const saveArray = () => {
+        if (!arrayEditor) return;
+        const target = arrayEditor;
+        setArrayEditor(null);
+        void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: `[${target.entries.filter((entry) => entry.trim()).join(", ")}]`, displayData: ""});
     };
     const selectedRange = () => {
         const current = gridSelection.current?.cell;
@@ -279,7 +323,7 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
             document.removeEventListener("paste", clipboard);
         };
     }, [gridSelection, table, onPaste]);
-    return <div className="table-document" data-inline-editor={inlineEditor || foreignKeyEditor ? "open" : "closed"}>
+    return <div className="table-document" data-inline-editor={inlineEditor || foreignKeyEditor || arrayEditor ? "open" : "closed"}>
         <div className="table-document-header">
             <div>
                 <div className="table-eyebrow">CUE expression editing</div>
@@ -346,19 +390,43 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
                     setContextRow(null);
                 }}>Delete row</button>
             </div>}
-            {inlineEditor && <textarea ref={editorRef} className="inline-cell-editor" defaultValue={inlineEditor.value} style={{left: inlineEditor.bounds.x, top: inlineEditor.bounds.y, width: inlineEditor.bounds.width, height: inlineEditor.bounds.height}} onBlur={finishInlineEdit} onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    finishInlineEdit();
-                }
-                if (event.key === "Escape") setInlineEditor(null);
-            }/>}
+            {inlineEditor && <textarea
+                ref={editorRef}
+                className="inline-cell-editor"
+                defaultValue={inlineEditor.value}
+                style={{left: inlineEditor.bounds.x, top: inlineEditor.bounds.y, width: inlineEditor.bounds.width, height: inlineEditor.bounds.height}}
+                onBlur={finishInlineEdit}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        finishInlineEdit();
+                    }
+                    if (event.key === "Escape") setInlineEditor(null);
+                }}
+            />}
             {foreignKeyEditor && <div className="foreign-key-cell-editor" style={{left: foreignKeyEditor.bounds.x, top: foreignKeyEditor.bounds.y, width: foreignKeyEditor.bounds.width, minHeight: foreignKeyEditor.bounds.height}}>
                 <input ref={foreignKeyEditorRef} defaultValue={foreignKeyEditor.value} list={`foreign-key-options-${foreignKeyEditor.column}`} aria-label={`Select ${foreignKeyEditor.target} ID`} onKeyDown={(event) => {
                     if (event.key === "Enter") finishForeignKeyEdit(event.currentTarget.value);
                     if (event.key === "Escape") setForeignKeyEditor(null);
                 }} onBlur={(event) => finishForeignKeyEdit(event.currentTarget.value)}/>
                 <datalist id={`foreign-key-options-${foreignKeyEditor.column}`}>{foreignKeyEditor.options.map((option) => <option key={option} value={option}/>)}</datalist>
+            </div>}
+            {arrayEditor && <div className="array-editor-backdrop" role="presentation" onMouseDown={() => setArrayEditor(null)}>
+                <section className="array-editor-dialog" role="dialog" aria-label={`Edit ${table.columns[arrayEditor.column - 1].name}`} onMouseDown={(event) => event.stopPropagation()}>
+                    <header><div><span>Array values</span><h2>{table.columns[arrayEditor.column - 1].name}</h2></div><button type="button" aria-label="Close array editor" onClick={() => setArrayEditor(null)}>x</button></header>
+                    <div className="array-entry-list">
+                        {arrayEditor.entries.map((entry, index) => <div className="array-entry" key={`${index}:${entry}`}>
+                            <code>{index + 1}</code>
+                            <input aria-label={`Array item ${index + 1}`} value={entry} onChange={(event) => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? event.target.value : value)})}/>
+                            <button type="button" aria-label={`Move item ${index + 1} up`} disabled={index === 0} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? arrayEditor.entries[index - 1] : position === index - 1 ? arrayEditor.entries[index] : value)})}>Up</button>
+                            <button type="button" aria-label={`Move item ${index + 1} down`} disabled={index === arrayEditor.entries.length - 1} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? arrayEditor.entries[index + 1] : position === index + 1 ? arrayEditor.entries[index] : value)})}>Down</button>
+                            <button type="button" aria-label={`Delete item ${index + 1}`} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.filter((_, position) => position !== index)})}>Delete</button>
+                        </div>)}
+                    </div>
+                    <button className="array-add" type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, ""]})}>Add item</button>
+                    <label className="array-paste">Paste items<textarea aria-label="Paste array items" value={arrayEditor.pasted} placeholder={'One CUE expression per line'} onChange={(event) => setArrayEditor({...arrayEditor, pasted: event.target.value})}/></label>
+                    <div className="dialog-actions"><button type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, ...arrayEditor.pasted.replace(/\r/g, "").split("\n").map((entry) => entry.trim()).filter(Boolean)], pasted: ""})} disabled={!arrayEditor.pasted.trim()}>Add pasted items</button><button type="button" onClick={() => setArrayEditor(null)}>Cancel</button><button type="button" onClick={saveArray}>Apply</button></div>
+                </section>
             </div>}
         </div>
     </div>;
