@@ -65,7 +65,7 @@ type TableDocument = {
     path: string;
     namespace: string;
     name: string;
-    columns: { name: string; schema: { kind: string; enumValues?: { expression: string }[] } }[];
+    columns: { name: string; schema: { kind: string; enumValues?: { expression: string }[] }; foreignKeyTable?: string; foreignKeyOptions?: string[] }[];
     rows: { id: string; values: Record<string, { expression: string; display: string; formula?: boolean }> }[];
     diagnostics?: { rowID: string; column?: string; message: string }[];
 };
@@ -88,6 +88,7 @@ type CellError = { rowID: string; column: string; message: string };
 type DraftRow = { id: string; values: Record<string, string> };
 type EnumCell = CustomCell<{kind: "enum"; value: string; options: string[]}>;
 type InlineEditor = { column: number; row: number; value: string; bounds: {x: number; y: number; width: number; height: number} };
+type ForeignKeyEditor = InlineEditor & {options: string[]; target: string};
 
 const enumRenderer: CustomRenderer<EnumCell> = {
     kind: GridCellKind.Custom,
@@ -106,7 +107,9 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
     const [selectedColumn, setSelectedColumn] = useState<number | null>(null);
     const [gridSelection, setGridSelection] = useState<GridSelection>({columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: undefined});
     const [inlineEditor, setInlineEditor] = useState<InlineEditor | null>(null);
+    const [foreignKeyEditor, setForeignKeyEditor] = useState<ForeignKeyEditor | null>(null);
     const editorRef = useRef<HTMLTextAreaElement | null>(null);
+    const foreignKeyEditorRef = useRef<HTMLInputElement | null>(null);
     const gridRef = useRef<HTMLDivElement | null>(null);
     const lastCellBounds = useRef<{cell: Item; bounds: {x: number; y: number; width: number; height: number}} | null>(null);
     const columns: GridColumn[] = [
@@ -117,9 +120,10 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
     const selectedColumnName = selectedColumn === null ? null : table.columns[selectedColumn - 1]?.name ?? null;
     const columnWidth = (column: GridColumn) => "width" in column ? column.width : 170;
     useEffect(() => {
-        editorRef.current?.focus();
-        editorRef.current?.select();
-    }, [inlineEditor]);
+        const editor = inlineEditor ? editorRef.current : foreignKeyEditorRef.current;
+        editor?.focus();
+        editor?.select();
+    }, [inlineEditor, foreignKeyEditor]);
     useEffect(() => {
         const closeContextMenu = (event: PointerEvent) => {
             const target = event.target as Element | null;
@@ -148,6 +152,9 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         const cell = column === 0 ? {display: source.id, expression: source.id} : source.values[table.columns[column - 1].name];
         const error = isDraft(row) ? draftError : errorFor(source.id, table.columns[column - 1]?.name ?? "");
         const columnDefinition = table.columns[column - 1];
+        if (column !== 0 && columnDefinition.foreignKeyTable && !cell?.formula) {
+            return {kind: GridCellKind.Text, data: cell?.expression ?? "", displayData: cell?.display ?? "", allowOverlay: true, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined};
+        }
         if (column !== 0 && columnDefinition.schema.kind === "enum" && !cell?.formula) {
             const options = columnDefinition.schema.enumValues?.map((entry) => entry.expression.replace(/^"|"$/g, "")) ?? [];
             return {kind: GridCellKind.Custom, allowOverlay: true, copyData: cell?.display ?? "", data: {kind: "enum", value: cell?.display ?? options[0] ?? "", options}, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined} as EnumCell;
@@ -220,8 +227,19 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         if (column < 0 || row < 0 || row >= table.rows.length + 1) return;
         const source = rowFor(row);
         const cell = column === 0 ? {expression: source.id, formula: false} : source.values[table.columns[column - 1].name];
+        const columnDefinition = table.columns[column - 1];
+        if (column !== 0 && columnDefinition.foreignKeyTable && !cell?.formula) {
+            window.requestAnimationFrame(() => setForeignKeyEditor({column, row, value: cell?.expression.replace(/^"|"$/g, "") ?? "", bounds, options: columnDefinition.foreignKeyOptions ?? [], target: columnDefinition.foreignKeyTable!}));
+            return;
+        }
         if (column !== 0 && ["enum", "boolean"].includes(table.columns[column - 1].schema.kind)) return;
         window.setTimeout(() => setInlineEditor({column, row, value: cell?.expression ?? "", bounds}), 0);
+    };
+    const finishForeignKeyEdit = (value: string) => {
+        if (!foreignKeyEditor) return;
+        const target = foreignKeyEditor;
+        setForeignKeyEditor(null);
+        void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: JSON.stringify(value), displayData: value});
     };
     const selectedRange = () => {
         const current = gridSelection.current?.cell;
@@ -261,7 +279,7 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
             document.removeEventListener("paste", clipboard);
         };
     }, [gridSelection, table, onPaste]);
-    return <div className="table-document" data-inline-editor={inlineEditor ? "open" : "closed"}>
+    return <div className="table-document" data-inline-editor={inlineEditor || foreignKeyEditor ? "open" : "closed"}>
         <div className="table-document-header">
             <div>
                 <div className="table-eyebrow">CUE expression editing</div>
@@ -303,6 +321,12 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
                     lastCellBounds.current = {cell: [column, row], bounds};
                     if (column >= 0) openInlineAt(column, row, bounds);
                 }}
+                onCellActivated={([column, row]) => {
+                    const last = lastCellBounds.current;
+                    if (last?.cell[0] === column && last.cell[1] === row && table.columns[column - 1]?.foreignKeyTable) {
+                        openInlineAt(column, row, last.bounds);
+                    }
+                }}
                 onHeaderClicked={(column) => {
                     setSelectedColumn(column === 0 ? null : column);
                     setMenu(null);
@@ -328,7 +352,14 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
                     finishInlineEdit();
                 }
                 if (event.key === "Escape") setInlineEditor(null);
-            }}/>}
+            }/>}
+            {foreignKeyEditor && <div className="foreign-key-cell-editor" style={{left: foreignKeyEditor.bounds.x, top: foreignKeyEditor.bounds.y, width: foreignKeyEditor.bounds.width, minHeight: foreignKeyEditor.bounds.height}}>
+                <input ref={foreignKeyEditorRef} defaultValue={foreignKeyEditor.value} list={`foreign-key-options-${foreignKeyEditor.column}`} aria-label={`Select ${foreignKeyEditor.target} ID`} onKeyDown={(event) => {
+                    if (event.key === "Enter") finishForeignKeyEdit(event.currentTarget.value);
+                    if (event.key === "Escape") setForeignKeyEditor(null);
+                }} onBlur={(event) => finishForeignKeyEdit(event.currentTarget.value)}/>
+                <datalist id={`foreign-key-options-${foreignKeyEditor.column}`}>{foreignKeyEditor.options.map((option) => <option key={option} value={option}/>)}</datalist>
+            </div>}
         </div>
     </div>;
 }

@@ -256,7 +256,7 @@ func (s *Service) GetTable(path string) (document.Table, error) {
 	if err != nil {
 		return document.Table{}, fmt.Errorf("load table: %w", err)
 	}
-	return withDiagnostics(table, *s.current), nil
+	return withTableMetadata(table, *s.current), nil
 }
 
 // UpdateCell applies one CUE expression to an existing table cell, then
@@ -274,7 +274,7 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 	if err != nil {
 		return CellUpdateResult{}, err
 	}
-	return CellUpdateResult{Table: withDiagnostics(table, view), Workspace: view}, nil
+	return CellUpdateResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 func (s *Service) Paste(paste Paste) (HistoryResult, error) {
@@ -314,7 +314,7 @@ func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
 	if err != nil {
 		return FormulaSetResult{}, err
 	}
-	return FormulaSetResult{Table: withDiagnostics(table, view), Workspace: view}, nil
+	return FormulaSetResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 func (s *Service) edit(path string, operation func() (document.Table, error)) (document.Table, View, error) {
@@ -381,7 +381,7 @@ func (s *Service) restoreHistory(path string, undo bool) (HistoryResult, error) 
 
 func (s *Service) historyResult(path string, table document.Table, view View) HistoryResult {
 	record := s.history[path]
-	return HistoryResult{Table: withDiagnostics(table, view), Workspace: view, CanUndo: record != nil && len(record.undo) > 0, CanRedo: record != nil && len(record.redo) > 0}
+	return HistoryResult{Table: withTableMetadata(table, view), Workspace: view, CanUndo: record != nil && len(record.undo) > 0, CanRedo: record != nil && len(record.redo) > 0}
 }
 
 func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
@@ -397,7 +397,7 @@ func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
 	if err != nil {
 		return RowCreateResult{}, err
 	}
-	return RowCreateResult{Table: withDiagnostics(table, view)}, nil
+	return RowCreateResult{Table: withTableMetadata(table, view)}, nil
 }
 
 func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
@@ -413,7 +413,7 @@ func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
 	if err != nil {
 		return CellUpdateResult{}, err
 	}
-	return CellUpdateResult{Table: withDiagnostics(table, view)}, nil
+	return CellUpdateResult{Table: withTableMetadata(table, view)}, nil
 }
 
 func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
@@ -657,6 +657,37 @@ func withDiagnostics(table document.Table, view View) document.Table {
 			}
 			table.Rows[index].Values[formula.Column] = document.Cell{Expression: formula.Expression, Display: display, Formula: true}
 			break
+		}
+	}
+	return table
+}
+
+func withTableMetadata(table document.Table, view View) document.Table {
+	return withForeignKeyOptions(withDiagnostics(table, view), view.Tree)
+}
+
+// withForeignKeyOptions exposes target IDs only for scalar foreign keys. Array
+// keys keep CUE expression editing until their dedicated list editor exists.
+func withForeignKeyOptions(table document.Table, tree projecttree.Tree) document.Table {
+	targets := map[string][]string{}
+	var tables []document.Table
+	collectTables(tree.Root, &tables)
+	for _, candidate := range tables {
+		name := candidate.Name
+		if candidate.Namespace != "" {
+			name = candidate.Namespace + "." + candidate.Name
+		}
+		for _, row := range candidate.Rows {
+			targets[name] = append(targets[name], row.ID)
+		}
+	}
+	for index := range table.Columns {
+		for _, key := range table.ForeignKeys {
+			if key.Column == table.Columns[index].Name && table.Columns[index].Schema.Kind != "array" {
+				table.Columns[index].ForeignKeyTable = key.Table
+				table.Columns[index].ForeignKeyOptions = targets[key.Table]
+				break
+			}
 		}
 	}
 	return table

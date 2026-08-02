@@ -5,10 +5,11 @@ const table = {
     namespace: "rpg",
     name: "item",
     columns: [
+        {name: "effectID", schema: {kind: "string"}, foreignKeyTable: "rpg.effect", foreignKeyOptions: ["burn", "freeze"]},
         {name: "name", schema: {kind: "string"}},
         {name: "rarity", schema: {kind: "enum", enumValues: [{expression: `"N"`}, {expression: `"R"`}]}},
     ],
-    rows: [{id: "sword", values: {name: {expression: "20 + 5", display: "25", formula: true}, rarity: {expression: `"N"`, display: "N"}}}],
+    rows: [{id: "sword", values: {name: {expression: "20 + 5", display: "25", formula: true}, rarity: {expression: `"N"`, display: "N"}, effectID: {expression: `"burn"`, display: "burn"}}}],
 };
 
 const workspace = {
@@ -68,7 +69,7 @@ test("supports pointer editing, row menus, and selected-column actions", async (
     await expect(page.getByRole("button", {name: "Move column"})).toBeEnabled();
     await expect(page.getByRole("button", {name: "Delete column"})).toBeEnabled();
 
-    await page.mouse.click(box.x + 225, box.y + 50);
+    await page.mouse.click(box.x + 395, box.y + 50);
     await expect(page.getByRole("button", {name: "Rename column"})).toBeDisabled();
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "open");
     await expect(page.locator("textarea"), JSON.stringify(canvases)).toBeVisible();
@@ -87,9 +88,25 @@ test("edits formula cells with the application inline editor", async ({page}) =>
     expect(box).not.toBeNull();
     if (!box) return;
 
-    await page.mouse.dblclick(box.x + 225, box.y + 50);
+    await page.mouse.dblclick(box.x + 395, box.y + 50);
 
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "open");
     await expect(page.locator("textarea")).toHaveValue("20 + 5");
     expect(pageErrors).toEqual([]);
+});
+
+test("offers existing IDs while allowing manual foreign-key input", async ({page}) => {
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    await page.mouse.click(box.x + 225, box.y + 50);
+
+    const input = page.getByRole("combobox", {name: "Select rpg.effect ID"});
+    await expect(input).toHaveValue("burn");
+    expect(await page.locator("datalist option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value))).toEqual(["burn", "freeze"]);
+    await input.fill("unreleased_effect");
+    await input.press("Enter");
+    await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
 });

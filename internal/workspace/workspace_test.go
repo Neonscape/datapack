@@ -3,6 +3,7 @@ package workspace
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -559,6 +560,36 @@ _tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectIDs: {table
 	item, err := service.GetTable(filepath.Join(projectRoot, "tables", "item.cue"))
 	if err != nil || item.Rows[0].Values["effectIDs"].Expression != `["burn_large"]` {
 		t.Fatalf("item = %#v, error = %v", item, err)
+	}
+}
+
+func TestGetTableIncludesScalarForeignKeyOptions(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "effect.cue"), `package effect
+#PrimaryKey: string
+#Row: {name: string}
+rows: {burn: {name: "Burn"}, freeze: {name: "Freeze"}}
+_tool: {table: {namespace: "rpg", name: "effect"}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {effectID: string, effectIDs: [...string]}
+rows: {sword: {effectID: "burn", effectIDs: ["burn"]}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table: "rpg.effect"}, effectIDs: {table: "rpg.effect"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	table, err := service.GetTable(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.Columns[0].ForeignKeyTable != "rpg.effect" || !reflect.DeepEqual(table.Columns[0].ForeignKeyOptions, []string{"burn", "freeze"}) || table.Columns[1].ForeignKeyTable != "" {
+		t.Fatalf("columns = %#v", table.Columns)
 	}
 }
 

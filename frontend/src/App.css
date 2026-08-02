@@ -344,6 +344,24 @@
     outline: none;
 }
 
+.foreign-key-cell-editor {
+    position: absolute;
+    z-index: 4;
+    background: #fff;
+    border: 1px solid #3d7a98;
+}
+
+.foreign-key-cell-editor input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 30px;
+    border: 0;
+    padding: 4px 8px;
+    color: #17232b;
+    font: inherit;
+    outline: none;
+}
+
 .dialog-backdrop {
     position: fixed;
     z-index: 20;

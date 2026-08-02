@@ -19,9 +19,11 @@ type Table struct {
 }
 
 type Column struct {
-	Name     string           `json:"name"`
-	Optional bool             `json:"optional"`
-	Schema   schemamodel.Node `json:"schema"`
+	Name              string           `json:"name"`
+	Optional          bool             `json:"optional"`
+	Schema            schemamodel.Node `json:"schema"`
+	ForeignKeyTable   string           `json:"foreignKeyTable,omitempty"`
+	ForeignKeyOptions []string         `json:"foreignKeyOptions,omitempty"`
 }
 
 type Row struct {
