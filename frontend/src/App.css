@@ -28,6 +28,56 @@
     background: #d9dee3;
 }
 
+.app-menubar {
+    display: flex;
+    align-self: stretch;
+    align-items: center;
+    gap: 2px;
+}
+
+.app-menu { position: relative; }
+.app-menu > button {
+    border: 0;
+    border-radius: 3px;
+    padding: 5px 8px;
+    color: #33454f;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+.app-menu > button:hover, .app-menu > button[aria-expanded="true"] { background: #e8eff1; }
+.app-menu-popover {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% - 4px);
+    left: 0;
+    min-width: 164px;
+    padding: 4px;
+    border: 1px solid #cbd5da;
+    border-radius: 4px;
+    background: #ffffff;
+    box-shadow: 0 8px 18px rgba(34, 50, 61, 0.18);
+}
+.app-menu-popover button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    width: 100%;
+    border: 0;
+    padding: 7px 9px;
+    color: #33454f;
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+.app-menu-popover button:hover:not(:disabled) { background: #eef4f5; }
+.app-menu-popover button:disabled { color: #9aa6ad; cursor: default; }
+.app-menu-popover kbd { color: #78858d; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+
 .project-name {
     min-width: 0;
     overflow: hidden;
@@ -120,20 +170,6 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
 }
-
-.new-table-button {
-    width: 20px;
-    height: 20px;
-    margin-left: auto;
-    border: 1px solid #bfcbd1;
-    border-radius: 3px;
-    color: #33454f;
-    background: #ffffff;
-    font: 16px/16px sans-serif;
-    cursor: pointer;
-}
-
-.new-table-button:hover { background: #eef4f5; }
 
 .tree {
     padding: 8px 0;

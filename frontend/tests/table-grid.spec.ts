@@ -51,7 +51,8 @@ test.beforeEach(async ({page}) => {
         (window as Window & {go: unknown}).go = {main: {App: api}};
     }, {table, workspace});
     await page.goto("/");
-    await page.locator("header").getByRole("button", {name: "Open project"}).click();
+    await page.getByRole("button", {name: "File"}).click();
+    await page.getByRole("navigation", {name: "Application menu"}).getByRole("button", {name: "Open project"}).click();
     await page.getByRole("button", {name: "rpg.item"}).click();
 });
 
@@ -183,10 +184,19 @@ test("edits the selected column Schema", async ({page}) => {
 });
 
 test("creates and opens a table from the project explorer", async ({page}) => {
-    await page.getByRole("button", {name: "Create table"}).click();
+    await page.getByRole("button", {name: "File"}).click();
+    await page.getByRole("button", {name: "New table"}).click();
     await expect(page.getByRole("heading", {name: "Create table"})).toBeVisible();
     await page.getByRole("textbox", {name: "Namespace"}).fill("combat");
     await page.getByRole("textbox", {name: "Table name"}).fill("skill");
     await page.getByRole("button", {name: "Create", exact: true}).click();
     await expect(page.getByRole("heading", {name: "Create table"})).toBeHidden();
+});
+
+test("groups history commands under Edit", async ({page}) => {
+    await page.getByRole("button", {name: "Edit"}).click();
+    await expect(page.getByRole("button", {name: /Undo/})).toBeEnabled();
+    await expect(page.getByRole("button", {name: /Redo/})).toBeEnabled();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", {name: /Undo/})).toBeHidden();
 });

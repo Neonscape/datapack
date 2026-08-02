@@ -531,6 +531,7 @@ function App() {
     const [notice, setNotice] = useState("");
     const [dialog, setDialog] = useState<StructureDialog | null>(null);
     const [tableDialog, setTableDialog] = useState<TableDialog | null>(null);
+    const [appMenu, setAppMenu] = useState<"file" | "edit" | null>(null);
 
     async function pasteCells(row: number, column: number, text: string) {
         if (!table) return;
@@ -574,6 +575,21 @@ function App() {
         document.addEventListener("keydown", historyShortcut);
         return () => document.removeEventListener("keydown", historyShortcut);
     }, [table]);
+
+    useEffect(() => {
+        const closeMenu = (event: PointerEvent) => {
+            if (!(event.target as Element | null)?.closest(".app-menu")) setAppMenu(null);
+        };
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setAppMenu(null);
+        };
+        document.addEventListener("pointerdown", closeMenu);
+        document.addEventListener("keydown", closeOnEscape);
+        return () => {
+            document.removeEventListener("pointerdown", closeMenu);
+            document.removeEventListener("keydown", closeOnEscape);
+        };
+    }, []);
 
     async function selectProject() {
         setError("");
@@ -694,6 +710,18 @@ function App() {
         }
     }
 
+    async function applyHistory(redo: boolean) {
+        if (!table) return;
+        setError("");
+        try {
+            const result = redo ? await Redo(table.path) : await Undo(table.path);
+            setTable(result.table as TableDocument);
+            setWorkspace(result.workspace as WorkspaceView);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
     async function exportProject() {
         setError("");
         setNotice("");
@@ -710,18 +738,33 @@ function App() {
             <header className="app-header">
                 <div className="brand">Datapack</div>
                 <div className="header-divider"/>
+                <nav className="app-menubar" aria-label="Application menu">
+                    <div className="app-menu">
+                        <button aria-expanded={appMenu === "file"} onClick={() => setAppMenu(appMenu === "file" ? null : "file")}>File</button>
+                        {appMenu === "file" && <div className="app-menu-popover">
+                            <button onClick={() => { setAppMenu(null); selectProject(); }}>Open project</button>
+                            <button disabled={!workspace} onClick={() => { setAppMenu(null); setTableDialog({namespace: "game", name: ""}); }}>New table</button>
+                        </div>}
+                    </div>
+                    <div className="app-menu">
+                        <button aria-expanded={appMenu === "edit"} onClick={() => setAppMenu(appMenu === "edit" ? null : "edit")}>Edit</button>
+                        {appMenu === "edit" && <div className="app-menu-popover">
+                            <button disabled={!table} onClick={() => { setAppMenu(null); applyHistory(false); }}>Undo <kbd>Ctrl+Z</kbd></button>
+                            <button disabled={!table} onClick={() => { setAppMenu(null); applyHistory(true); }}>Redo <kbd>Ctrl+Y</kbd></button>
+                        </div>}
+                    </div>
+                </nav>
                 <span className="project-name">{workspace?.tree.root.name ?? "No project open"}</span>
                 <div className="header-actions">
                     {workspace && <span className={`build-mode build-mode-${workspace.settings.build.mode}`}>{workspace.settings.build.mode === "auto" ? "Auto compile" : "Manual compile"}</span>}
                     {workspace && <button className="export-button" onClick={exportProject}>Export CSV</button>}
-                    <button className="open-button" onClick={selectProject}>Open project</button>
                 </div>
             </header>
 
             {workspace ? (
                 <section className="workbench">
                     <aside className="project-explorer">
-                        <div className="panel-title"><span>Project</span><button className="new-table-button" aria-label="Create table" onClick={() => setTableDialog({namespace: "game", name: ""})}>+</button></div>
+                        <div className="panel-title">Project</div>
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className={`editor-placeholder ${table ? "editor-table" : ""}`}>
