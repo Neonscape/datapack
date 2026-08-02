@@ -7,11 +7,11 @@ const table = {
     namespace: "rpg",
     name: "item",
     columns: [
-        {name: "tags", schema: {kind: "array"}},
-        {name: "effectID", schema: {kind: "string"}, foreignKeyTable: "rpg.effect", foreignKeyOptions: ["burn", "freeze"]},
-        {name: "name", schema: {kind: "string"}},
-        {name: "position", schema: {kind: "struct", fields: [{name: "x"}, {name: "y"}, {name: "label", optional: true}]}},
-        {name: "rarity", schema: {kind: "enum", enumValues: [{expression: `"N"`}, {expression: `"R"`}]}},
+        {name: "tags", schemaExpression: "[...string]", schema: {kind: "array"}},
+        {name: "effectID", schemaExpression: "string", schema: {kind: "string"}, foreignKeyTable: "rpg.effect", foreignKeyOptions: ["burn", "freeze"]},
+        {name: "name", schemaExpression: "string", schema: {kind: "string"}},
+        {name: "position", schemaExpression: "{x: int, y: int, label?: string}", schema: {kind: "struct", fields: [{name: "x"}, {name: "y"}, {name: "label", optional: true}]}},
+        {name: "rarity", schemaExpression: `"N" | "R"`, schema: {kind: "enum", enumValues: [{expression: `"N"`}, {expression: `"R"`}]}},
     ],
     rows: [{id: "sword", values: {tags: {expression: `["starter", "weapon"]`, display: `["starter", "weapon"]`}, position: {expression: `{x: 4, y: 8}`, display: `{x: 4, y: 8}`}, name: {expression: "20 + 5", display: "25", formula: true}, rarity: {expression: `"N"`, display: "N"}, effectID: {expression: `"burn"`, display: "burn"}}}],
     diagnostics: [{rowID: "sword", column: "effectID", message: "foreign key references missing row rpg.effect.burn"}, {rowID: "", message: "table has an invalid export configuration"}],
@@ -39,6 +39,7 @@ test.beforeEach(async ({page}) => {
             DeleteColumn: () => Promise.resolve({table, workspace}),
             MoveColumn: () => Promise.resolve({table, workspace}),
             RenameColumn: () => Promise.resolve({table, workspace}),
+            SetColumnSchema: () => Promise.resolve({table, workspace}),
             RenameRow: () => Promise.resolve({table, workspace}),
             Paste: () => Promise.resolve({table, workspace, canUndo: true, canRedo: false}),
             Undo: () => Promise.resolve({table, workspace, canUndo: false, canRedo: true}),
@@ -166,4 +167,18 @@ test("shows table diagnostics and focuses their cells", async ({page}) => {
     await diagnostic.click();
     await expect(page.locator(".table-diagnostics-title")).toContainText("2");
     await expect(page.getByRole("button", {name: /table.*invalid export configuration/})).toBeDisabled();
+});
+
+test("edits the selected column Schema", async ({page}) => {
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    await page.mouse.click(box.x + 565, box.y + 15);
+    await page.getByRole("button", {name: "Edit schema"}).click();
+    await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeVisible();
+    const schema = page.getByRole("textbox", {name: "CUE Schema"});
+    await schema.fill("int & >=20");
+    await page.getByRole("button", {name: "Apply"}).click();
+    await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeHidden();
 });

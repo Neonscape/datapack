@@ -321,6 +321,33 @@ func AddColumn(path, name, schemaExpression, initialExpression string) (Table, e
 	return validateAndReplace(path, candidate)
 }
 
+// SetColumnSchema replaces one #Row field Schema. Existing row values may no
+// longer satisfy it; those business errors remain editable diagnostics.
+func SetColumnSchema(path, name, schemaExpression string) (Table, error) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	schema, err := parser.ParseExpr(path, schemaExpression)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse column Schema: %w", err)
+	}
+	field := fieldsOfStruct(requiredField(fieldsOfFile(file), "#Row").Value)[name]
+	if field == nil {
+		return Table{}, fmt.Errorf("column %q does not exist", name)
+	}
+	field.Value = schema
+	candidate, err := format.Node(file)
+	if err != nil {
+		return Table{}, fmt.Errorf("format updated table: %w", err)
+	}
+	return validateAndReplace(path, candidate)
+}
+
 // DeleteColumn removes a column definition, its values, and same-table tool
 // metadata that would otherwise reference the removed column.
 func DeleteColumn(path, name string) (Table, error) {

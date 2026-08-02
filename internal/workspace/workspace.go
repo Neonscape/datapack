@@ -134,6 +134,17 @@ type ColumnAddResult struct {
 	Workspace View           `json:"workspace"`
 }
 
+type ColumnSchemaSet struct {
+	Path             string `json:"path"`
+	Name             string `json:"name"`
+	SchemaExpression string `json:"schemaExpression"`
+}
+
+type ColumnSchemaSetResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
 type ColumnDelete struct {
 	Path string `json:"path"`
 	Name string `json:"name"`
@@ -527,6 +538,22 @@ func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 		return ColumnAddResult{}, err
 	}
 	return ColumnAddResult{Table: table, Workspace: view}, nil
+}
+
+func (s *Service) SetColumnSchema(set ColumnSchemaSet) (ColumnSchemaSetResult, error) {
+	if s.current == nil {
+		return ColumnSchemaSetResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, set.Path) {
+		return ColumnSchemaSetResult{}, fmt.Errorf("table %q is not part of the open project", set.Path)
+	}
+	table, view, err := s.edit(set.Path, func() (document.Table, error) {
+		return document.SetColumnSchema(set.Path, set.Name, set.SchemaExpression)
+	})
+	if err != nil {
+		return ColumnSchemaSetResult{}, err
+	}
+	return ColumnSchemaSetResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) {

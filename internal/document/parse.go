@@ -83,10 +83,15 @@ func LoadTable(path string) (Table, error) {
 		if err != nil {
 			return Table{}, fmt.Errorf("parse column %q: %w", labelOf(field), err)
 		}
+		schemaExpression, err := expressionOf(field.Value)
+		if err != nil {
+			return Table{}, fmt.Errorf("read column %q Schema: %w", labelOf(field), err)
+		}
 		document.Columns = append(document.Columns, Column{
-			Name:     labelOf(field),
-			Optional: field.Constraint == token.OPTION,
-			Schema:   schema,
+			Name:             labelOf(field),
+			Optional:         field.Constraint == token.OPTION,
+			Schema:           schema,
+			SchemaExpression: schemaExpression,
 		})
 	}
 

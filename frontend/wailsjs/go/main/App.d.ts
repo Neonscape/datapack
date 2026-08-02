@@ -37,6 +37,8 @@ export function SelectProject():Promise<workspace.View>;
 
 export function SetCellFormula(arg1:workspace.FormulaSet):Promise<workspace.FormulaSetResult>;
 
+export function SetColumnSchema(arg1:workspace.ColumnSchemaSet):Promise<workspace.ColumnSchemaSetResult>;
+
 export function Undo(arg1:string):Promise<workspace.HistoryResult>;
 
 export function UpdateCell(arg1:workspace.CellUpdate):Promise<workspace.CellUpdateResult>;

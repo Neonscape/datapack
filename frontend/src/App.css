@@ -520,7 +520,8 @@
     font-weight: 700;
 }
 
-.structure-dialog input {
+.structure-dialog input,
+.structure-dialog textarea {
     width: 100%;
     box-sizing: border-box;
     border: 1px solid #bfcbd1;
@@ -530,6 +531,8 @@
     background: #ffffff;
     font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+
+.structure-dialog textarea { min-height: 88px; resize: vertical; }
 
 .dialog-actions {
     display: flex;

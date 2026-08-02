@@ -119,6 +119,10 @@ func (a *App) AddColumn(add workspace.ColumnAdd) (workspace.ColumnAddResult, err
 	return a.workspace.AddColumn(add)
 }
 
+func (a *App) SetColumnSchema(set workspace.ColumnSchemaSet) (workspace.ColumnSchemaSetResult, error) {
+	return a.workspace.SetColumnSchema(set)
+}
+
 // DeleteColumn removes a column and its associated row values and metadata.
 func (a *App) DeleteColumn(delete workspace.ColumnDelete) (workspace.ColumnDeleteResult, error) {
 	return a.workspace.DeleteColumn(delete)

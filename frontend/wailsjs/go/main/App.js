@@ -70,6 +70,10 @@ export function SetCellFormula(arg1) {
   return window['go']['main']['App']['SetCellFormula'](arg1);
 }
 
+export function SetColumnSchema(arg1) {
+  return window['go']['main']['App']['SetColumnSchema'](arg1);
+}
+
 export function Undo(arg1) {
   return window['go']['main']['App']['Undo'](arg1);
 }

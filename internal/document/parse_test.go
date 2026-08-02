@@ -405,6 +405,21 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestSetColumnSchemaPersistsBusinessDiagnostics(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {price: int}
+rows: {sword: {price: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	table, err := SetColumnSchema(path, "price", "int & >=20")
+	if err != nil || table.Columns[0].Schema.Requirements[0].Expression != ">=20" {
+		t.Fatalf("SetColumnSchema() = %#v, %v", table, err)
+	}
+	if _, err := SetColumnSchema(path, "price", "["); err == nil {
+		t.Fatal("SetColumnSchema() accepted invalid CUE")
+	}
+}
+
 func TestDeleteColumnRemovesValuesAndMetadata(t *testing.T) {
 	path := writeSource(t, "item.cue", `package item
 #PrimaryKey: string
