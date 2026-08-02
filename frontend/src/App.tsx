@@ -120,6 +120,27 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         editorRef.current?.focus();
         editorRef.current?.select();
     }, [inlineEditor]);
+    useEffect(() => {
+        const closeContextMenu = (event: PointerEvent) => {
+            const target = event.target as Element | null;
+            if (!target?.closest(".row-context-menu")) {
+                setMenu(null);
+                setContextRow(null);
+            }
+        };
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                setMenu(null);
+                setContextRow(null);
+            }
+        };
+        document.addEventListener("pointerdown", closeContextMenu);
+        document.addEventListener("keydown", closeOnEscape);
+        return () => {
+            document.removeEventListener("pointerdown", closeContextMenu);
+            document.removeEventListener("keydown", closeOnEscape);
+        };
+    }, []);
     const rowFor = (row: number): TableDocument["rows"][number] => isDraft(row) ? {id: draft.id, values: Object.fromEntries(Object.entries(draft.values).map(([name, expression]) => [name, {expression, display: expression, formula: false}]))} : table.rows[row];
     const errorFor = (rowID: string, column: string) => table.diagnostics?.find((diagnostic) => diagnostic.rowID === rowID && (!diagnostic.column || diagnostic.column === column));
     const getCellContent = ([column, row]: Item): GridCell => {
@@ -407,7 +428,7 @@ function App() {
     }
 
     return (
-        <main className="app-shell">
+        <main className="app-shell" onContextMenu={(event) => event.preventDefault()}>
             <header className="app-header">
                 <div className="brand">Datapack</div>
                 <div className="header-divider"/>

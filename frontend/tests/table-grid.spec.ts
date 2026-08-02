@@ -72,4 +72,6 @@ test("supports pointer editing, row menus, and selected-column actions", async (
 
     await page.mouse.click(box.x + 16, box.y + 50, {button: "right"});
     await expect(page.getByRole("button", {name: "Delete row"})).toBeVisible();
+    await page.mouse.click(box.x + 225, box.y + 50, {button: "right"});
+    await expect(page.getByRole("button", {name: "Delete row"})).toBeHidden();
 });
