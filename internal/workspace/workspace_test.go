@@ -615,6 +615,28 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestCreateTableAddsItToTheCurrentProject(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "tables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.CreateTable(TableCreate{Namespace: "combat", Name: "skill"})
+	if err != nil || result.Table.Namespace != "combat" || result.Table.Name != "skill" || !containsTable(result.Workspace.Tree.Root, result.Table.Path) {
+		t.Fatalf("CreateTable() = %#v, %v", result, err)
+	}
+	if _, err := service.CreateTable(TableCreate{Namespace: "combat", Name: "skill"}); err == nil {
+		t.Fatal("CreateTable() accepted duplicate table")
+	}
+}
+
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

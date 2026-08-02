@@ -11,6 +11,8 @@ export function ClearCell(arg1:workspace.CellUpdate):Promise<workspace.CellUpdat
 
 export function CreateRow(arg1:workspace.RowCreate):Promise<workspace.RowCreateResult>;
 
+export function CreateTable(arg1:workspace.TableCreate):Promise<workspace.TableCreateResult>;
+
 export function CurrentWorkspace():Promise<workspace.View|boolean>;
 
 export function DeleteColumn(arg1:workspace.ColumnDelete):Promise<workspace.ColumnDeleteResult>;

@@ -64,6 +64,10 @@ func (a *App) GetTable(path string) (document.Table, error) {
 	return a.workspace.GetTable(path)
 }
 
+func (a *App) CreateTable(create workspace.TableCreate) (workspace.TableCreateResult, error) {
+	return a.workspace.CreateTable(create)
+}
+
 // UpdateCell writes a valid CUE expression to an existing table cell.
 func (a *App) UpdateCell(update workspace.CellUpdate) (workspace.CellUpdateResult, error) {
 	return a.workspace.UpdateCell(update)

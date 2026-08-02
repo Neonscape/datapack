@@ -33,6 +33,7 @@ test.beforeEach(async ({page}) => {
             UpdateCell: () => Promise.resolve({table, workspace}),
             SetCellFormula: () => Promise.resolve({table, workspace}),
             CreateRow: () => Promise.resolve({table, workspace}),
+            CreateTable: () => Promise.resolve({table, workspace}),
             ClearCell: () => Promise.resolve({table, workspace}),
             DeleteRow: () => Promise.resolve({table, workspace}),
             AddColumn: () => Promise.resolve({table, workspace}),
@@ -179,4 +180,13 @@ test("edits the selected column Schema", async ({page}) => {
     await schema.fill("int & >=20");
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeHidden();
+});
+
+test("creates and opens a table from the project explorer", async ({page}) => {
+    await page.getByRole("button", {name: "Create table"}).click();
+    await expect(page.getByRole("heading", {name: "Create table"})).toBeVisible();
+    await page.getByRole("textbox", {name: "Namespace"}).fill("combat");
+    await page.getByRole("textbox", {name: "Table name"}).fill("skill");
+    await page.getByRole("button", {name: "Create", exact: true}).click();
+    await expect(page.getByRole("heading", {name: "Create table"})).toBeHidden();
 });

@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type GridCell, type GridColumn, type GridSelection, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddColumn, ClearCell, CreateRow, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, Paste, Redo, RenameColumn, RenameRow, SelectProject, SetCellFormula, SetColumnSchema, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, CreateRow, CreateTable, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, Paste, Redo, RenameColumn, RenameRow, SelectProject, SetCellFormula, SetColumnSchema, Undo, UpdateCell} from "../wailsjs/go/main/App";
 
 type TreeNode = {
     kind: "project" | "group" | "directory" | "table" | "tableData" | "localSchema" | "schemaFile" | "schemaDefinition" | "damaged";
@@ -520,6 +520,7 @@ type StructureDialog = {
     schema: string;
     initial: string;
 };
+type TableDialog = {namespace: string; name: string};
 
 function App() {
     const [workspace, setWorkspace] = useState<WorkspaceView | null>(null);
@@ -529,6 +530,7 @@ function App() {
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
     const [dialog, setDialog] = useState<StructureDialog | null>(null);
+    const [tableDialog, setTableDialog] = useState<TableDialog | null>(null);
 
     async function pasteCells(row: number, column: number, text: string) {
         if (!table) return;
@@ -679,6 +681,19 @@ function App() {
         }
     }
 
+    async function createTable() {
+        if (!tableDialog) return;
+        setError("");
+        try {
+            const result = await CreateTable(tableDialog);
+            setWorkspace(result.workspace as WorkspaceView);
+            setTable(result.table as TableDocument);
+            setTableDialog(null);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
     async function exportProject() {
         setError("");
         setNotice("");
@@ -706,7 +721,7 @@ function App() {
             {workspace ? (
                 <section className="workbench">
                     <aside className="project-explorer">
-                        <div className="panel-title">Project</div>
+                        <div className="panel-title"><span>Project</span><button className="new-table-button" aria-label="Create table" onClick={() => setTableDialog({namespace: "game", name: ""})}>+</button></div>
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className={`editor-placeholder ${table ? "editor-table" : ""}`}>
@@ -776,6 +791,14 @@ function App() {
                     {dialog.mode === "move" && <label>New zero-based position<input type="number" min="0" value={dialog.second} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>}
                     {dialog.mode === "delete" && <p>This removes the column, all row values, formulas, foreign-key metadata, and CSV export configuration that refer to it.</p>}
                     <div className="dialog-actions"><button type="button" onClick={() => setDialog(null)}>Cancel</button><button className={dialog.mode === "delete" ? "dialog-danger" : ""} type="submit">{dialog.mode === "delete" ? "Delete column" : "Apply"}</button></div>
+                </form>
+            </div>}
+            {tableDialog && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setTableDialog(null)}>
+                <form className="structure-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); createTable(); }}>
+                    <h2>Create table</h2>
+                    <label>Namespace<input autoFocus value={tableDialog.namespace} onChange={(event) => setTableDialog({...tableDialog, namespace: event.target.value})}/></label>
+                    <label>Table name<input value={tableDialog.name} onChange={(event) => setTableDialog({...tableDialog, name: event.target.value})}/></label>
+                    <div className="dialog-actions"><button type="button" onClick={() => setTableDialog(null)}>Cancel</button><button type="submit">Create</button></div>
                 </form>
             </div>}
         </main>

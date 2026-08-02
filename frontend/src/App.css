@@ -121,6 +121,20 @@
     text-transform: uppercase;
 }
 
+.new-table-button {
+    width: 20px;
+    height: 20px;
+    margin-left: auto;
+    border: 1px solid #bfcbd1;
+    border-radius: 3px;
+    color: #33454f;
+    background: #ffffff;
+    font: 16px/16px sans-serif;
+    cursor: pointer;
+}
+
+.new-table-button:hover { background: #eef4f5; }
+
 .tree {
     padding: 8px 0;
     overflow: auto;

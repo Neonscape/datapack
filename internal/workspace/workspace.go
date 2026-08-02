@@ -122,6 +122,16 @@ type ExportResult struct {
 	Files []string `json:"files"`
 }
 
+type TableCreate struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
+
+type TableCreateResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
 type ColumnAdd struct {
 	Path              string `json:"path"`
 	Name              string `json:"name"`
@@ -269,6 +279,65 @@ func (s *Service) GetTable(path string) (document.Table, error) {
 		return document.Table{}, fmt.Errorf("load table: %w", err)
 	}
 	return withTableMetadata(table, *s.current), nil
+}
+
+func (s *Service) CreateTable(create TableCreate) (TableCreateResult, error) {
+	if s.current == nil {
+		return TableCreateResult{}, fmt.Errorf("no project is open")
+	}
+	if !validTableName(create.Name) || !validNamespace(create.Namespace) {
+		return TableCreateResult{}, fmt.Errorf("table name and namespace must use lowercase letters, digits, and underscores")
+	}
+	var tables []document.Table
+	collectTables(s.current.Tree.Root, &tables)
+	for _, table := range tables {
+		if table.Namespace == create.Namespace && table.Name == create.Name {
+			return TableCreateResult{}, fmt.Errorf("table %q already exists", create.Namespace+"."+create.Name)
+		}
+	}
+	directory := filepath.Join(s.current.Project.Root, s.current.Project.Config.TableRoots[0], create.Name)
+	path := filepath.Join(directory, create.Name+".cue")
+	if err := os.Mkdir(directory, 0o755); err != nil {
+		if os.IsExist(err) {
+			return TableCreateResult{}, fmt.Errorf("table directory %q already exists", create.Name)
+		}
+		return TableCreateResult{}, fmt.Errorf("create table directory: %w", err)
+	}
+	source := fmt.Sprintf(`package %s
+
+#PrimaryKey: string
+
+#Row: {}
+
+rows: {}
+
+_tool: {
+	version: 1
+	table: {
+		namespace: %q
+		name: %q
+	}
+	foreignKeys: {}
+	formulas: {}
+}
+
+_editor: {columns: {}}
+`, create.Name, create.Namespace, create.Name)
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		_ = os.Remove(directory)
+		return TableCreateResult{}, fmt.Errorf("write table source: %w", err)
+	}
+	table, err := document.LoadTable(path)
+	if err != nil {
+		_ = os.Remove(path)
+		_ = os.Remove(directory)
+		return TableCreateResult{}, fmt.Errorf("validate created table: %w", err)
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return TableCreateResult{}, err
+	}
+	return TableCreateResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 // UpdateCell applies one CUE expression to an existing table cell, then
@@ -664,6 +733,30 @@ func containsTable(node projecttree.Node, path string) bool {
 		}
 	}
 	return false
+}
+
+func validTableName(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index, character := range value {
+		if !(character >= 'a' && character <= 'z' || character >= '0' && character <= '9' && index > 0 || character == '_' && index > 0) {
+			return false
+		}
+	}
+	return true
+}
+
+func validNamespace(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, part := range strings.Split(value, ".") {
+		if !validTableName(part) {
+			return false
+		}
+	}
+	return true
 }
 
 func withDiagnostics(table document.Table, view View) document.Table {

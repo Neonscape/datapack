@@ -18,6 +18,10 @@ export function CreateRow(arg1) {
   return window['go']['main']['App']['CreateRow'](arg1);
 }
 
+export function CreateTable(arg1) {
+  return window['go']['main']['App']['CreateTable'](arg1);
+}
+
 export function CurrentWorkspace() {
   return window['go']['main']['App']['CurrentWorkspace']();
 }
