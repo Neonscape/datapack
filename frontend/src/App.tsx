@@ -65,7 +65,7 @@ type TableDocument = {
     path: string;
     namespace: string;
     name: string;
-    columns: { name: string; schema: { kind: string; enumValues?: { expression: string }[] }; foreignKeyTable?: string; foreignKeyOptions?: string[] }[];
+    columns: { name: string; optional?: boolean; schema: { kind: string; enumValues?: { expression: string }[]; fields?: {name: string; optional?: boolean}[] }; foreignKeyTable?: string; foreignKeyOptions?: string[] }[];
     rows: { id: string; values: Record<string, { expression: string; display: string; formula?: boolean }> }[];
     diagnostics?: { rowID: string; column?: string; message: string }[];
 };
@@ -90,6 +90,7 @@ type EnumCell = CustomCell<{kind: "enum"; value: string; options: string[]}>;
 type InlineEditor = { column: number; row: number; value: string; bounds: {x: number; y: number; width: number; height: number} };
 type ForeignKeyEditor = InlineEditor & {options: string[]; target: string};
 type ArrayEditor = {column: number; row: number; entries: string[]; pasted: string};
+type StructEditor = {column: number; row: number; values: Record<string, string>};
 
 function arrayEntries(expression: string) {
     const source = expression.trim();
@@ -120,6 +121,40 @@ function arrayEntries(expression: string) {
     return entries;
 }
 
+function structValues(expression: string, fieldNames: string[]) {
+    const source = expression.trim();
+    const values: Record<string, string> = {};
+    if (!source.startsWith("{") || !source.endsWith("}")) return values;
+    let start = 1;
+    let depth = 0;
+    let quote = "";
+    let escaped = false;
+    const entries: string[] = [];
+    for (let index = 1; index < source.length - 1; index++) {
+        const character = source[index];
+        if (quote) {
+            if (!escaped && character === quote) quote = "";
+            escaped = !escaped && character === "\\";
+            continue;
+        }
+        if (character === `"` || character === "'") quote = character;
+        else if (character === "[" || character === "{") depth++;
+        else if (character === "]" || character === "}") depth--;
+        else if ((character === "," || character === "\n") && depth === 0) {
+            entries.push(source.slice(start, index).trim());
+            start = index + 1;
+        }
+    }
+    entries.push(source.slice(start, -1).trim());
+    for (const entry of entries) {
+        const separator = entry.indexOf(":");
+        if (separator < 0) continue;
+        const name = entry.slice(0, separator).trim();
+        if (fieldNames.includes(name)) values[name] = entry.slice(separator + 1).trim();
+    }
+    return values;
+}
+
 const enumRenderer: CustomRenderer<EnumCell> = {
     kind: GridCellKind.Custom,
     isMatch: (cell): cell is EnumCell => (cell as EnumCell).data.kind === "enum",
@@ -139,6 +174,7 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
     const [inlineEditor, setInlineEditor] = useState<InlineEditor | null>(null);
     const [foreignKeyEditor, setForeignKeyEditor] = useState<ForeignKeyEditor | null>(null);
     const [arrayEditor, setArrayEditor] = useState<ArrayEditor | null>(null);
+    const [structEditor, setStructEditor] = useState<StructEditor | null>(null);
     const editorRef = useRef<HTMLTextAreaElement | null>(null);
     const foreignKeyEditorRef = useRef<HTMLInputElement | null>(null);
     const gridRef = useRef<HTMLDivElement | null>(null);
@@ -183,7 +219,7 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         const cell = column === 0 ? {display: source.id, expression: source.id} : source.values[table.columns[column - 1].name];
         const error = isDraft(row) ? draftError : errorFor(source.id, table.columns[column - 1]?.name ?? "");
         const columnDefinition = table.columns[column - 1];
-        if (column !== 0 && columnDefinition.schema.kind === "array" && !cell?.formula) {
+        if (column !== 0 && ["array", "struct"].includes(columnDefinition.schema.kind) && !cell?.formula) {
             return {kind: GridCellKind.Text, data: cell?.expression ?? "[]", displayData: cell?.display ?? "[]", allowOverlay: true, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined};
         }
         if (column !== 0 && columnDefinition.foreignKeyTable && !cell?.formula) {
@@ -262,6 +298,10 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         const source = rowFor(row);
         const cell = column === 0 ? {expression: source.id, formula: false} : source.values[table.columns[column - 1].name];
         const columnDefinition = table.columns[column - 1];
+        if (column !== 0 && columnDefinition.schema.kind === "struct" && !cell?.formula) {
+            window.requestAnimationFrame(() => setStructEditor({column, row, values: structValues(cell?.expression ?? "{}", columnDefinition.schema.fields?.map((field) => field.name) ?? [])}));
+            return;
+        }
         if (column !== 0 && columnDefinition.schema.kind === "array" && !cell?.formula) {
             window.requestAnimationFrame(() => setArrayEditor({column, row, entries: arrayEntries(cell?.expression ?? "[]"), pasted: ""}));
             return;
@@ -284,6 +324,14 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         const target = arrayEditor;
         setArrayEditor(null);
         void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: `[${target.entries.filter((entry) => entry.trim()).join(", ")}]`, displayData: ""});
+    };
+    const saveStruct = () => {
+        if (!structEditor) return;
+        const target = structEditor;
+        const fields = table.columns[target.column - 1].schema.fields ?? [];
+        const entries = fields.filter((field) => target.values[field.name]?.trim()).map((field) => `${field.name}: ${target.values[field.name].trim()}`);
+        setStructEditor(null);
+        void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: `{${entries.join(", ")}}`, displayData: ""});
     };
     const selectedRange = () => {
         const current = gridSelection.current?.cell;
@@ -323,7 +371,7 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
             document.removeEventListener("paste", clipboard);
         };
     }, [gridSelection, table, onPaste]);
-    return <div className="table-document" data-inline-editor={inlineEditor || foreignKeyEditor || arrayEditor ? "open" : "closed"}>
+    return <div className="table-document" data-inline-editor={inlineEditor || foreignKeyEditor || arrayEditor || structEditor ? "open" : "closed"}>
         <div className="table-document-header">
             <div>
                 <div className="table-eyebrow">CUE expression editing</div>
@@ -426,6 +474,13 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
                     <button className="array-add" type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, ""]})}>Add item</button>
                     <label className="array-paste">Paste items<textarea aria-label="Paste array items" value={arrayEditor.pasted} placeholder={'One CUE expression per line'} onChange={(event) => setArrayEditor({...arrayEditor, pasted: event.target.value})}/></label>
                     <div className="dialog-actions"><button type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, ...arrayEditor.pasted.replace(/\r/g, "").split("\n").map((entry) => entry.trim()).filter(Boolean)], pasted: ""})} disabled={!arrayEditor.pasted.trim()}>Add pasted items</button><button type="button" onClick={() => setArrayEditor(null)}>Cancel</button><button type="button" onClick={saveArray}>Apply</button></div>
+                </section>
+            </div>}
+            {structEditor && <div className="array-editor-backdrop" role="presentation" onMouseDown={() => setStructEditor(null)}>
+                <section className="struct-editor-dialog" role="dialog" aria-label={`Edit ${table.columns[structEditor.column - 1].name}`} onMouseDown={(event) => event.stopPropagation()}>
+                    <header><div><span>Structure values</span><h2>{table.columns[structEditor.column - 1].name}</h2></div><button type="button" aria-label="Close struct editor" onClick={() => setStructEditor(null)}>x</button></header>
+                    <div className="struct-field-list">{(table.columns[structEditor.column - 1].schema.fields ?? []).map((field) => <label key={field.name}>{field.name}{field.optional && <span>Optional</span>}<input aria-label={`Struct field ${field.name}`} value={structEditor.values[field.name] ?? ""} placeholder="CUE expression" onChange={(event) => setStructEditor({...structEditor, values: {...structEditor.values, [field.name]: event.target.value}})}/></label>)}</div>
+                    <div className="dialog-actions"><button type="button" onClick={() => setStructEditor(null)}>Cancel</button><button type="button" onClick={saveStruct}>Apply</button></div>
                 </section>
             </div>}
         </div>

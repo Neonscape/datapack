@@ -1,5 +1,7 @@
 import {expect, test} from "@playwright/test";
 
+test.use({viewport: {width: 1920, height: 1080}});
+
 const table = {
     path: "/project/tables/item.cue",
     namespace: "rpg",
@@ -8,9 +10,10 @@ const table = {
         {name: "tags", schema: {kind: "array"}},
         {name: "effectID", schema: {kind: "string"}, foreignKeyTable: "rpg.effect", foreignKeyOptions: ["burn", "freeze"]},
         {name: "name", schema: {kind: "string"}},
+        {name: "position", schema: {kind: "struct", fields: [{name: "x"}, {name: "y"}, {name: "label", optional: true}]}},
         {name: "rarity", schema: {kind: "enum", enumValues: [{expression: `"N"`}, {expression: `"R"`}]}},
     ],
-    rows: [{id: "sword", values: {tags: {expression: `["starter", "weapon"]`, display: `["starter", "weapon"]`}, name: {expression: "20 + 5", display: "25", formula: true}, rarity: {expression: `"N"`, display: "N"}, effectID: {expression: `"burn"`, display: "burn"}}}],
+    rows: [{id: "sword", values: {tags: {expression: `["starter", "weapon"]`, display: `["starter", "weapon"]`}, position: {expression: `{x: 4, y: 8}`, display: `{x: 4, y: 8}`}, name: {expression: "20 + 5", display: "25", formula: true}, rarity: {expression: `"N"`, display: "N"}, effectID: {expression: `"burn"`, display: "burn"}}}],
 };
 
 const workspace = {
@@ -125,6 +128,21 @@ test("edits, reorders, and adds array items", async ({page}) => {
     await page.getByRole("button", {name: "Add pasted items"}).click();
     await expect(page.getByRole("textbox", {name: "Array item 1"})).toHaveValue(`"weapon"`);
     await expect(page.getByRole("textbox", {name: "Array item 4"})).toHaveValue(`"equipped"`);
+    await page.getByRole("button", {name: "Apply"}).click();
+    await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
+});
+
+test("edits flat struct fields", async ({page}) => {
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    await page.mouse.click(box.x + 735, box.y + 50);
+    await expect(page.getByRole("dialog", {name: "Edit position"})).toBeVisible();
+    await expect(page.getByRole("textbox", {name: "Struct field x"})).toHaveValue("4");
+    await page.getByRole("textbox", {name: "Struct field y"}).fill("12");
+    await page.getByRole("textbox", {name: "Struct field label"}).fill(`"spawn"`);
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
 });
