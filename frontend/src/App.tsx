@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type GridCell, type GridColumn, type GridSelection, type Item} from '@glideapps/glide-data-grid';
+import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type GridCell, type GridColumn, type GridSelection, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
 import {AddColumn, ClearCell, CreateRow, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, Paste, Redo, RenameColumn, RenameRow, SelectProject, SetCellFormula, Undo, UpdateCell} from "../wailsjs/go/main/App";
@@ -177,6 +177,7 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
     const [structEditor, setStructEditor] = useState<StructEditor | null>(null);
     const editorRef = useRef<HTMLTextAreaElement | null>(null);
     const foreignKeyEditorRef = useRef<HTMLInputElement | null>(null);
+    const dataEditorRef = useRef<DataEditorRef | null>(null);
     const gridRef = useRef<HTMLDivElement | null>(null);
     const lastCellBounds = useRef<{cell: Item; bounds: {x: number; y: number; width: number; height: number}} | null>(null);
     const columns: GridColumn[] = [
@@ -214,6 +215,14 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
     }, []);
     const rowFor = (row: number): TableDocument["rows"][number] => isDraft(row) ? {id: draft.id, values: Object.fromEntries(Object.entries(draft.values).map(([name, expression]) => [name, {expression, display: expression, formula: false}]))} : table.rows[row];
     const errorFor = (rowID: string, column: string) => table.diagnostics?.find((diagnostic) => diagnostic.rowID === rowID && (!diagnostic.column || diagnostic.column === column));
+    const focusDiagnostic = (diagnostic: NonNullable<TableDocument["diagnostics"]>[number]) => {
+        const row = table.rows.findIndex((entry) => entry.id === diagnostic.rowID);
+        const column = diagnostic.column ? table.columns.findIndex((entry) => entry.name === diagnostic.column) + 1 : 0;
+        if (row < 0 || column < 0) return;
+        setGridSelection({columns: CompactSelection.fromSingleSelection(column), rows: CompactSelection.fromSingleSelection(row), current: {cell: [column, row], range: {x: column, y: row, width: 1, height: 1}, rangeStack: []}});
+        dataEditorRef.current?.scrollTo(column, row, "both", 24, 48, {hAlign: "center", vAlign: "center"});
+        dataEditorRef.current?.focus();
+    };
     const getCellContent = ([column, row]: Item): GridCell => {
         const source = rowFor(row);
         const cell = column === 0 ? {display: source.id, expression: source.id} : source.values[table.columns[column - 1].name];
@@ -386,8 +395,17 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
             <span>{table.rows.length} rows + draft</span>
         </div>
         {draftError && <div className="table-validation-error"><code>draft</code><span>{draftError}</span></div>}
+        {(table.diagnostics?.length ?? 0) > 0 && <section className="table-diagnostics" aria-label="Table diagnostics">
+            <div className="table-diagnostics-title"><strong>Diagnostics</strong><span>{table.diagnostics!.length}</span></div>
+            <div className="table-diagnostics-list">{table.diagnostics!.map((diagnostic, index) => {
+                const location = diagnostic.rowID ? diagnostic.column ? `${diagnostic.rowID}.${diagnostic.column}` : diagnostic.rowID : "table";
+                const navigable = table.rows.some((row) => row.id === diagnostic.rowID) && (!diagnostic.column || table.columns.some((column) => column.name === diagnostic.column));
+                return <button key={`${location}:${diagnostic.message}:${index}`} className="table-diagnostic" disabled={!navigable} onClick={() => focusDiagnostic(diagnostic)}><code>{location}</code><span>{diagnostic.message}</span></button>;
+            })}</div>
+        </section>}
         <div ref={gridRef} className="table-grid">
             <DataEditor
+                ref={dataEditorRef}
                 columns={columns}
                 getCellContent={getCellContent}
                 rows={table.rows.length + 1}

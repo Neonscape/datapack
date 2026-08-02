@@ -14,6 +14,7 @@ const table = {
         {name: "rarity", schema: {kind: "enum", enumValues: [{expression: `"N"`}, {expression: `"R"`}]}},
     ],
     rows: [{id: "sword", values: {tags: {expression: `["starter", "weapon"]`, display: `["starter", "weapon"]`}, position: {expression: `{x: 4, y: 8}`, display: `{x: 4, y: 8}`}, name: {expression: "20 + 5", display: "25", formula: true}, rarity: {expression: `"N"`, display: "N"}, effectID: {expression: `"burn"`, display: "burn"}}}],
+    diagnostics: [{rowID: "sword", column: "effectID", message: "foreign key references missing row rpg.effect.burn"}, {rowID: "", message: "table has an invalid export configuration"}],
 };
 
 const workspace = {
@@ -145,4 +146,12 @@ test("edits flat struct fields", async ({page}) => {
     await page.getByRole("textbox", {name: "Struct field label"}).fill(`"spawn"`);
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
+});
+
+test("shows table diagnostics and focuses their cells", async ({page}) => {
+    await expect(page.getByRole("region", {name: "Table diagnostics"})).toBeVisible();
+    const diagnostic = page.getByRole("button", {name: /sword\.effectID.*foreign key references missing row/});
+    await diagnostic.click();
+    await expect(page.locator(".table-diagnostics-title")).toContainText("2");
+    await expect(page.getByRole("button", {name: /table.*invalid export configuration/})).toBeDisabled();
 });
