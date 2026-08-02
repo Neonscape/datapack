@@ -46,6 +46,14 @@ export function OpenProject(arg1) {
   return window['go']['main']['App']['OpenProject'](arg1);
 }
 
+export function Paste(arg1) {
+  return window['go']['main']['App']['Paste'](arg1);
+}
+
+export function Redo(arg1) {
+  return window['go']['main']['App']['Redo'](arg1);
+}
+
 export function RenameColumn(arg1) {
   return window['go']['main']['App']['RenameColumn'](arg1);
 }
@@ -60,6 +68,10 @@ export function SelectProject() {
 
 export function SetCellFormula(arg1) {
   return window['go']['main']['App']['SetCellFormula'](arg1);
+}
+
+export function Undo(arg1) {
+  return window['go']['main']['App']['Undo'](arg1);
 }
 
 export function UpdateCell(arg1) {

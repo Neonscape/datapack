@@ -234,6 +234,30 @@ _tool: {table: {namespace: "combat", name: "growth"}, formulas: {level_01: {atta
 	}
 }
 
+func TestPasteCellsIsAtomicAndSupportsFormulas(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {name: string, price: int}
+rows: {sword: {name: "Sword", price: 10}, axe: {name: "Axe", price: 20}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	table, err := PasteCells(path, []string{"sword", "axe"}, []string{"name", "price"}, [][]string{{`"Steel Sword"`, "=20 + 5"}, {`"Steel Axe"`, "30"}})
+	if err != nil || table.Rows[0].Values["name"].Display != "Steel Sword" || formulaExpressionFor(table, "sword", "price") != "20 + 5" || table.Rows[1].Values["price"].Expression != "30" {
+		t.Fatalf("PasteCells() = %#v, %v", table, err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PasteCells(path, []string{"sword"}, []string{"name", "price"}, [][]string{{`"Valid"`, "["}}); err == nil {
+		t.Fatal("PasteCells() accepted invalid CUE")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("source changed after invalid paste: %q, error = %v", after, err)
+	}
+}
+
 func TestRenameRowUpdatesFormulaReferencesWithoutChangingStrings(t *testing.T) {
 	path := writeSource(t, "growth.cue", `package growth
 #PrimaryKey: string

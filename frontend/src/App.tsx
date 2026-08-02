@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type GridCell, type GridColumn, type GridSelection, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddColumn, ClearCell, CreateRow, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, RenameColumn, RenameRow, SelectProject, SetCellFormula, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, CreateRow, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, Paste, Redo, RenameColumn, RenameRow, SelectProject, SetCellFormula, Undo, UpdateCell} from "../wailsjs/go/main/App";
 
 type TreeNode = {
     kind: "project" | "group" | "directory" | "table" | "tableData" | "localSchema" | "schemaFile" | "schemaDefinition" | "damaged";
@@ -98,7 +98,7 @@ const enumRenderer: CustomRenderer<EnumCell> = {
     </select>, disablePadding: true}),
 };
 
-function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onSaveInput}: { table: TableDocument; onAddColumn: () => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onSaveInput: (rowID: string, column: string, input: string) => Promise<void> }) {
+function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColumn, onRenameColumn, onPaste, onSaveInput}: { table: TableDocument; onAddColumn: () => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void> }) {
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
     const [draftError, setDraftError] = useState("");
     const [contextRow, setContextRow] = useState<number | null>(null);
@@ -223,6 +223,44 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         if (cell?.formula || (column !== 0 && ["enum", "boolean"].includes(table.columns[column - 1].schema.kind))) return;
         window.setTimeout(() => setInlineEditor({column, row, value: cell?.expression ?? "", bounds}), 0);
     };
+    const selectedRange = () => {
+        const current = gridSelection.current?.cell;
+        if (!current || current[0] === 0 || current[1] >= table.rows.length) return null;
+        const range = gridSelection.current?.range;
+        const x = range?.x ?? current[0];
+        const y = range?.y ?? current[1];
+        const width = range?.width ?? 1;
+        const height = range?.height ?? 1;
+        if (x === 0 || x + width > table.columns.length + 1 || y + height > table.rows.length) return null;
+        return {x, y, width, height};
+    };
+    useEffect(() => {
+        const clipboard = (event: ClipboardEvent) => {
+            if ((event.target as Element | null)?.closest("textarea, input, select")) return;
+            const range = selectedRange();
+            if (!range) return;
+            if (event.type === "copy") {
+                const text = Array.from({length: range.height}, (_, row) => Array.from({length: range.width}, (_, column) => {
+                    const cell = table.rows[range.y + row].values[table.columns[range.x + column - 1].name];
+                    return cell?.formula ? `=${cell.expression}` : cell?.expression ?? "";
+                }).join("\t")).join("\n");
+                event.clipboardData?.setData("text/plain", text);
+                event.preventDefault();
+            }
+            if (event.type === "paste") {
+                const text = event.clipboardData?.getData("text/plain");
+                if (text === undefined) return;
+                event.preventDefault();
+                void onPaste(range.y, range.x, text);
+            }
+        };
+        document.addEventListener("copy", clipboard);
+        document.addEventListener("paste", clipboard);
+        return () => {
+            document.removeEventListener("copy", clipboard);
+            document.removeEventListener("paste", clipboard);
+        };
+    }, [gridSelection, table, onPaste]);
     return <div className="table-document" data-inline-editor={inlineEditor ? "open" : "closed"}>
         <div className="table-document-header">
             <div>
@@ -311,6 +349,49 @@ function App() {
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
     const [dialog, setDialog] = useState<StructureDialog | null>(null);
+
+    async function pasteCells(row: number, column: number, text: string) {
+        if (!table) return;
+        const values = text.replace(/\r/g, "").split("\n").filter((line, index, lines) => line !== "" || index < lines.length - 1).map((line) => line.split("\t"));
+        if (values.length === 0 || values.some((line) => line.length !== values[0].length)) {
+            setError("Clipboard rows must have the same number of columns");
+            return;
+        }
+        const rowIDs = table.rows.slice(row, row + values.length).map((entry) => entry.id);
+        const columns = table.columns.slice(column - 1, column - 1 + values[0].length).map((entry) => entry.name);
+        if (rowIDs.length !== values.length || columns.length !== values[0].length) {
+            setError("Paste range exceeds the existing table");
+            return;
+        }
+        setError("");
+        try {
+            const result = await Paste({path: table.path, rowIDs, columns, values});
+            setTable(result.table as TableDocument);
+            setWorkspace(result.workspace as WorkspaceView);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
+    useEffect(() => {
+        const historyShortcut = (event: KeyboardEvent) => {
+            if (!table || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select")) return;
+            const redo = event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z");
+            if (event.key.toLowerCase() !== "z" && !redo) return;
+            event.preventDefault();
+            void (async () => {
+                try {
+                    const result = redo ? await Redo(table.path) : await Undo(table.path);
+                    setTable(result.table as TableDocument);
+                    setWorkspace(result.workspace as WorkspaceView);
+                } catch (reason) {
+                    setError(reason instanceof Error ? reason.message : String(reason));
+                }
+            })();
+        };
+        document.addEventListener("keydown", historyShortcut);
+        return () => document.removeEventListener("keydown", historyShortcut);
+    }, [table]);
 
     async function selectProject() {
         setError("");
@@ -447,7 +528,7 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className={`editor-placeholder ${table ? "editor-table" : ""}`}>
-                        {table ? <TableGrid table={table} onAddColumn={() => setDialog({mode: "add", name: "", second: "", schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onSaveInput={saveCellInput}/> : selectedSchema ? <>
+                        {table ? <TableGrid table={table} onAddColumn={() => setDialog({mode: "add", name: "", second: "", schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>

@@ -43,6 +43,69 @@ func SetCellValue(path, rowID, column, expression string) (Table, error) {
 	return validateAndReplace(path, candidate)
 }
 
+// PasteCells applies a rectangular set of fixed values and formulas as one
+// source transaction. A single malformed input leaves the source unchanged.
+func PasteCells(path string, rowIDs, columns []string, values [][]string) (Table, error) {
+	if len(rowIDs) == 0 || len(columns) == 0 || len(values) != len(rowIDs) {
+		return Table{}, fmt.Errorf("paste range dimensions do not match")
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return Table{}, fmt.Errorf("read table source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return Table{}, fmt.Errorf("parse table source: %w", err)
+	}
+	for rowIndex, rowID := range rowIDs {
+		if len(values[rowIndex]) != len(columns) {
+			return Table{}, fmt.Errorf("paste row %d has %d values, want %d", rowIndex+1, len(values[rowIndex]), len(columns))
+		}
+		for columnIndex, column := range columns {
+			input := strings.TrimSpace(values[rowIndex][columnIndex])
+			if input == "" {
+				continue
+			}
+			if strings.HasPrefix(input, "=") {
+				expression := strings.TrimSpace(strings.TrimPrefix(input, "="))
+				if _, err := exprparser.Parse(expression); err != nil {
+					return Table{}, fmt.Errorf("paste row %q column %q formula: %w", rowID, column, err)
+				}
+				if err := setFormula(file, rowID, column, expression); err != nil {
+					return Table{}, err
+				}
+				continue
+			}
+			value, err := parser.ParseExpr(path, input)
+			if err != nil {
+				return Table{}, fmt.Errorf("paste row %q column %q: %w", rowID, column, err)
+			}
+			if err := replaceCell(file, rowID, column, value); err != nil {
+				return Table{}, err
+			}
+			removeFormula(file, rowID, column)
+		}
+	}
+	// Apply clears last so a partially cleared row remains available for later
+	// values in the same paste transaction.
+	for rowIndex, rowID := range rowIDs {
+		var emptyColumns []string
+		for columnIndex, column := range columns {
+			if strings.TrimSpace(values[rowIndex][columnIndex]) == "" {
+				emptyColumns = append(emptyColumns, column)
+			}
+		}
+		if err := clearCells(file, rowID, emptyColumns); err != nil {
+			return Table{}, err
+		}
+	}
+	candidate, err := format.Node(file)
+	if err != nil {
+		return Table{}, fmt.Errorf("format pasted table: %w", err)
+	}
+	return validateAndReplace(path, candidate)
+}
+
 // SetCellFormula stores an expr-lang/expr expression and removes the fixed
 // source value. Formula evaluation supplies the value during preview and export.
 func SetCellFormula(path, rowID, column, expression string) (Table, error) {
@@ -134,18 +197,41 @@ func ClearCell(path, rowID, column string) (Table, error) {
 	if row == nil {
 		return Table{}, fmt.Errorf("row %q does not exist", rowID)
 	}
-	removeNamedField(row.Value, column)
-	removeFormula(file, rowID, column)
-	if len(orderedStructFields(row.Value)) == 0 && !hasFormulasForRow(file, rowID) {
-		if err := removeRow(file, rowID); err != nil {
-			return Table{}, err
-		}
+	if err := clearCell(file, rowID, column); err != nil {
+		return Table{}, err
 	}
 	candidate, err := format.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
 	return validateAndReplace(path, candidate)
+}
+
+func clearCell(file *ast.File, rowID, column string) error {
+	return clearCells(file, rowID, []string{column})
+}
+
+func clearCells(file *ast.File, rowID string, columns []string) error {
+	fields := fieldsOfFile(file)
+	rows := requiredField(fields, "rows")
+	row := fieldsOfStruct(rows.Value)[rowID]
+	if row == nil {
+		return fmt.Errorf("row %q does not exist", rowID)
+	}
+	for _, column := range columns {
+		removeNamedField(row.Value, column)
+		removeFormula(file, rowID, column)
+	}
+	if len(orderedStructFields(row.Value)) == 0 && !hasFormulasForRow(file, rowID) {
+		return removeRow(file, rowID)
+	}
+	return nil
+}
+
+// RestoreSource atomically replaces a table with a previously recorded valid
+// source snapshot. Workspace uses it for undo and redo.
+func RestoreSource(path string, source []byte) (Table, error) {
+	return validateAndReplace(path, source)
 }
 
 // AddRow inserts a new table row using a complete CUE struct expression.

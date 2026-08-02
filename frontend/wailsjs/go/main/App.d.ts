@@ -25,6 +25,10 @@ export function MoveColumn(arg1:workspace.ColumnMove):Promise<workspace.ColumnMo
 
 export function OpenProject(arg1:string):Promise<workspace.View>;
 
+export function Paste(arg1:workspace.Paste):Promise<workspace.HistoryResult>;
+
+export function Redo(arg1:string):Promise<workspace.HistoryResult>;
+
 export function RenameColumn(arg1:workspace.ColumnRename):Promise<workspace.ColumnRenameResult>;
 
 export function RenameRow(arg1:workspace.RowRename):Promise<workspace.RowRenameResult>;
@@ -32,5 +36,7 @@ export function RenameRow(arg1:workspace.RowRename):Promise<workspace.RowRenameR
 export function SelectProject():Promise<workspace.View>;
 
 export function SetCellFormula(arg1:workspace.FormulaSet):Promise<workspace.FormulaSetResult>;
+
+export function Undo(arg1:string):Promise<workspace.HistoryResult>;
 
 export function UpdateCell(arg1:workspace.CellUpdate):Promise<workspace.CellUpdateResult>;

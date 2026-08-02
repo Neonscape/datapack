@@ -34,6 +34,9 @@ test.beforeEach(async ({page}) => {
             MoveColumn: () => Promise.resolve({table, workspace}),
             RenameColumn: () => Promise.resolve({table, workspace}),
             RenameRow: () => Promise.resolve({table, workspace}),
+            Paste: () => Promise.resolve({table, workspace, canUndo: true, canRedo: false}),
+            Undo: () => Promise.resolve({table, workspace, canUndo: false, canRedo: true}),
+            Redo: () => Promise.resolve({table, workspace, canUndo: true, canRedo: false}),
             Export: () => Promise.resolve({files: []}),
         };
         // Wails generated bindings resolve methods through this object.

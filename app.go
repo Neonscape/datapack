@@ -82,6 +82,18 @@ func (a *App) ClearCell(update workspace.CellUpdate) (workspace.CellUpdateResult
 	return a.workspace.ClearCell(update)
 }
 
+func (a *App) Paste(paste workspace.Paste) (workspace.HistoryResult, error) {
+	return a.workspace.Paste(paste)
+}
+
+func (a *App) Undo(path string) (workspace.HistoryResult, error) {
+	return a.workspace.Undo(path)
+}
+
+func (a *App) Redo(path string) (workspace.HistoryResult, error) {
+	return a.workspace.Redo(path)
+}
+
 // AddRow inserts a new table row using a complete CUE struct expression.
 func (a *App) AddRow(add workspace.RowAdd) (workspace.RowAddResult, error) {
 	return a.workspace.AddRow(add)

@@ -28,6 +28,12 @@ type View struct {
 type Service struct {
 	configRoot string
 	current    *View
+	history    map[string]*history
+}
+
+type history struct {
+	undo [][]byte
+	redo [][]byte
 }
 
 type CellUpdate struct {
@@ -40,6 +46,20 @@ type CellUpdate struct {
 type CellUpdateResult struct {
 	Table     document.Table `json:"table"`
 	Workspace View           `json:"workspace"`
+}
+
+type Paste struct {
+	Path    string     `json:"path"`
+	RowIDs  []string   `json:"rowIDs"`
+	Columns []string   `json:"columns"`
+	Values  [][]string `json:"values"`
+}
+
+type HistoryResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+	CanUndo   bool           `json:"canUndo"`
+	CanRedo   bool           `json:"canRedo"`
 }
 
 type FormulaSet struct {
@@ -147,7 +167,7 @@ type ColumnMoveResult struct {
 }
 
 func NewService(configRoot string) *Service {
-	return &Service{configRoot: configRoot}
+	return &Service{configRoot: configRoot, history: map[string]*history{}}
 }
 
 func NewUserService() (*Service, error) {
@@ -248,15 +268,37 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 	if !containsTable(s.current.Tree.Root, update.Path) {
 		return CellUpdateResult{}, fmt.Errorf("table %q is not part of the open project", update.Path)
 	}
-	table, err := document.SetCellValue(update.Path, update.RowID, update.Column, update.Expression)
-	if err != nil {
-		return CellUpdateResult{}, err
-	}
-	view, err := s.refreshCurrentView()
+	table, view, err := s.edit(update.Path, func() (document.Table, error) {
+		return document.SetCellValue(update.Path, update.RowID, update.Column, update.Expression)
+	})
 	if err != nil {
 		return CellUpdateResult{}, err
 	}
 	return CellUpdateResult{Table: withDiagnostics(table, view), Workspace: view}, nil
+}
+
+func (s *Service) Paste(paste Paste) (HistoryResult, error) {
+	if s.current == nil {
+		return HistoryResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, paste.Path) {
+		return HistoryResult{}, fmt.Errorf("table %q is not part of the open project", paste.Path)
+	}
+	table, view, err := s.edit(paste.Path, func() (document.Table, error) {
+		return document.PasteCells(paste.Path, paste.RowIDs, paste.Columns, paste.Values)
+	})
+	if err != nil {
+		return HistoryResult{}, err
+	}
+	return s.historyResult(paste.Path, table, view), nil
+}
+
+func (s *Service) Undo(path string) (HistoryResult, error) {
+	return s.restoreHistory(path, true)
+}
+
+func (s *Service) Redo(path string) (HistoryResult, error) {
+	return s.restoreHistory(path, false)
 }
 
 func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
@@ -266,15 +308,80 @@ func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
 	if !containsTable(s.current.Tree.Root, set.Path) {
 		return FormulaSetResult{}, fmt.Errorf("table %q is not part of the open project", set.Path)
 	}
-	table, err := document.SetCellFormula(set.Path, set.RowID, set.Column, set.Expression)
-	if err != nil {
-		return FormulaSetResult{}, err
-	}
-	view, err := s.refreshCurrentView()
+	table, view, err := s.edit(set.Path, func() (document.Table, error) {
+		return document.SetCellFormula(set.Path, set.RowID, set.Column, set.Expression)
+	})
 	if err != nil {
 		return FormulaSetResult{}, err
 	}
 	return FormulaSetResult{Table: withDiagnostics(table, view), Workspace: view}, nil
+}
+
+func (s *Service) edit(path string, operation func() (document.Table, error)) (document.Table, View, error) {
+	before, err := os.ReadFile(path)
+	if err != nil {
+		return document.Table{}, View{}, fmt.Errorf("record edit source: %w", err)
+	}
+	table, err := operation()
+	if err != nil {
+		return document.Table{}, View{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return document.Table{}, View{}, err
+	}
+	record := s.history[path]
+	if record == nil {
+		record = &history{}
+		s.history[path] = record
+	}
+	record.undo = append(record.undo, before)
+	record.redo = nil
+	return table, view, nil
+}
+
+func (s *Service) restoreHistory(path string, undo bool) (HistoryResult, error) {
+	if s.current == nil {
+		return HistoryResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, path) {
+		return HistoryResult{}, fmt.Errorf("table %q is not part of the open project", path)
+	}
+	record := s.history[path]
+	if record == nil || (undo && len(record.undo) == 0) || (!undo && len(record.redo) == 0) {
+		return HistoryResult{}, fmt.Errorf("nothing to %s", map[bool]string{true: "undo", false: "redo"}[undo])
+	}
+	current, err := os.ReadFile(path)
+	if err != nil {
+		return HistoryResult{}, fmt.Errorf("read history source: %w", err)
+	}
+	var target []byte
+	if undo {
+		target = record.undo[len(record.undo)-1]
+	} else {
+		target = record.redo[len(record.redo)-1]
+	}
+	table, err := document.RestoreSource(path, target)
+	if err != nil {
+		return HistoryResult{}, err
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return HistoryResult{}, err
+	}
+	if undo {
+		record.undo = record.undo[:len(record.undo)-1]
+		record.redo = append(record.redo, current)
+	} else {
+		record.redo = record.redo[:len(record.redo)-1]
+		record.undo = append(record.undo, current)
+	}
+	return s.historyResult(path, table, view), nil
+}
+
+func (s *Service) historyResult(path string, table document.Table, view View) HistoryResult {
+	record := s.history[path]
+	return HistoryResult{Table: withDiagnostics(table, view), Workspace: view, CanUndo: record != nil && len(record.undo) > 0, CanRedo: record != nil && len(record.redo) > 0}
 }
 
 func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
@@ -284,11 +391,9 @@ func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
 	if !containsTable(s.current.Tree.Root, create.Path) {
 		return RowCreateResult{}, fmt.Errorf("table %q is not part of the open project", create.Path)
 	}
-	table, err := document.CreateRow(create.Path, create.RowID, create.Values, create.Formulas)
-	if err != nil {
-		return RowCreateResult{}, err
-	}
-	view, err := s.refreshCurrentView()
+	table, view, err := s.edit(create.Path, func() (document.Table, error) {
+		return document.CreateRow(create.Path, create.RowID, create.Values, create.Formulas)
+	})
 	if err != nil {
 		return RowCreateResult{}, err
 	}
@@ -302,11 +407,9 @@ func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
 	if !containsTable(s.current.Tree.Root, update.Path) {
 		return CellUpdateResult{}, fmt.Errorf("table %q is not part of the open project", update.Path)
 	}
-	table, err := document.ClearCell(update.Path, update.RowID, update.Column)
-	if err != nil {
-		return CellUpdateResult{}, err
-	}
-	view, err := s.refreshCurrentView()
+	table, view, err := s.edit(update.Path, func() (document.Table, error) {
+		return document.ClearCell(update.Path, update.RowID, update.Column)
+	})
 	if err != nil {
 		return CellUpdateResult{}, err
 	}
@@ -320,11 +423,9 @@ func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
 	if !containsTable(s.current.Tree.Root, add.Path) {
 		return RowAddResult{}, fmt.Errorf("table %q is not part of the open project", add.Path)
 	}
-	table, err := document.AddRow(add.Path, add.RowID, add.Expression)
-	if err != nil {
-		return RowAddResult{}, err
-	}
-	view, err := s.refreshCurrentView()
+	table, view, err := s.edit(add.Path, func() (document.Table, error) {
+		return document.AddRow(add.Path, add.RowID, add.Expression)
+	})
 	if err != nil {
 		return RowAddResult{}, err
 	}
@@ -345,11 +446,9 @@ func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
 	if usage := foreignKeyUsage(s.current.Tree, table, delete.RowID); usage != nil {
 		return RowDeleteResult{}, fmt.Errorf("row %q is referenced by %s.%s.%s", delete.RowID, usage.Table, usage.RowID, usage.Column)
 	}
-	table, err = document.DeleteRow(delete.Path, delete.RowID)
-	if err != nil {
-		return RowDeleteResult{}, err
-	}
-	view, err := s.refreshCurrentView()
+	table, view, err := s.edit(delete.Path, func() (document.Table, error) {
+		return document.DeleteRow(delete.Path, delete.RowID)
+	})
 	if err != nil {
 		return RowDeleteResult{}, err
 	}
@@ -421,11 +520,9 @@ func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 	if !containsTable(s.current.Tree.Root, add.Path) {
 		return ColumnAddResult{}, fmt.Errorf("table %q is not part of the open project", add.Path)
 	}
-	table, err := document.AddColumn(add.Path, add.Name, add.SchemaExpression, add.InitialExpression)
-	if err != nil {
-		return ColumnAddResult{}, err
-	}
-	view, err := s.refreshCurrentView()
+	table, view, err := s.edit(add.Path, func() (document.Table, error) {
+		return document.AddColumn(add.Path, add.Name, add.SchemaExpression, add.InitialExpression)
+	})
 	if err != nil {
 		return ColumnAddResult{}, err
 	}
@@ -439,11 +536,9 @@ func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) 
 	if !containsTable(s.current.Tree.Root, delete.Path) {
 		return ColumnDeleteResult{}, fmt.Errorf("table %q is not part of the open project", delete.Path)
 	}
-	table, err := document.DeleteColumn(delete.Path, delete.Name)
-	if err != nil {
-		return ColumnDeleteResult{}, err
-	}
-	view, err := s.refreshCurrentView()
+	table, view, err := s.edit(delete.Path, func() (document.Table, error) {
+		return document.DeleteColumn(delete.Path, delete.Name)
+	})
 	if err != nil {
 		return ColumnDeleteResult{}, err
 	}
@@ -457,11 +552,9 @@ func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) 
 	if !containsTable(s.current.Tree.Root, rename.Path) {
 		return ColumnRenameResult{}, fmt.Errorf("table %q is not part of the open project", rename.Path)
 	}
-	table, err := document.RenameColumn(rename.Path, rename.OldName, rename.NewName)
-	if err != nil {
-		return ColumnRenameResult{}, err
-	}
-	view, err := s.refreshCurrentView()
+	table, view, err := s.edit(rename.Path, func() (document.Table, error) {
+		return document.RenameColumn(rename.Path, rename.OldName, rename.NewName)
+	})
 	if err != nil {
 		return ColumnRenameResult{}, err
 	}
@@ -475,11 +568,9 @@ func (s *Service) MoveColumn(move ColumnMove) (ColumnMoveResult, error) {
 	if !containsTable(s.current.Tree.Root, move.Path) {
 		return ColumnMoveResult{}, fmt.Errorf("table %q is not part of the open project", move.Path)
 	}
-	table, err := document.MoveColumn(move.Path, move.Name, move.Position)
-	if err != nil {
-		return ColumnMoveResult{}, err
-	}
-	view, err := s.refreshCurrentView()
+	table, view, err := s.edit(move.Path, func() (document.Table, error) {
+		return document.MoveColumn(move.Path, move.Name, move.Position)
+	})
 	if err != nil {
 		return ColumnMoveResult{}, err
 	}

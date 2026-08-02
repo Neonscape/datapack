@@ -1085,6 +1085,55 @@ export namespace workspace {
 		    return a;
 		}
 	}
+	export class HistoryResult {
+	    table: document.Table;
+	    workspace: View;
+	    canUndo: boolean;
+	    canRedo: boolean;
+	    static createFrom(source: any = {}) {
+	        return new HistoryResult(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = this.convertValues(source["table"], document.Table);
+	        this.workspace = this.convertValues(source["workspace"], View);
+	        this.canUndo = source["canUndo"];
+	        this.canRedo = source["canRedo"];
+	    }
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Paste {
+	    path: string;
+	    rowIDs: string[];
+	    columns: string[];
+	    values: string[][];
+	    static createFrom(source: any = {}) {
+	        return new Paste(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.rowIDs = source["rowIDs"];
+	        this.columns = source["columns"];
+	        this.values = source["values"];
+	    }
+	}
 	
 	
 	export class RowAdd {
@@ -1281,4 +1330,3 @@ export namespace workspace {
 	}
 
 }
-

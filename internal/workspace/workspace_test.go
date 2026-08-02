@@ -461,6 +461,73 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestPasteUndoAndRedo(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {name: string, price: int}
+rows: {sword: {name: "Sword", price: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	pasted, err := service.Paste(Paste{Path: path, RowIDs: []string{"sword"}, Columns: []string{"name", "price"}, Values: [][]string{{`"Steel Sword"`, "=20 + 5"}}})
+	if err != nil || !pasted.CanUndo || pasted.CanRedo || pasted.Table.Rows[0].Values["name"].Expression != `"Steel Sword"` {
+		t.Fatalf("Paste() = %#v, %v", pasted, err)
+	}
+	undone, err := service.Undo(path)
+	if err != nil || undone.CanUndo || !undone.CanRedo || undone.Table.Rows[0].Values["name"].Expression != `"Sword"` {
+		t.Fatalf("Undo() = %#v, %v", undone, err)
+	}
+	redone, err := service.Redo(path)
+	if err != nil || !redone.CanUndo || redone.CanRedo || redone.Table.Rows[0].Values["name"].Expression != `"Steel Sword"` {
+		t.Fatalf("Redo() = %#v, %v", redone, err)
+	}
+}
+
+func TestFormulaAndClearCellAreUndoable(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {price: int}
+rows: {sword: {price: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetCellFormula(FormulaSet{Path: path, RowID: "sword", Column: "price", Expression: "20 + 5"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ClearCell(CellUpdate{Path: path, RowID: "sword", Column: "price"}); err != nil {
+		t.Fatal(err)
+	}
+	undone, err := service.Undo(path)
+	if err != nil || formulaExpressionForWorkspace(undone.Table, "sword", "price") != "20 + 5" {
+		t.Fatalf("Undo() = %#v, %v", undone, err)
+	}
+}
+
+func formulaExpressionForWorkspace(table document.Table, rowID, column string) string {
+	for _, entry := range table.Formulas {
+		if entry.RowID == rowID && entry.Column == column {
+			return entry.Expression
+		}
+	}
+	return ""
+}
+
 func TestRenameRowUpdatesForeignKeyReferences(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
