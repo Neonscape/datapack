@@ -87,7 +87,16 @@ test("supports pointer editing, row menus, and selected-column actions", async (
 
 test("edits formula cells with the application inline editor", async ({page}) => {
     const pageErrors: Error[] = [];
+    const calls: string[] = [];
     page.on("pageerror", (error) => pageErrors.push(error));
+    await page.evaluate(() => {
+        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const setFormula = api.SetCellFormula;
+        const updateCell = api.UpdateCell;
+        api.SetCellFormula = (...args) => { (window as Window & {formulaCalls: string[]}).formulaCalls.push("formula"); return setFormula(...args); };
+        api.UpdateCell = (...args) => { (window as Window & {formulaCalls: string[]}).formulaCalls.push("value"); return updateCell(...args); };
+        (window as Window & {formulaCalls: string[]}).formulaCalls = [];
+    });
     const canvas = page.locator("canvas:visible").first();
     const box = await canvas.boundingBox();
     expect(box).not.toBeNull();
@@ -96,7 +105,10 @@ test("edits formula cells with the application inline editor", async ({page}) =>
     await page.mouse.dblclick(box.x + 565, box.y + 50);
 
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "open");
-    await expect(page.locator("textarea")).toHaveValue("20 + 5");
+    await expect(page.locator("textarea")).toHaveValue("=20 + 5");
+    await page.mouse.click(box.x + 1000, box.y + 200);
+    await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
+    expect(await page.evaluate(() => (window as Window & {formulaCalls: string[]}).formulaCalls)).toEqual(["formula"]);
     expect(pageErrors).toEqual([]);
 });
 

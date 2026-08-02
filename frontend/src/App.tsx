@@ -229,10 +229,10 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         const error = isDraft(row) ? draftError : errorFor(source.id, table.columns[column - 1]?.name ?? "");
         const columnDefinition = table.columns[column - 1];
         if (column !== 0 && ["array", "struct"].includes(columnDefinition.schema.kind) && !cell?.formula) {
-            return {kind: GridCellKind.Text, data: cell?.expression ?? "[]", displayData: cell?.display ?? "[]", allowOverlay: true, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined};
+            return {kind: GridCellKind.Text, data: cell?.expression ?? "[]", displayData: cell?.display ?? "[]", allowOverlay: false, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined};
         }
         if (column !== 0 && columnDefinition.foreignKeyTable && !cell?.formula) {
-            return {kind: GridCellKind.Text, data: cell?.expression ?? "", displayData: cell?.display ?? "", allowOverlay: true, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined};
+            return {kind: GridCellKind.Text, data: cell?.expression ?? "", displayData: cell?.display ?? "", allowOverlay: false, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined};
         }
         if (column !== 0 && columnDefinition.schema.kind === "enum" && !cell?.formula) {
             const options = columnDefinition.schema.enumValues?.map((entry) => entry.expression.replace(/^"|"$/g, "")) ?? [];
@@ -245,7 +245,7 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
             kind: GridCellKind.Text,
             data: cell?.formula ? `=${cell.expression}` : cell?.expression ?? "",
             displayData: cell?.formula ? `fx ${cell.display}` : cell?.display ?? "",
-            allowOverlay: true,
+            allowOverlay: false,
             themeOverride: error ? {
                 bgCell: "#fff1f1",
                 textDark: "#8a3030",
@@ -320,7 +320,7 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
             return;
         }
         if (column !== 0 && ["enum", "boolean"].includes(table.columns[column - 1].schema.kind)) return;
-        window.setTimeout(() => setInlineEditor({column, row, value: cell?.expression ?? "", bounds}), 0);
+        window.setTimeout(() => setInlineEditor({column, row, value: cell?.formula ? `=${cell.expression}` : cell?.expression ?? "", bounds}), 0);
     };
     const finishForeignKeyEdit = (value: string) => {
         if (!foreignKeyEditor) return;
@@ -430,12 +430,6 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
                     const bounds = {x: event.bounds.x - (gridBounds?.x ?? 0), y: event.bounds.y - (gridBounds?.y ?? 0), width: event.bounds.width, height: event.bounds.height};
                     lastCellBounds.current = {cell: [column, row], bounds};
                     if (column >= 0) openInlineAt(column, row, bounds);
-                }}
-                onCellActivated={([column, row]) => {
-                    const last = lastCellBounds.current;
-                    if (last?.cell[0] === column && last.cell[1] === row && table.columns[column - 1]?.foreignKeyTable) {
-                        openInlineAt(column, row, last.bounds);
-                    }
                 }}
                 onHeaderClicked={(column) => {
                     setSelectedColumn(column === 0 ? null : column);
