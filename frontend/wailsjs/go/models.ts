@@ -55,6 +55,9 @@ export namespace document {
 	    name: string;
 	    optional: boolean;
 	    schema: schemamodel.Node;
+	    schemaExpression: string;
+	    foreignKeyTable?: string;
+	    foreignKeyOptions?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Column(source);
@@ -65,6 +68,9 @@ export namespace document {
 	        this.name = source["name"];
 	        this.optional = source["optional"];
 	        this.schema = this.convertValues(source["schema"], schemamodel.Node);
+	        this.schemaExpression = source["schemaExpression"];
+	        this.foreignKeyTable = source["foreignKeyTable"];
+	        this.foreignKeyOptions = source["foreignKeyOptions"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -834,6 +840,7 @@ export namespace workspace {
 	    name: string;
 	    schemaExpression: string;
 	    initialExpression: string;
+	    position?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new ColumnAdd(source);
@@ -845,6 +852,7 @@ export namespace workspace {
 	        this.name = source["name"];
 	        this.schemaExpression = source["schemaExpression"];
 	        this.initialExpression = source["initialExpression"];
+	        this.position = source["position"];
 	    }
 	}
 	export class ColumnAddResult {
@@ -1003,6 +1011,49 @@ export namespace workspace {
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ColumnSchemaSet {
+	    path: string;
+	    name: string;
+	    schemaExpression: string;
+	    static createFrom(source: any = {}) {
+	        return new ColumnSchemaSet(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	        this.schemaExpression = source["schemaExpression"];
+	    }
+	}
+	export class ColumnSchemaSetResult {
+	    table: document.Table;
+	    workspace: View;
+	    static createFrom(source: any = {}) {
+	        return new ColumnSchemaSetResult(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = this.convertValues(source["table"], document.Table);
+	        this.workspace = this.convertValues(source["workspace"], View);
+	    }
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1310,6 +1361,47 @@ export namespace workspace {
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TableCreate {
+	    namespace: string;
+	    name: string;
+	    static createFrom(source: any = {}) {
+	        return new TableCreate(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	    }
+	}
+	export class TableCreateResult {
+	    table: document.Table;
+	    workspace: View;
+	    static createFrom(source: any = {}) {
+	        return new TableCreateResult(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = this.convertValues(source["table"], document.Table);
+	        this.workspace = this.convertValues(source["workspace"], View);
+	    }
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
