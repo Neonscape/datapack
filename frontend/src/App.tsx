@@ -220,7 +220,7 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onMoveColum
         if (column < 0 || row < 0 || row >= table.rows.length + 1) return;
         const source = rowFor(row);
         const cell = column === 0 ? {expression: source.id, formula: false} : source.values[table.columns[column - 1].name];
-        if (cell?.formula || (column !== 0 && ["enum", "boolean"].includes(table.columns[column - 1].schema.kind))) return;
+        if (column !== 0 && ["enum", "boolean"].includes(table.columns[column - 1].schema.kind)) return;
         window.setTimeout(() => setInlineEditor({column, row, value: cell?.expression ?? "", bounds}), 0);
     };
     const selectedRange = () => {

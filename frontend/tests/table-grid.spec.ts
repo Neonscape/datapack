@@ -8,7 +8,7 @@ const table = {
         {name: "name", schema: {kind: "string"}},
         {name: "rarity", schema: {kind: "enum", enumValues: [{expression: `"N"`}, {expression: `"R"`}]}},
     ],
-    rows: [{id: "sword", values: {name: {expression: `"Sword"`, display: "Sword"}, rarity: {expression: `"N"`, display: "N"}}}],
+    rows: [{id: "sword", values: {name: {expression: "20 + 5", display: "25", formula: true}, rarity: {expression: `"N"`, display: "N"}}}],
 };
 
 const workspace = {
@@ -77,4 +77,19 @@ test("supports pointer editing, row menus, and selected-column actions", async (
     await expect(page.getByRole("button", {name: "Delete row"})).toBeVisible();
     await page.mouse.click(box.x + 225, box.y + 50, {button: "right"});
     await expect(page.getByRole("button", {name: "Delete row"})).toBeHidden();
+});
+
+test("edits formula cells with the application inline editor", async ({page}) => {
+    const pageErrors: Error[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error));
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    await page.mouse.dblclick(box.x + 225, box.y + 50);
+
+    await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "open");
+    await expect(page.locator("textarea")).toHaveValue("20 + 5");
+    expect(pageErrors).toEqual([]);
 });
