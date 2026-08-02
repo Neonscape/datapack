@@ -70,13 +70,11 @@ test("supports pointer editing, row menus, and selected-column actions", async (
     }));
 
     // Header then the first data row. The marker is the left-most grid column.
-    await page.mouse.click(box.x + 225, box.y + 15);
-    await expect(page.getByRole("button", {name: "Rename column"})).toBeEnabled();
-    await expect(page.getByRole("button", {name: "Move column"})).toBeEnabled();
-    await expect(page.getByRole("button", {name: "Delete column"})).toBeEnabled();
+    await page.mouse.click(box.x + 225, box.y + 15, {button: "right"});
+    await expect(page.getByRole("button", {name: "Add to left"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "Edit schema"})).toBeVisible();
 
     await page.mouse.click(box.x + 565, box.y + 50);
-    await expect(page.getByRole("button", {name: "Rename column"})).toBeDisabled();
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "open");
     await expect(page.locator("textarea"), JSON.stringify(canvases)).toBeVisible();
 
@@ -174,7 +172,7 @@ test("edits the selected column Schema", async ({page}) => {
     const box = await canvas.boundingBox();
     expect(box).not.toBeNull();
     if (!box) return;
-    await page.mouse.click(box.x + 565, box.y + 15);
+    await page.mouse.click(box.x + 565, box.y + 15, {button: "right"});
     await page.getByRole("button", {name: "Edit schema"}).click();
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeVisible();
     const schema = page.getByRole("textbox", {name: "CUE Schema"});

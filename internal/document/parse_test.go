@@ -393,15 +393,27 @@ func TestAddColumnInitializesAndValidatesEveryRow(t *testing.T) {
 rows: {sword: {name: "Sword"}, potion: {name: "Potion"}}
 _tool: {table: {namespace: "rpg", name: "item"}}`)
 
-	table, err := AddColumn(path, "price", "int & >=0", "10")
+	table, err := AddColumn(path, "price", "int & >=0", "10", -1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(table.Columns) != 2 || table.Rows[0].Values["price"].Expression != "10" || table.Rows[1].Values["price"].Expression != "10" {
 		t.Fatalf("table = %#v", table)
 	}
-	if _, err := AddColumn(path, "invalid", "int & >=0", "-1"); err == nil {
+	if _, err := AddColumn(path, "invalid", "int & >=0", "-1", -1); err == nil {
 		t.Fatal("AddColumn() accepted an invalid initial value")
+	}
+}
+
+func TestAddColumnInsertsAtRequestedPosition(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {name: string, rarity: string}
+rows: {sword: {name: "Sword", rarity: "N"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	table, err := AddColumn(path, "price", "int", "0", 1)
+	if err != nil || table.Columns[0].Name != "name" || table.Columns[1].Name != "price" || table.Columns[2].Name != "rarity" {
+		t.Fatalf("AddColumn() = %#v, %v", table.Columns, err)
 	}
 }
 

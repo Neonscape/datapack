@@ -288,7 +288,7 @@ func DeleteRow(path, rowID string) (Table, error) {
 // AddColumn adds a required column and initializes every existing row with one
 // CUE expression. New columns are intentionally not added to export or foreign
 // key metadata; those are explicit follow-up configuration changes.
-func AddColumn(path, name, schemaExpression, initialExpression string) (Table, error) {
+func AddColumn(path, name, schemaExpression, initialExpression string, position int) (Table, error) {
 	if !validIdentifier(name) {
 		return Table{}, fmt.Errorf("column %q must be a valid CUE identifier", name)
 	}
@@ -310,6 +310,11 @@ func AddColumn(path, name, schemaExpression, initialExpression string) (Table, e
 	}
 	if err := insertColumn(file, name, schema, value); err != nil {
 		return Table{}, err
+	}
+	if position >= 0 {
+		if err := moveColumn(file, name, position); err != nil {
+			return Table{}, err
+		}
 	}
 	candidate, err := format.Node(file)
 	if err != nil {

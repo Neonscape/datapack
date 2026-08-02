@@ -127,6 +127,7 @@ type ColumnAdd struct {
 	Name              string `json:"name"`
 	SchemaExpression  string `json:"schemaExpression"`
 	InitialExpression string `json:"initialExpression"`
+	Position          *int   `json:"position,omitempty"`
 }
 
 type ColumnAddResult struct {
@@ -531,8 +532,12 @@ func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 	if !containsTable(s.current.Tree.Root, add.Path) {
 		return ColumnAddResult{}, fmt.Errorf("table %q is not part of the open project", add.Path)
 	}
+	position := -1
+	if add.Position != nil {
+		position = *add.Position
+	}
 	table, view, err := s.edit(add.Path, func() (document.Table, error) {
-		return document.AddColumn(add.Path, add.Name, add.SchemaExpression, add.InitialExpression)
+		return document.AddColumn(add.Path, add.Name, add.SchemaExpression, add.InitialExpression, position)
 	})
 	if err != nil {
 		return ColumnAddResult{}, err

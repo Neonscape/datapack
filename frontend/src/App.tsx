@@ -164,11 +164,12 @@ const enumRenderer: CustomRenderer<EnumCell> = {
     </select>, disablePadding: true}),
 };
 
-function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput}: { table: TableDocument; onAddColumn: () => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void> }) {
+function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput}: { table: TableDocument; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void> }) {
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
     const [draftError, setDraftError] = useState("");
     const [contextRow, setContextRow] = useState<number | null>(null);
     const [menu, setMenu] = useState<{x: number; y: number} | null>(null);
+    const [columnMenu, setColumnMenu] = useState<{column: number; x: number; y: number} | null>(null);
     const [selectedColumn, setSelectedColumn] = useState<number | null>(null);
     const [gridSelection, setGridSelection] = useState<GridSelection>({columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: undefined});
     const [inlineEditor, setInlineEditor] = useState<InlineEditor | null>(null);
@@ -195,15 +196,17 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
     useEffect(() => {
         const closeContextMenu = (event: PointerEvent) => {
             const target = event.target as Element | null;
-            if (!target?.closest(".row-context-menu")) {
-                setMenu(null);
-                setContextRow(null);
+            if (!target?.closest(".row-context-menu, .column-context-menu")) {
+	                setMenu(null);
+	                setContextRow(null);
+	                setColumnMenu(null);
             }
         };
         const closeOnEscape = (event: KeyboardEvent) => {
             if (event.key === "Escape") {
                 setMenu(null);
                 setContextRow(null);
+	                setColumnMenu(null);
             }
         };
         document.addEventListener("pointerdown", closeContextMenu);
@@ -386,13 +389,6 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
                 <div className="table-eyebrow">CUE expression editing</div>
                 <h1>{table.namespace}.{table.name}</h1>
             </div>
-            <div className="table-actions">
-                <button className="table-action" onClick={onAddColumn}>Add column</button>
-                <button className="table-action" disabled={selectedColumnName === null} onClick={() => selectedColumn !== null && selectedColumnName && onEditColumnSchema(selectedColumnName, table.columns[selectedColumn - 1].schemaExpression)}>Edit schema</button>
-                <button className="table-action" disabled={selectedColumnName === null} onClick={() => selectedColumnName && onRenameColumn(selectedColumnName)}>Rename column</button>
-                <button className="table-action" disabled={selectedColumnName === null} onClick={() => selectedColumnName && onMoveColumn(selectedColumnName)}>Move column</button>
-                <button className="table-action table-action-danger" disabled={selectedColumnName === null} onClick={() => selectedColumnName && onDeleteColumn(selectedColumnName)}>Delete column</button>
-            </div>
             <span>{table.rows.length} rows + draft</span>
         </div>
         {draftError && <div className="table-validation-error"><code>draft</code><span>{draftError}</span></div>}
@@ -437,6 +433,14 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
                     setMenu(null);
                     setContextRow(null);
                 }}
+                onHeaderContextMenu={(column, event) => {
+                    if (column === 0) return;
+                    event.preventDefault();
+                    setSelectedColumn(column);
+                    setColumnMenu({column, x: event.localEventX, y: event.localEventY});
+                    setMenu(null);
+                    setContextRow(null);
+                }}
                 onCellContextMenu={([column, row], event) => {
                     if (row === table.rows.length || column !== -1) return;
                     event.preventDefault();
@@ -450,6 +454,15 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
                     setMenu(null);
                     setContextRow(null);
                 }}>Delete row</button>
+            </div>}
+            {columnMenu && <div className="column-context-menu" style={{left: columnMenu.x, top: columnMenu.y}}>
+                <button onClick={() => { onAddColumn(columnMenu.column - 1); setColumnMenu(null); }}>Add to left</button>
+                <button onClick={() => { onAddColumn(columnMenu.column); setColumnMenu(null); }}>Add to right</button>
+                <hr/>
+                <button onClick={() => { const column = table.columns[columnMenu.column - 1]; onEditColumnSchema(column.name, column.schemaExpression); setColumnMenu(null); }}>Edit schema</button>
+                <button onClick={() => { onRenameColumn(table.columns[columnMenu.column - 1].name); setColumnMenu(null); }}>Rename column</button>
+                <button onClick={() => { onMoveColumn(table.columns[columnMenu.column - 1].name); setColumnMenu(null); }}>Move column</button>
+                <button className="column-context-danger" onClick={() => { onDeleteColumn(table.columns[columnMenu.column - 1].name); setColumnMenu(null); }}>Delete column</button>
             </div>}
             {inlineEditor && <textarea
                 ref={editorRef}
@@ -631,7 +644,7 @@ function App() {
         try {
             let result;
             if (dialog.mode === "add") {
-                result = await AddColumn({path: table.path, name: dialog.name, schemaExpression: dialog.schema, initialExpression: dialog.initial});
+                result = await AddColumn({path: table.path, name: dialog.name, schemaExpression: dialog.schema, initialExpression: dialog.initial, position: Number(dialog.second)});
             } else if (dialog.mode === "schema") {
                 result = await SetColumnSchema({path: table.path, name: dialog.name, schemaExpression: dialog.schema});
             } else if (dialog.mode === "rename") {
@@ -697,7 +710,7 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
                     </aside>
                     <section className={`editor-placeholder ${table ? "editor-table" : ""}`}>
-                        {table ? <TableGrid table={table} onAddColumn={() => setDialog({mode: "add", name: "", second: "", schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression, initial: ""})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput}/> : selectedSchema ? <>
+                        {table ? <TableGrid table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression, initial: ""})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>
