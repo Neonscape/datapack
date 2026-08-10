@@ -45,7 +45,11 @@ type Summary struct {
 }
 
 func (i Index) Summary() Summary {
-	return Summary{Diagnostics: i.Diagnostics}
+	diagnostics := i.Diagnostics
+	if diagnostics == nil {
+		diagnostics = []Diagnostic{}
+	}
+	return Summary{Diagnostics: diagnostics}
 }
 
 func Build(tables []document.Table) Index {

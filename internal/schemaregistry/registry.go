@@ -141,7 +141,11 @@ func (r Registry) Index() Index {
 			Usages:    r.Usages[id],
 		})
 	}
-	return Index{Definitions: definitions, Diagnostics: r.Diagnostics}
+	diagnostics := r.Diagnostics
+	if diagnostics == nil {
+		diagnostics = []Diagnostic{}
+	}
+	return Index{Definitions: definitions, Diagnostics: diagnostics}
 }
 
 func (r *Registry) addDefinition(definition Definition) {
