@@ -83,7 +83,7 @@ function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; 
                 <span className={`node-icon node-${node.kind}`} aria-hidden="true"/>
                 <span>{node.name}</span>
             </button>
-            {node.children?.map((child) => <Tree key={`${child.kind}:${child.path ?? child.name}`} node={child} depth={depth + 1} onOpenTable={onOpenTable}/>) }
+            {node.children?.map((child) => <Tree key={`${child.kind}:${child.path ?? child.name}:${child.name}`} node={child} depth={depth + 1} onOpenTable={onOpenTable}/>) }
         </div>
     );
 }

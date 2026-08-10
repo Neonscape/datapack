@@ -432,6 +432,19 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestLoadEmptyTableUsesEmptyCollections(t *testing.T) {
+	path := writeSource(t, "empty.cue", `package empty
+#PrimaryKey: string
+#Row: {}
+rows: {}
+_tool: {table: {namespace: "game", name: "empty"}, foreignKeys: {}, formulas: {}}
+_editor: {columns: {}}`)
+	table, err := LoadTable(path)
+	if err != nil || table.Columns == nil || table.Rows == nil || table.ForeignKeys == nil || table.Formulas == nil || table.LocalSchema == nil {
+		t.Fatalf("LoadTable() = %#v, %v", table, err)
+	}
+}
+
 func TestDeleteColumnRemovesValuesAndMetadata(t *testing.T) {
 	path := writeSource(t, "item.cue", `package item
 #PrimaryKey: string
