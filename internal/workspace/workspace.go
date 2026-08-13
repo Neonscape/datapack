@@ -4,12 +4,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"cuelang.org/go/cue"
+	"cuelang.org/go/cue/ast"
 	"cuelang.org/go/cue/cuecontext"
+	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/load"
+	"cuelang.org/go/cue/parser"
+	"cuelang.org/go/cue/token"
 	"datapack/internal/document"
 	"datapack/internal/export/csv"
 	"datapack/internal/foreignkey"
@@ -374,6 +380,13 @@ func (s *Service) schemaDefinitionScope(path string) (string, error) {
 	return "", fmt.Errorf("path %q is not part of the open project", path)
 }
 
+func (s *Service) currentSchemaPackage(path string) string {
+	if schema, err := document.LoadPublicSchema(path); err == nil {
+		return schema.Package
+	}
+	return ""
+}
+
 func (s *Service) schemaDefinitionID(path, name string) (schemaregistry.ID, error) {
 	if containsSchemaFile(s.current.Tree.Root, path) {
 		schema, err := document.LoadPublicSchema(path)
@@ -402,6 +415,18 @@ func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaE
 	update := document.SchemaDefinitionUpdate{Kind: create.Kind, Type: create.Type, AppliesTo: create.AppliesTo, SchemaExpression: create.SchemaExpression}
 	scope, err := s.schemaDefinitionScope(create.Path)
 	if err != nil {
+		return SchemaEditResult{}, err
+	}
+	if scope == "local" {
+		normalized, err := s.normalizeSchemaReferences(create.Path, create.SchemaExpression)
+		if err != nil {
+			return SchemaEditResult{}, err
+		}
+		update.SchemaExpression = normalized
+		if err := s.ensureSchemaImports(create.Path, normalized, ""); err != nil {
+			return SchemaEditResult{}, err
+		}
+	} else if err := s.ensureSchemaImports(create.Path, create.SchemaExpression, s.currentSchemaPackage(create.Path)); err != nil {
 		return SchemaEditResult{}, err
 	}
 	var result SchemaEditResult
@@ -440,6 +465,18 @@ func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult
 	update := document.SchemaDefinitionUpdate{Kind: set.Kind, Type: set.Type, AppliesTo: set.AppliesTo, SchemaExpression: set.SchemaExpression}
 	scope, err := s.schemaDefinitionScope(set.Path)
 	if err != nil {
+		return SchemaEditResult{}, err
+	}
+	if scope == "local" {
+		normalized, err := s.normalizeSchemaReferences(set.Path, set.SchemaExpression)
+		if err != nil {
+			return SchemaEditResult{}, err
+		}
+		update.SchemaExpression = normalized
+		if err := s.ensureSchemaImports(set.Path, normalized, ""); err != nil {
+			return SchemaEditResult{}, err
+		}
+	} else if err := s.ensureSchemaImports(set.Path, set.SchemaExpression, s.currentSchemaPackage(set.Path)); err != nil {
 		return SchemaEditResult{}, err
 	}
 	var result SchemaEditResult
@@ -558,6 +595,253 @@ func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaE
 	result.Workspace = view
 	s.log(logging.Info, "schema definition deleted", map[string]any{"path": delete.Path, "name": delete.Name, "scope": scope})
 	return result, nil
+}
+
+// normalizeSchemaReferences resolves bare #Name references in a table Schema
+// expression into _local.#Name or package.#Name forms that CUE can resolve
+// from the table file scope. Local definitions win over public definitions.
+func (s *Service) normalizeSchemaReferences(path, expression string) (string, error) {
+	localNames := map[string]bool{}
+	if table, err := document.LoadTable(path); err == nil {
+		for _, definition := range table.LocalSchema {
+			localNames[definition.Name] = true
+		}
+	}
+	publicPackage := map[string]string{}
+	ambiguous := map[string]bool{}
+	for _, definition := range s.current.Schemas.Definitions {
+		if definition.Table != "" {
+			continue
+		}
+		pkg, name, ok := splitDefinitionID(string(definition.ID))
+		if !ok {
+			continue
+		}
+		if existing, exists := publicPackage[name]; exists && existing != pkg {
+			delete(publicPackage, name)
+			ambiguous[name] = true
+			continue
+		}
+		if !ambiguous[name] {
+			publicPackage[name] = pkg
+		}
+	}
+	parsed, err := parser.ParseExpr(path, expression)
+	if err != nil {
+		return "", fmt.Errorf("parse Schema expression: %w", err)
+	}
+	rewritten, err := rewriteSchemaBareReferences(parsed, func(name string) (ast.Expr, error) {
+		short := strings.TrimPrefix(name, "#")
+		if localNames[short] {
+			return &ast.SelectorExpr{X: ast.NewIdent("_local"), Sel: ast.NewIdent(name)}, nil
+		}
+		if pkg, exists := publicPackage[short]; exists {
+			return &ast.SelectorExpr{X: ast.NewIdent(pkg), Sel: ast.NewIdent(name)}, nil
+		}
+		if ambiguous[short] {
+			return nil, fmt.Errorf("Schema reference %s is ambiguous; qualify it with a package name", name)
+		}
+		return nil, fmt.Errorf("Schema reference %s not found; local references use _local.%s and public references use package.%s", name, name, name)
+	})
+	if err != nil {
+		return "", err
+	}
+	formatted, err := format.Node(rewritten)
+	if err != nil {
+		return "", fmt.Errorf("format Schema expression: %w", err)
+	}
+	return string(formatted), nil
+}
+
+func splitDefinitionID(id string) (string, string, bool) {
+	marker := strings.Index(id, ".#")
+	if marker < 0 || marker == len(id)-2 {
+		return "", "", false
+	}
+	return id[:marker], id[marker+2:], true
+}
+
+func rewriteSchemaBareReferences(expression ast.Expr, resolve func(string) (ast.Expr, error)) (ast.Expr, error) {
+	switch value := expression.(type) {
+	case *ast.ParenExpr:
+		rewritten, err := rewriteSchemaBareReferences(value.X, resolve)
+		if err != nil {
+			return nil, err
+		}
+		value.X = rewritten
+		return value, nil
+	case *ast.BinaryExpr:
+		left, err := rewriteSchemaBareReferences(value.X, resolve)
+		if err != nil {
+			return nil, err
+		}
+		right, err := rewriteSchemaBareReferences(value.Y, resolve)
+		if err != nil {
+			return nil, err
+		}
+		value.X, value.Y = left, right
+		return value, nil
+	case *ast.UnaryExpr:
+		rewritten, err := rewriteSchemaBareReferences(value.X, resolve)
+		if err != nil {
+			return nil, err
+		}
+		value.X = rewritten
+		return value, nil
+	case *ast.SelectorExpr:
+		rewritten, err := rewriteSchemaBareReferences(value.X, resolve)
+		if err != nil {
+			return nil, err
+		}
+		value.X = rewritten
+		return value, nil
+	case *ast.Ident:
+		if strings.HasPrefix(value.Name, "#") {
+			return resolve(value.Name)
+		}
+		return value, nil
+	case *ast.StructLit:
+		for index, declaration := range value.Elts {
+			field, ok := declaration.(*ast.Field)
+			if !ok {
+				continue
+			}
+			rewritten, err := rewriteSchemaBareReferences(field.Value, resolve)
+			if err != nil {
+				return nil, err
+			}
+			field.Value = rewritten
+			value.Elts[index] = field
+		}
+		return value, nil
+	case *ast.ListLit:
+		for index, element := range value.Elts {
+			rewritten, err := rewriteSchemaBareReferences(element, resolve)
+			if err != nil {
+				return nil, err
+			}
+			value.Elts[index] = rewritten
+		}
+		return value, nil
+	default:
+		return value, nil
+	}
+}
+
+// referencedSchemaPackages collects the package names referenced by qualified
+// references in a Schema expression.
+func referencedSchemaPackages(expression string) ([]string, error) {
+	parsed, err := parser.ParseExpr("schema-reference.cue", expression)
+	if err != nil {
+		return nil, fmt.Errorf("parse Schema expression: %w", err)
+	}
+	packages := map[string]bool{}
+	ast.Walk(parsed, func(node ast.Node) bool {
+		selector, ok := node.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		if identifier, ok := selector.X.(*ast.Ident); ok && identifier.Name != "_local" {
+			packages[identifier.Name] = true
+		}
+		return true
+	}, nil)
+	result := make([]string, 0, len(packages))
+	for pkg := range packages {
+		result = append(result, pkg)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+// ensureSchemaImports makes sure the source file imports every public Schema
+// package referenced by the expression.
+func (s *Service) ensureSchemaImports(path, expression, excludePackage string) error {
+	packages, err := referencedSchemaPackages(expression)
+	if err != nil {
+		return err
+	}
+	for _, pkg := range packages {
+		if pkg == excludePackage || !s.knownSchemaPackage(pkg) {
+			continue
+		}
+		importPath, err := s.schemaImportPath(pkg)
+		if err != nil {
+			return err
+		}
+		if err := document.EnsureImport(path, importPath); err != nil {
+			return fmt.Errorf("import schema package %q: %w", pkg, err)
+		}
+	}
+	return nil
+}
+
+func (s *Service) knownSchemaPackage(pkg string) bool {
+	for _, definition := range s.current.Schemas.Definitions {
+		if definition.Table != "" {
+			continue
+		}
+		if packageName, _, ok := splitDefinitionID(string(definition.ID)); ok && packageName == pkg {
+			return true
+		}
+	}
+	return false
+}
+
+// schemaImportPath derives the CUE import path for one public Schema package.
+func (s *Service) schemaImportPath(packageName string) (string, error) {
+	directory := ""
+	for _, definition := range s.current.Schemas.Definitions {
+		if definition.Table != "" {
+			continue
+		}
+		if pkg, _, ok := splitDefinitionID(string(definition.ID)); ok && pkg == packageName {
+			directory = filepath.Dir(definition.Path)
+			break
+		}
+	}
+	if directory == "" {
+		return "", fmt.Errorf("schema package %q is not part of the open project", packageName)
+	}
+	relative, err := filepath.Rel(s.current.Project.Root, directory)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("schema package %q is outside the project directory", packageName)
+	}
+	module, err := s.moduleName()
+	if err != nil {
+		return "", err
+	}
+	return module + "/" + filepath.ToSlash(relative) + ":" + packageName, nil
+}
+
+func (s *Service) moduleName() (string, error) {
+	path := filepath.Join(s.current.Project.Root, "cue.mod", "module.cue")
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("cannot resolve CUE module import: read %s: %w", path, err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return "", fmt.Errorf("cannot resolve CUE module import: %w", err)
+	}
+	for _, declaration := range file.Decls {
+		field, ok := declaration.(*ast.Field)
+		if !ok {
+			continue
+		}
+		name, _, err := ast.LabelName(field.Label)
+		if err != nil || name != "module" {
+			continue
+		}
+		literal, ok := field.Value.(*ast.BasicLit)
+		if !ok || literal.Kind != token.STRING {
+			continue
+		}
+		if value, err := strconv.Unquote(literal.Value); err == nil && value != "" {
+			return value, nil
+		}
+	}
+	return "", fmt.Errorf("cannot resolve CUE module import: cue.mod/module.cue has no module declaration")
 }
 
 func (s *Service) CreateTable(create TableCreate) (TableCreateResult, error) {
@@ -898,8 +1182,15 @@ func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 	if add.Position != nil {
 		position = *add.Position
 	}
+	expression, err := s.normalizeSchemaReferences(add.Path, add.SchemaExpression)
+	if err != nil {
+		return ColumnAddResult{}, err
+	}
+	if err := s.ensureSchemaImports(add.Path, expression, ""); err != nil {
+		return ColumnAddResult{}, err
+	}
 	table, view, err := s.edit(add.Path, func() (document.Table, error) {
-		return document.AddColumn(add.Path, add.Name, add.SchemaExpression, add.InitialExpression, position)
+		return document.AddColumn(add.Path, add.Name, expression, add.InitialExpression, position)
 	})
 	if err != nil {
 		return ColumnAddResult{}, err
@@ -914,8 +1205,15 @@ func (s *Service) SetColumnSchema(set ColumnSchemaSet) (ColumnSchemaSetResult, e
 	if !containsTable(s.current.Tree.Root, set.Path) {
 		return ColumnSchemaSetResult{}, fmt.Errorf("table %q is not part of the open project", set.Path)
 	}
+	expression, err := s.normalizeSchemaReferences(set.Path, set.SchemaExpression)
+	if err != nil {
+		return ColumnSchemaSetResult{}, err
+	}
+	if err := s.ensureSchemaImports(set.Path, expression, ""); err != nil {
+		return ColumnSchemaSetResult{}, err
+	}
 	table, view, err := s.edit(set.Path, func() (document.Table, error) {
-		return document.SetColumnSchema(set.Path, set.Name, set.SchemaExpression)
+		return document.SetColumnSchema(set.Path, set.Name, expression)
 	})
 	if err != nil {
 		return ColumnSchemaSetResult{}, err

@@ -320,7 +320,7 @@ func resolve(reference, table, packageName string) (ID, error) {
 	}
 	if strings.HasPrefix(reference, "#") {
 		if packageName == "" {
-			return "", fmt.Errorf("Schema reference %s has no package scope", reference)
+			return "", fmt.Errorf("Schema reference %s must be qualified: local references use _local.%s and public references use package.%s", reference, reference, reference)
 		}
 		return publicID(packageName, strings.TrimPrefix(reference, "#")), nil
 	}

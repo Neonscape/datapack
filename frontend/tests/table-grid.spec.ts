@@ -12,7 +12,7 @@ const table = {
         {name: "name", schemaExpression: "string", schema: {kind: "string"}},
         {name: "position", schemaExpression: "{x: int, y: int, label?: string}", schema: {kind: "struct", fields: [{name: "x"}, {name: "y"}, {name: "label", optional: true}]}},
         {name: "rarity", schemaExpression: `"N" | "R"`, schema: {kind: "enum", enumValues: [{expression: `"N"`}, {expression: `"R"`}]}},
-        {name: "testAttack", schemaExpression: "int", schema: {kind: "integer"}},
+        {name: "testAttack", schemaExpression: "_local.#Position", schema: {kind: "reference"}},
     ],
     rows: [{id: "sword", values: {tags: {expression: `["starter", "weapon"]`, display: `["starter", "weapon"]`}, position: {expression: `{x: 4, y: 8}`, display: `{x: 4, y: 8}`}, name: {expression: "20 + 5", display: "25", formula: true}, rarity: {expression: `"N"`, display: "N"}, effectID: {expression: `"burn"`, display: "burn"}}}],
     diagnostics: [{rowID: "sword", column: "effectID", message: "foreign key references missing row rpg.effect.burn"}, {rowID: "", message: "table has an invalid export configuration"}],
@@ -41,6 +41,7 @@ const workspace = {
     schemas: {definitions: [
         {id: "common.#GameID", kind: "type", path: publicSchema.path, usages: [{definition: "common.#GameID", path: table.path, table: "rpg.item", field: "#PrimaryKey"}]},
         {id: "common.#NonNegative", kind: "constraint", path: publicSchema.path, usages: []},
+        {id: "rpg.item._local.#Position", kind: "type", path: table.path, table: "rpg.item", usages: []},
     ]},
     foreignKeys: {diagnostics: []},
 };
@@ -97,7 +98,7 @@ test.beforeEach(async ({page}) => {
     await page.goto("/");
     await page.getByRole("button", {name: "File"}).click();
     await page.getByRole("navigation", {name: "Application menu"}).getByRole("button", {name: "Open project"}).click();
-    await page.getByRole("button", {name: "rpg.item"}).click();
+    await page.getByRole("button", {name: "rpg.item", exact: true}).click();
 });
 
 test("supports pointer editing, row menus, and selected-column actions", async ({page}) => {
@@ -240,6 +241,23 @@ test("edits the selected column Schema", async ({page}) => {
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeHidden();
 });
 
+test("shows local references without prefix and inserts picked references", async ({page}) => {
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    await page.mouse.click(box.x + 1075, box.y + 15, {button: "right"});
+    await page.getByRole("button", {name: "Edit schema"}).click();
+    const schema = page.getByRole("textbox", {name: "CUE Schema"});
+    await expect(schema).toHaveValue("#Position");
+    const picker = page.getByLabel("Insert Schema reference", {exact: true});
+    await expect(picker.locator("option")).toContainText(["Choose a reference", "#Position", "common.#GameID", "common.#NonNegative"]);
+    await picker.selectOption("common.#NonNegative");
+    await expect(schema).toHaveValue("#Position & common.#NonNegative");
+    await page.getByRole("button", {name: "Apply"}).click();
+    await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeHidden();
+});
+
 test("creates and opens a table from the project explorer", async ({page}) => {
     await page.getByRole("button", {name: "File"}).click();
     await page.getByRole("button", {name: "New table"}).click();
@@ -266,7 +284,7 @@ test("keeps navigation visible after creating a draft row", async ({page}) => {
     await page.mouse.click(box.x + 55, box.y + 80);
     await page.locator("textarea").fill("new_row");
     await page.locator("textarea").press("Enter");
-    await expect(page.getByRole("button", {name: "rpg.item"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "rpg.item", exact: true})).toBeVisible();
     await expect(page.getByText("Schemas", {exact: true})).toBeVisible();
 });
 

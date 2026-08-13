@@ -146,6 +146,20 @@ function schemaDefinitions(workspace: WorkspaceView | null): SchemaDefinition[] 
     return workspace?.schemas?.definitions ?? [];
 }
 
+function schemaReferenceOptions(workspace: WorkspaceView | null): {label: string; value: string; kind: "type" | "constraint"}[] {
+    const options: {label: string; value: string; kind: "type" | "constraint"}[] = [];
+    for (const definition of schemaDefinitions(workspace)) {
+        if (definition.id.includes("._local.#")) {
+            const name = definition.id.split(".#")[1];
+            options.push({label: `#${name}`, value: `#${name}`, kind: definition.kind});
+        } else {
+            options.push({label: definition.id, value: definition.id, kind: definition.kind});
+        }
+    }
+    options.sort((left, right) => left.label.localeCompare(right.label));
+    return options;
+}
+
 function Tree({node, depth = 0, onOpenTable, onOpenSchema}: { node: TreeNode; depth?: number; onOpenTable: (path: string) => void; onOpenSchema: (node: TreeNode) => void }) {
     const isFile = node.kind === "tableData" || node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "damaged";
     const isSchemaNode = node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "localSchema";
@@ -1064,7 +1078,7 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable} onOpenSchema={openSchema}/></div>
                     </aside>
                     <section className={`editor-placeholder ${table ? "editor-table" : ""}`}>
-                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression, initial: ""})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <>
+                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: ""})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>
@@ -1127,6 +1141,15 @@ function App() {
                         <label>Initial CUE value<input value={dialog.initial} onChange={(event) => setDialog({...dialog, initial: event.target.value})}/></label>
                     </>}
                     {dialog.mode === "schema" && <label>CUE Schema<textarea autoFocus value={dialog.schema} onChange={(event) => setDialog({...dialog, schema: event.target.value})}/></label>}
+                    {dialog.mode === "schema" && <label>Insert Schema reference<select aria-label="Insert Schema reference" value="" onChange={(event) => {
+                        const option = schemaReferenceOptions(workspace).find((entry) => entry.value === event.target.value);
+                        if (!option) return;
+                        const current = dialog.schema.trim();
+                        setDialog({...dialog, schema: option.kind === "constraint" ? (current ? `${current} & ${option.value}` : option.value) : option.value});
+                    }}>
+                        <option value="">Choose a reference</option>
+                        {schemaReferenceOptions(workspace).map((option) => <option key={`${option.kind}:${option.value}`} value={option.value}>{option.label}</option>)}
+                    </select></label>}
                     {dialog.mode === "rename" && <label>New name<input value={dialog.second} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>}
                     {dialog.mode === "move" && <label>New zero-based position<input type="number" min="0" value={dialog.second} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>}
                     {dialog.mode === "delete" && <p>This removes the column, all row values, formulas, foreign-key metadata, and CSV export configuration that refer to it.</p>}

@@ -817,6 +817,135 @@ _schema: {version: 1, definitions: {GameID: {kind: "type", type: "string"}}}`)
 	}
 }
 
+func TestSetColumnSchemaNormalizesLocalSchemaReference(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: string
+_local: {#tmpDamageBase: int}
+_schema: {localDefinitions: {tmpDamageBase: {kind: "type", type: "integer"}}}
+#Row: {damage: int}
+rows: {sword: {damage: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.SetColumnSchema(ColumnSchemaSet{Path: tablePath, Name: "damage", SchemaExpression: "#tmpDamageBase"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, column := range result.Table.Columns {
+		if column.Name == "damage" && column.SchemaExpression == "_local.#tmpDamageBase" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("columns = %#v", result.Table.Columns)
+	}
+	for _, diagnostic := range result.Workspace.Schemas.Diagnostics {
+		if diagnostic.Field == "damage" {
+			t.Fatalf("diagnostics = %#v", result.Workspace.Schemas.Diagnostics)
+		}
+	}
+}
+
+func TestSetColumnSchemaRejectsUnknownBareReference(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: string
+#Row: {damage: int}
+rows: {sword: {damage: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := service.SetColumnSchema(ColumnSchemaSet{Path: tablePath, Name: "damage", SchemaExpression: "#Missing"})
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("SetColumnSchema() = %v, want not found error", err)
+	}
+}
+
+func TestSetColumnSchemaAddsSchemaImport(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	writeFile(t, filepath.Join(projectRoot, "cue.mod", "module.cue"), `module: "example.com/game"`)
+	writeFile(t, filepath.Join(projectRoot, "schema", "common.cue"), `package common
+#DamageBaseValue: int & >=0
+_schema: {version: 1, definitions: {DamageBaseValue: {kind: "type", type: "integer"}}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: string
+#Row: {damage: int}
+rows: {sword: {damage: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.SetColumnSchema(ColumnSchemaSet{Path: tablePath, Name: "damage", SchemaExpression: "common.#DamageBaseValue"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile(tablePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(source), `import "example.com/game/schema:common"`) {
+		t.Fatalf("source = %s", source)
+	}
+	for _, diagnostic := range result.Table.Diagnostics {
+		if strings.Contains(diagnostic.Message, "reference") {
+			t.Fatalf("table diagnostics = %#v", result.Table.Diagnostics)
+		}
+	}
+}
+
+func TestSetSchemaDefinitionAddsCrossPackageImport(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	writeFile(t, filepath.Join(projectRoot, "cue.mod", "module.cue"), `module: "example.com/game"`)
+	writeFile(t, filepath.Join(projectRoot, "schema", "common.cue"), `package common
+#DamageBaseValue: int & >=0
+_schema: {version: 1, definitions: {DamageBaseValue: {kind: "type", type: "integer"}}}`)
+	rulesPath := filepath.Join(projectRoot, "schema", "rules.cue")
+	writeFile(t, rulesPath, `package rules
+#Damage: int
+_schema: {version: 1, definitions: {Damage: {kind: "type", type: "integer"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "tables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetSchemaDefinition(SchemaDefinitionSet{Path: rulesPath, Name: "Damage", Kind: "type", Type: "integer", SchemaExpression: "common.#DamageBaseValue"}); err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile(rulesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(source), `import "example.com/game/schema:common"`) {
+		t.Fatalf("source = %s", source)
+	}
+}
+
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

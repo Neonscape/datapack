@@ -161,6 +161,31 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestEnsureImportAddsImportWhenMissing(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	if err := EnsureImport(path, "example.com/game/schema:common"); err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(source), `import "example.com/game/schema:common"`) {
+		t.Fatalf("source = %s", source)
+	}
+	if err := EnsureImport(path, "example.com/game/schema:common"); err != nil {
+		t.Fatalf("EnsureImport() is not idempotent: %v", err)
+	}
+	if _, err := LoadTable(path); err != nil {
+		t.Fatalf("LoadTable() after import = %v", err)
+	}
+}
+
 func TestRenameLocalSchemaDefinitionPropagatesReferences(t *testing.T) {
 	root := t.TempDir()
 	tablePath := root + "/item.cue"

@@ -5,11 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"cuelang.org/go/cue/ast"
 	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/parser"
+	"cuelang.org/go/cue/token"
 )
 
 // SchemaDefinitionUpdate carries the editable metadata and expression of one
@@ -565,4 +567,84 @@ func validatePublicSchemaAndReplace(path string, source []byte) (PublicSchema, e
 	}
 	schema.Path = path
 	return schema, nil
+}
+
+// EnsureImport appends one import declaration when the file does not already
+// import the same path. Table and Schema files are both supported.
+func EnsureImport(path, importPath string) error {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read source: %w", err)
+	}
+	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	if err != nil {
+		return fmt.Errorf("parse source: %w", err)
+	}
+	for _, declaration := range file.Decls {
+		imports, ok := declaration.(*ast.ImportDecl)
+		if !ok {
+			continue
+		}
+		for _, spec := range imports.Specs {
+			literal := spec.Path
+			if literal.Kind != token.STRING {
+				continue
+			}
+			value, err := strconv.Unquote(literal.Value)
+			if err == nil && value == importPath {
+				return nil
+			}
+		}
+	}
+	insertAt := 0
+	for index, declaration := range file.Decls {
+		switch declaration.(type) {
+		case *ast.Package, *ast.ImportDecl:
+			insertAt = index + 1
+		}
+	}
+	importDecl := &ast.ImportDecl{Specs: []*ast.ImportSpec{{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)}}}}
+	file.Decls = append(file.Decls[:insertAt], append([]ast.Decl{importDecl}, file.Decls[insertAt:]...)...)
+	candidate, err := format.Node(file)
+	if err != nil {
+		return fmt.Errorf("format source with import: %w", err)
+	}
+	return replaceSource(path, candidate)
+}
+
+// replaceSource validates the candidate with the same rules as other Schema
+// edits and atomically replaces the file.
+func replaceSource(path string, candidate []byte) error {
+	if err := validateSchemaSourceCandidate(path, candidate); err != nil {
+		return err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("stat source: %w", err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".datapack-*.cue")
+	if err != nil {
+		return fmt.Errorf("create temporary source: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(info.Mode()); err != nil {
+		temporary.Close()
+		return fmt.Errorf("set temporary source permissions: %w", err)
+	}
+	if _, err := temporary.Write(candidate); err != nil {
+		temporary.Close()
+		return fmt.Errorf("write temporary source: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		temporary.Close()
+		return fmt.Errorf("sync temporary source: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close temporary source: %w", err)
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return fmt.Errorf("replace source: %w", err)
+	}
+	return nil
 }
