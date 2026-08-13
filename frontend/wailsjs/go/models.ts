@@ -137,6 +137,80 @@ export namespace document {
 	        this.expression = source["expression"];
 	    }
 	}
+	export class SchemaDefinition {
+	    name: string;
+	    kind: string;
+	    type?: string;
+	    appliesTo?: string[];
+	    schema: schemamodel.Node;
+	    schemaExpression: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SchemaDefinition(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.kind = source["kind"];
+	        this.type = source["type"];
+	        this.appliesTo = source["appliesTo"];
+	        this.schema = this.convertValues(source["schema"], schemamodel.Node);
+	        this.schemaExpression = source["schemaExpression"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PublicSchema {
+	    path: string;
+	    package: string;
+	    definitions: SchemaDefinition[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PublicSchema(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.package = source["package"];
+	        this.definitions = this.convertValues(source["definitions"], SchemaDefinition);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Row {
 	    id: string;
 	    values: Record<string, Cell>;
@@ -169,42 +243,7 @@ export namespace document {
 		    return a;
 		}
 	}
-	export class SchemaDefinition {
-	    name: string;
-	    kind: string;
-	    appliesTo?: string[];
-	    schema: schemamodel.Node;
 	
-	    static createFrom(source: any = {}) {
-	        return new SchemaDefinition(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.kind = source["kind"];
-	        this.appliesTo = source["appliesTo"];
-	        this.schema = this.convertValues(source["schema"], schemamodel.Node);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class Table {
 	    path: string;
 	    package: string;
@@ -1033,9 +1072,11 @@ export namespace workspace {
 	    path: string;
 	    name: string;
 	    schemaExpression: string;
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnSchemaSet(source);
 	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1046,14 +1087,17 @@ export namespace workspace {
 	export class ColumnSchemaSetResult {
 	    table: document.Table;
 	    workspace: View;
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnSchemaSetResult(source);
 	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1141,9 +1185,11 @@ export namespace workspace {
 	    workspace: View;
 	    canUndo: boolean;
 	    canRedo: boolean;
+	
 	    static createFrom(source: any = {}) {
 	        return new HistoryResult(source);
 	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
@@ -1151,6 +1197,7 @@ export namespace workspace {
 	        this.canUndo = source["canUndo"];
 	        this.canRedo = source["canRedo"];
 	    }
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1174,9 +1221,11 @@ export namespace workspace {
 	    rowIDs: string[];
 	    columns: string[];
 	    values: string[][];
+	
 	    static createFrom(source: any = {}) {
 	        return new Paste(source);
 	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1379,12 +1428,122 @@ export namespace workspace {
 		    return a;
 		}
 	}
+	export class SchemaDefinitionCreate {
+	    path: string;
+	    name: string;
+	    kind: string;
+	    type?: string;
+	    appliesTo?: string[];
+	    schemaExpression: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SchemaDefinitionCreate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	        this.kind = source["kind"];
+	        this.type = source["type"];
+	        this.appliesTo = source["appliesTo"];
+	        this.schemaExpression = source["schemaExpression"];
+	    }
+	}
+	export class SchemaDefinitionDelete {
+	    path: string;
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SchemaDefinitionDelete(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	    }
+	}
+	export class SchemaDefinitionRename {
+	    path: string;
+	    oldName: string;
+	    newName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SchemaDefinitionRename(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.oldName = source["oldName"];
+	        this.newName = source["newName"];
+	    }
+	}
+	export class SchemaDefinitionSet {
+	    path: string;
+	    name: string;
+	    kind: string;
+	    type?: string;
+	    appliesTo?: string[];
+	    schemaExpression: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SchemaDefinitionSet(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	        this.kind = source["kind"];
+	        this.type = source["type"];
+	        this.appliesTo = source["appliesTo"];
+	        this.schemaExpression = source["schemaExpression"];
+	    }
+	}
+	export class SchemaEditResult {
+	    schema: document.PublicSchema;
+	    table: document.Table;
+	    workspace: View;
+	
+	    static createFrom(source: any = {}) {
+	        return new SchemaEditResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.schema = this.convertValues(source["schema"], document.PublicSchema);
+	        this.table = this.convertValues(source["table"], document.Table);
+	        this.workspace = this.convertValues(source["workspace"], View);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class TableCreate {
 	    namespace: string;
 	    name: string;
+	
 	    static createFrom(source: any = {}) {
 	        return new TableCreate(source);
 	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.namespace = source["namespace"];
@@ -1394,14 +1553,17 @@ export namespace workspace {
 	export class TableCreateResult {
 	    table: document.Table;
 	    workspace: View;
+	
 	    static createFrom(source: any = {}) {
 	        return new TableCreateResult(source);
 	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1422,3 +1584,4 @@ export namespace workspace {
 	}
 
 }
+

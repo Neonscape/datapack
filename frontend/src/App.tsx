@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type GridCell, type GridColumn, type GridSelection, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddColumn, ClearCell, CreateRow, CreateTable, DeleteColumn, DeleteRow, Export, GetTable, MoveColumn, Paste, Redo, RenameColumn, RenameRow, SelectProject, SetCellFormula, SetColumnSchema, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, CreateRow, CreateSchemaDefinition, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, Export, GetPublicSchema, GetTable, MoveColumn, Paste, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, SelectProject, SetCellFormula, SetColumnSchema, SetSchemaDefinition, Undo, UpdateCell} from "../wailsjs/go/main/App";
 import {EventsOn} from "../wailsjs/runtime/runtime";
 
 type LogEntry = {
@@ -109,22 +109,56 @@ type TableDocument = {
     columns: { name: string; optional?: boolean; schema: { kind: string; enumValues?: { expression: string }[]; fields?: {name: string; optional?: boolean}[] }; schemaExpression: string; foreignKeyTable?: string; foreignKeyOptions?: string[] }[];
     rows: { id: string; values: Record<string, { expression: string; display: string; formula?: boolean }> }[];
     diagnostics?: { rowID: string; column?: string; message: string }[];
+    localSchema: SchemaDefinitionDocument[];
+};
+
+type SchemaDefinitionDocument = {
+    name: string;
+    kind: "type" | "constraint";
+    type?: string;
+    appliesTo?: string[];
+    schema: { kind: string };
+    schemaExpression: string;
+};
+
+type PublicSchemaDocument = {
+    path: string;
+    package: string;
+    definitions: SchemaDefinitionDocument[];
+};
+
+type SchemaEditorState = {
+    path: string;
+    local: boolean;
+    package?: string;
+    logicalTable?: string;
+    definitions: SchemaDefinitionDocument[];
+    selected: string | null;
+};
+
+type SchemaEditResult = {
+    schema: PublicSchemaDocument;
+    table: TableDocument;
+    workspace: WorkspaceView;
 };
 
 function schemaDefinitions(workspace: WorkspaceView | null): SchemaDefinition[] {
     return workspace?.schemas?.definitions ?? [];
 }
 
-function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; onOpenTable: (path: string) => void }) {
+function Tree({node, depth = 0, onOpenTable, onOpenSchema}: { node: TreeNode; depth?: number; onOpenTable: (path: string) => void; onOpenSchema: (node: TreeNode) => void }) {
     const isFile = node.kind === "tableData" || node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "damaged";
+    const isSchemaNode = node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "localSchema";
     const openTable = node.kind === "tableData" && node.path ? () => onOpenTable(node.path!) : undefined;
+    const openSchema = isSchemaNode && node.path ? () => onOpenSchema(node) : undefined;
+    const openAction = openTable ?? openSchema;
     return (
         <div className="tree-node">
-            <button className={`tree-row ${isFile ? "tree-file" : ""} ${openTable ? "tree-action" : ""}`} style={{paddingLeft: `${12 + depth * 16}px`}} onClick={openTable} disabled={!openTable}>
+            <button className={`tree-row ${isFile ? "tree-file" : ""} ${openAction ? "tree-action" : ""}`} style={{paddingLeft: `${12 + depth * 16}px`}} onClick={openAction} disabled={!openAction}>
                 <span className={`node-icon node-${node.kind}`} aria-hidden="true"/>
                 <span>{node.name}</span>
             </button>
-            {node.children?.map((child) => <Tree key={`${child.kind}:${child.path ?? child.name}:${child.name}`} node={child} depth={depth + 1} onOpenTable={onOpenTable}/>) }
+            {node.children?.map((child) => <Tree key={`${child.kind}:${child.path ?? child.name}:${child.name}`} node={child} depth={depth + 1} onOpenTable={onOpenTable} onOpenSchema={onOpenSchema}/>) }
         </div>
     );
 }
@@ -569,10 +603,162 @@ type StructureDialog = {
 };
 type TableDialog = {namespace: string; name: string};
 
+type SchemaDraft = {name: string; kind: "type" | "constraint"; type: string; appliesTo: string; expression: string};
+
+function SchemaEditor({state, usages, onSelect, onCreate, onApply, onRename, onDelete}: {
+    state: SchemaEditorState;
+    usages: (name: string) => SchemaUsage[];
+    onSelect: (name: string) => void;
+    onCreate: (name: string, kind: "type" | "constraint", type: string, appliesTo: string[], expression: string) => Promise<void>;
+    onApply: (name: string, kind: "type" | "constraint", type: string, appliesTo: string[], expression: string) => Promise<void>;
+    onRename: (oldName: string, newName: string) => Promise<void>;
+    onDelete: (name: string) => Promise<void>;
+}) {
+    const [draft, setDraft] = useState<SchemaDraft | null>(null);
+    const [creating, setCreating] = useState(false);
+    const [renaming, setRenaming] = useState(false);
+    const [renameValue, setRenameValue] = useState("");
+    const [confirmingDelete, setConfirmingDelete] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [editorError, setEditorError] = useState("");
+
+    useEffect(() => {
+        setCreating(false);
+        setRenaming(false);
+        setConfirmingDelete(false);
+        setEditorError("");
+        const definition = state.definitions.find((entry) => entry.name === state.selected) ?? null;
+        setDraft(definition ? {
+            name: definition.name,
+            kind: definition.kind,
+            type: definition.type ?? "",
+            appliesTo: (definition.appliesTo ?? []).join(", "),
+            expression: definition.schemaExpression,
+        } : null);
+    }, [state.selected, state.definitions]);
+
+    function startCreate() {
+        setDraft({name: "", kind: "type", type: "string", appliesTo: "", expression: "string"});
+        setCreating(true);
+        setRenaming(false);
+        setConfirmingDelete(false);
+        setEditorError("");
+    }
+
+    async function submit() {
+        if (!draft) return;
+        setBusy(true);
+        setEditorError("");
+        try {
+            const appliesTo = draft.appliesTo.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+            if (creating) await onCreate(draft.name, draft.kind, draft.type, appliesTo, draft.expression);
+            else await onApply(draft.name, draft.kind, draft.type, appliesTo, draft.expression);
+        } catch (reason) {
+            setEditorError(reason instanceof Error ? reason.message : String(reason));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function submitRename() {
+        if (!draft || !renameValue.trim() || renameValue.trim() === draft.name) {
+            setRenaming(false);
+            return;
+        }
+        setBusy(true);
+        setEditorError("");
+        try {
+            await onRename(draft.name, renameValue.trim());
+            setRenaming(false);
+        } catch (reason) {
+            setEditorError(reason instanceof Error ? reason.message : String(reason));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    const selectedUsages = state.selected ? usages(state.selected) : [];
+    return (
+        <section className="schema-editor">
+            <aside className="schema-editor-sidebar">
+                <div className="schema-editor-title">{state.local ? "Local Schema" : "Public Schema"}</div>
+                <div className="schema-editor-file">{state.path}</div>
+                <div className="schema-definition-list">
+                    {state.definitions.map((definition) => <button
+                        className={`schema-definition-row ${state.selected === definition.name ? "schema-definition-row-selected" : ""}`}
+                        key={definition.name}
+                        onClick={() => onSelect(definition.name)}
+                    >
+                        <span>#{definition.name}</span>
+                        <span className={`schema-kind-dot schema-kind-${definition.kind}`} aria-hidden="true"/>
+                    </button>)}
+                    {state.definitions.length === 0 && <div className="schema-editor-empty">No definitions</div>}
+                </div>
+                <button className="schema-editor-create" onClick={startCreate}>New definition</button>
+            </aside>
+            <div className="schema-editor-form">
+                {draft ? <>
+                    <div className="schema-editor-row">
+                        <label>Name<input aria-label="Name" value={draft.name} disabled={!creating} onChange={(event) => setDraft({...draft, name: event.target.value})}/></label>
+                        <label>Kind<select aria-label="Kind" value={draft.kind} onChange={(event) => setDraft({...draft, kind: event.target.value as "type" | "constraint"})}>
+                            <option value="type">type</option>
+                            <option value="constraint">constraint</option>
+                        </select></label>
+                    </div>
+                    {draft.kind === "type" ? (
+                        <label>Type<select aria-label="Type" value={draft.type} onChange={(event) => setDraft({...draft, type: event.target.value})}>
+                            {["string", "integer", "number", "boolean", "enum", "array", "struct", "reference"].map((option) => <option key={option} value={option}>{option}</option>)}
+                        </select></label>
+                    ) : (
+                        <label>Applies to<input aria-label="Applies to" value={draft.appliesTo} placeholder="integer, number" onChange={(event) => setDraft({...draft, appliesTo: event.target.value})}/></label>
+                    )}
+                    <label>Schema expression<textarea aria-label="Schema expression" rows={6} value={draft.expression} onChange={(event) => setDraft({...draft, expression: event.target.value})}/></label>
+                    <div className="schema-editor-actions">
+                        <button disabled={busy} onClick={submit}>{creating ? "Create" : "Apply"}</button>
+                        {creating ? <button onClick={() => { setCreating(false); setDraft(null); }}>Cancel</button> : <>
+                            {renaming ? <>
+                                <input className="schema-rename-input" value={renameValue} onChange={(event) => setRenameValue(event.target.value)}/>
+                                <button disabled={busy} onClick={submitRename}>Confirm rename</button>
+                                <button onClick={() => setRenaming(false)}>Cancel</button>
+                            </> : <button onClick={() => { setRenameValue(draft.name); setRenaming(true); }}>Rename</button>}
+                            <button className={confirmingDelete ? "schema-delete-danger" : ""} onClick={async () => {
+                                if (!confirmingDelete) {
+                                    setConfirmingDelete(true);
+                                    return;
+                                }
+                                setConfirmingDelete(false);
+                                setBusy(true);
+                                setEditorError("");
+                                try {
+                                    await onDelete(draft.name);
+                                } catch (reason) {
+                                    setEditorError(reason instanceof Error ? reason.message : String(reason));
+                                } finally {
+                                    setBusy(false);
+                                }
+                            }}>{confirmingDelete ? "Confirm delete" : "Delete definition"}</button>
+                        </>}
+                    </div>
+                    {editorError && <div className="schema-editor-error">{editorError}</div>}
+                </> : <div className="schema-editor-empty">Select or create a definition</div>}
+                <div className="schema-editor-usages">
+                    <div className="schema-editor-usages-title">Usages</div>
+                    {selectedUsages.map((usage) => <div className="usage-row" key={`${usage.path}:${usage.field}`}>
+                        <span>{usage.table ?? usage.path}</span>
+                        <code>{usage.field}</code>
+                    </div>)}
+                    {state.selected && selectedUsages.length === 0 && <div className="schema-editor-empty">No usages</div>}
+                </div>
+            </div>
+        </section>
+    );
+}
+
 function App() {
     const [workspace, setWorkspace] = useState<WorkspaceView | null>(null);
     const [selectedSchema, setSelectedSchema] = useState<SchemaDefinition | null>(null);
     const [table, setTable] = useState<TableDocument | null>(null);
+    const [schemaDocument, setSchemaDocument] = useState<SchemaEditorState | null>(null);
     const [cellError, setCellError] = useState<CellError | null>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
@@ -646,6 +832,7 @@ function App() {
                 setWorkspace(view);
                 setSelectedSchema(schemaDefinitions(view)[0] ?? null);
                 setTable(null);
+                setSchemaDocument(null);
                 setCellError(null);
             }
         } catch (reason) {
@@ -657,10 +844,72 @@ function App() {
         setError("");
         try {
             setTable(await GetTable(path) as TableDocument);
+            setSchemaDocument(null);
             setCellError(null);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         }
+    }
+
+    async function openSchema(node: TreeNode) {
+        setError("");
+        try {
+            if (node.kind === "localSchema") {
+                const document = await GetTable(node.path!) as TableDocument;
+                const logical = document.namespace ? `${document.namespace}.${document.name}` : document.name;
+                setSchemaDocument({path: node.path!, local: true, logicalTable: logical, definitions: document.localSchema, selected: document.localSchema[0]?.name ?? null});
+            } else {
+                const document = await GetPublicSchema(node.path!) as PublicSchemaDocument;
+                const name = node.kind === "schemaDefinition" ? node.name.replace(/^#/, "") : null;
+                setSchemaDocument({path: node.path!, local: false, package: document.package, definitions: document.definitions, selected: name ?? document.definitions[0]?.name ?? null});
+            }
+            setTable(null);
+            setCellError(null);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
+    function applySchemaResult(result: SchemaEditResult, selected: string | null) {
+        setWorkspace(result.workspace);
+        if (!schemaDocument) return;
+        if (schemaDocument.local) {
+            setSchemaDocument({...schemaDocument, definitions: result.table.localSchema, selected: selected ?? result.table.localSchema[0]?.name ?? null});
+        } else {
+            setSchemaDocument({...schemaDocument, definitions: result.schema.definitions, selected: selected ?? result.schema.definitions[0]?.name ?? null});
+        }
+    }
+
+    async function saveSchemaDefinition(create: boolean, name: string, kind: "type" | "constraint", type: string, appliesTo: string[], expression: string) {
+        if (!schemaDocument) return;
+        setError("");
+        const payload = {path: schemaDocument.path, name, kind, type, appliesTo, schemaExpression: expression};
+        const result = create
+            ? await CreateSchemaDefinition(payload) as SchemaEditResult
+            : await SetSchemaDefinition(payload) as SchemaEditResult;
+        applySchemaResult(result, name);
+    }
+
+    async function renameSchemaDefinition(oldName: string, newName: string) {
+        if (!schemaDocument) return;
+        setError("");
+        const result = await RenameSchemaDefinition({path: schemaDocument.path, oldName, newName}) as SchemaEditResult;
+        applySchemaResult(result, newName);
+    }
+
+    async function deleteSchemaDefinition(name: string) {
+        if (!schemaDocument) return;
+        setError("");
+        const result = await DeleteSchemaDefinition({path: schemaDocument.path, name}) as SchemaEditResult;
+        applySchemaResult(result, null);
+    }
+
+    function schemaUsages(name: string): SchemaUsage[] {
+        if (!schemaDocument || !workspace) return [];
+        const id = schemaDocument.local
+            ? `${schemaDocument.logicalTable}._local.#${name}`
+            : `${schemaDocument.package}.#${name}`;
+        return schemaDefinitions(workspace).find((definition) => definition.id === id)?.usages ?? [];
     }
 
     async function saveCellInput(rowID: string, column: string, input: string) {
@@ -812,10 +1061,10 @@ function App() {
                 <section className="workbench">
                     <aside className="project-explorer">
                         <div className="panel-title">Project</div>
-                        <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable}/></div>
+                        <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable} onOpenSchema={openSchema}/></div>
                     </aside>
                     <section className={`editor-placeholder ${table ? "editor-table" : ""}`}>
-                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression, initial: ""})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput}/> : selectedSchema ? <>
+                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression, initial: ""})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>

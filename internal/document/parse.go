@@ -130,11 +130,17 @@ func LoadTable(path string) (Table, error) {
 			if err != nil {
 				return Table{}, fmt.Errorf("parse local schema %q: %w", name, err)
 			}
+			expression, err := expressionOf(field.Value)
+			if err != nil {
+				return Table{}, fmt.Errorf("read local schema %q: %w", name, err)
+			}
 			document.LocalSchema = append(document.LocalSchema, SchemaDefinition{
-				Name:      name[1:],
-				Kind:      localDefinitions[name[1:]].Kind,
-				AppliesTo: localDefinitions[name[1:]].AppliesTo,
-				Schema:    schema,
+				Name:             name[1:],
+				Kind:             localDefinitions[name[1:]].Kind,
+				Type:             localDefinitions[name[1:]].Type,
+				AppliesTo:        localDefinitions[name[1:]].AppliesTo,
+				Schema:           schema,
+				SchemaExpression: expression,
 			})
 		}
 	}
@@ -168,12 +174,18 @@ func LoadPublicSchema(path string) (PublicSchema, error) {
 		if err != nil {
 			return PublicSchema{}, fmt.Errorf("parse schema %q: %w", name, err)
 		}
+		expression, err := expressionOf(definition.Value)
+		if err != nil {
+			return PublicSchema{}, fmt.Errorf("read schema %q: %w", name, err)
+		}
 		definitionMetadata := fieldsOfStruct(metadataField.Value)
 		document.Definitions = append(document.Definitions, SchemaDefinition{
-			Name:      name,
-			Kind:      stringOf(requiredField(definitionMetadata, "kind").Value),
-			AppliesTo: stringListOf(definitionMetadata["appliesTo"]),
-			Schema:    schema,
+			Name:             name,
+			Kind:             stringOf(requiredField(definitionMetadata, "kind").Value),
+			Type:             optionalString(definitionMetadata["type"]),
+			AppliesTo:        stringListOf(definitionMetadata["appliesTo"]),
+			Schema:           schema,
+			SchemaExpression: expression,
 		})
 	}
 	return document, nil
@@ -181,6 +193,7 @@ func LoadPublicSchema(path string) (PublicSchema, error) {
 
 type definitionMetadata struct {
 	Kind      string
+	Type      string
 	AppliesTo []string
 }
 
@@ -200,6 +213,7 @@ func localDefinitionKinds(fields map[string]*ast.Field) map[string]definitionMet
 		if kind := definition["kind"]; kind != nil {
 			result[labelOf(field)] = definitionMetadata{
 				Kind:      stringOf(kind.Value),
+				Type:      optionalString(definition["type"]),
 				AppliesTo: stringListOf(definition["appliesTo"]),
 			}
 		}
@@ -220,6 +234,13 @@ func stringListOf(field *ast.Field) []string {
 		values = append(values, stringOf(element))
 	}
 	return values
+}
+
+func optionalString(field *ast.Field) string {
+	if field == nil {
+		return ""
+	}
+	return stringOf(field.Value)
 }
 
 func requiredField(fields map[string]*ast.Field, name string) *ast.Field {

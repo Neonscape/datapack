@@ -18,6 +18,10 @@ export function CreateRow(arg1) {
   return window['go']['main']['App']['CreateRow'](arg1);
 }
 
+export function CreateSchemaDefinition(arg1) {
+  return window['go']['main']['App']['CreateSchemaDefinition'](arg1);
+}
+
 export function CreateTable(arg1) {
   return window['go']['main']['App']['CreateTable'](arg1);
 }
@@ -34,8 +38,16 @@ export function DeleteRow(arg1) {
   return window['go']['main']['App']['DeleteRow'](arg1);
 }
 
+export function DeleteSchemaDefinition(arg1) {
+  return window['go']['main']['App']['DeleteSchemaDefinition'](arg1);
+}
+
 export function Export() {
   return window['go']['main']['App']['Export']();
+}
+
+export function GetPublicSchema(arg1) {
+  return window['go']['main']['App']['GetPublicSchema'](arg1);
 }
 
 export function GetTable(arg1) {
@@ -70,6 +82,10 @@ export function RenameRow(arg1) {
   return window['go']['main']['App']['RenameRow'](arg1);
 }
 
+export function RenameSchemaDefinition(arg1) {
+  return window['go']['main']['App']['RenameSchemaDefinition'](arg1);
+}
+
 export function SelectProject() {
   return window['go']['main']['App']['SelectProject']();
 }
@@ -80,6 +96,10 @@ export function SetCellFormula(arg1) {
 
 export function SetColumnSchema(arg1) {
   return window['go']['main']['App']['SetColumnSchema'](arg1);
+}
+
+export function SetSchemaDefinition(arg1) {
+  return window['go']['main']['App']['SetSchemaDefinition'](arg1);
 }
 
 export function Undo(arg1) {

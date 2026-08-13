@@ -663,6 +663,160 @@ func TestCreateTableAddsItToTheCurrentProject(t *testing.T) {
 	}
 }
 
+func TestCreatePublicSchemaDefinitionRefreshesSchemaIndex(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	schemaPath := filepath.Join(projectRoot, "schema", "common.cue")
+	writeFile(t, schemaPath, `package common
+#GameID: string
+_schema: {version: 1, definitions: {GameID: {kind: "type", type: "string"}}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
+#PrimaryKey: common.#GameID
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.CreateSchemaDefinition(SchemaDefinitionCreate{Path: schemaPath, Name: "Rarity", Kind: "type", Type: "enum", SchemaExpression: `"N" | "R"`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Schema.Definitions) != 2 || result.Schema.Definitions[1].Name != "Rarity" {
+		t.Fatalf("schema = %#v", result.Schema)
+	}
+	found := false
+	for _, definition := range result.Workspace.Schemas.Definitions {
+		if definition.ID == "common.#Rarity" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("schema index = %#v", result.Workspace.Schemas.Definitions)
+	}
+}
+
+func TestCreateLocalSchemaDefinitionRefreshesSchemaIndex(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: string
+#Row: {position: _local.#Position}
+rows: {sword: {position: {x: 0}}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.CreateSchemaDefinition(SchemaDefinitionCreate{Path: tablePath, Name: "Position", Kind: "type", Type: "struct", SchemaExpression: `{x: number}`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, definition := range result.Workspace.Schemas.Definitions {
+		if definition.ID == "rpg.item._local.#Position" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("schema index = %#v", result.Workspace.Schemas.Definitions)
+	}
+}
+
+func TestDeleteSchemaDefinitionBlockedWhenReferenced(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	schemaPath := filepath.Join(projectRoot, "schema", "common.cue")
+	writeFile(t, schemaPath, `package common
+#GameID: string
+_schema: {version: 1, definitions: {GameID: {kind: "type", type: "string"}}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
+#PrimaryKey: common.#GameID
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := service.DeleteSchemaDefinition(SchemaDefinitionDelete{Path: schemaPath, Name: "GameID"})
+	if err == nil || !strings.Contains(err.Error(), "referenced") {
+		t.Fatalf("DeleteSchemaDefinition() = %v, want referenced error", err)
+	}
+}
+
+func TestRenameSchemaDefinitionUpdatesReferencingTable(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	schemaPath := filepath.Join(projectRoot, "schema", "common.cue")
+	writeFile(t, schemaPath, `package common
+#GameID: string
+_schema: {version: 1, definitions: {GameID: {kind: "type", type: "string"}}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: common.#GameID
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.RenameSchemaDefinition(SchemaDefinitionRename{Path: schemaPath, OldName: "GameID", NewName: "GameIdentifier"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, definition := range result.Workspace.Schemas.Definitions {
+		if definition.ID == "common.#GameIdentifier" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("schema index = %#v", result.Workspace.Schemas.Definitions)
+	}
+	table, err := service.GetTable(tablePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.PrimaryKey.Reference != "common.#GameIdentifier" {
+		t.Fatalf("primary key = %#v", table.PrimaryKey)
+	}
+}
+
+func TestGetPublicSchemaLoadsOnlyProjectSchemaFiles(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	schemaPath := filepath.Join(projectRoot, "schema", "common.cue")
+	writeFile(t, schemaPath, `package common
+#GameID: string
+_schema: {version: 1, definitions: {GameID: {kind: "type", type: "string"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "tables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := service.GetPublicSchema(schemaPath)
+	if err != nil || len(schema.Definitions) != 1 || schema.Definitions[0].SchemaExpression != "string" {
+		t.Fatalf("GetPublicSchema() = %#v, %v", schema, err)
+	}
+	if _, err := service.GetPublicSchema(filepath.Join(projectRoot, "outside.cue")); err == nil {
+		t.Fatal("GetPublicSchema() accepted a path outside the project tree")
+	}
+}
+
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

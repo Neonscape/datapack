@@ -18,19 +18,39 @@ const table = {
     diagnostics: [{rowID: "sword", column: "effectID", message: "foreign key references missing row rpg.effect.burn"}, {rowID: "", message: "table has an invalid export configuration"}],
 };
 
+const publicSchema = {
+    path: "/project/schema/common.cue",
+    package: "common",
+    definitions: [
+        {name: "GameID", kind: "type", type: "string", schema: {kind: "string"}, schemaExpression: "string"},
+        {name: "NonNegative", kind: "constraint", appliesTo: ["integer", "number"], schema: {kind: "unknown"}, schemaExpression: ">=0"},
+    ],
+};
+
 const workspace = {
     project: {path: "/project/game.dtproj", root: "/project"},
     settings: {build: {mode: "manual"}},
-    tree: {root: {kind: "project", name: "game.dtproj", children: [{kind: "tableData", name: "rpg.item", path: table.path}]}},
-    schemas: {definitions: []},
+    tree: {root: {kind: "project", name: "game.dtproj", children: [
+        {kind: "tableData", name: "rpg.item", path: table.path},
+        {kind: "schemaDefinition", name: "#GameID", path: publicSchema.path},
+        {kind: "schemaFile", name: "common", path: publicSchema.path, children: [
+            {kind: "schemaDefinition", name: "#GameID", path: publicSchema.path},
+            {kind: "schemaDefinition", name: "#NonNegative", path: publicSchema.path},
+        ]},
+    ]}},
+    schemas: {definitions: [
+        {id: "common.#GameID", kind: "type", path: publicSchema.path, usages: [{definition: "common.#GameID", path: table.path, table: "rpg.item", field: "#PrimaryKey"}]},
+        {id: "common.#NonNegative", kind: "constraint", path: publicSchema.path, usages: []},
+    ]},
     foreignKeys: {diagnostics: []},
 };
 
 test.beforeEach(async ({page}) => {
-    await page.addInitScript(({table, workspace}) => {
+    await page.addInitScript(({table, workspace, publicSchema}) => {
         const api = {
             SelectProject: () => Promise.resolve(workspace),
             GetTable: () => Promise.resolve(table),
+            GetPublicSchema: () => Promise.resolve(publicSchema),
             UpdateCell: () => Promise.resolve({table, workspace}),
             SetCellFormula: () => Promise.resolve({table, workspace}),
             CreateRow: () => Promise.resolve({table, workspace}),
@@ -47,10 +67,33 @@ test.beforeEach(async ({page}) => {
             Undo: () => Promise.resolve({table, workspace, canUndo: false, canRedo: true}),
             Redo: () => Promise.resolve({table, workspace, canUndo: true, canRedo: false}),
             Export: () => Promise.resolve({files: []}),
+            CreateSchemaDefinition: (argument) => {
+                publicSchema.definitions.push({name: argument.name, kind: argument.kind, type: argument.type, appliesTo: argument.appliesTo, schema: {kind: "string"}, schemaExpression: argument.schemaExpression});
+                return Promise.resolve({schema: publicSchema, table, workspace});
+            },
+            SetSchemaDefinition: (argument) => {
+                const definition = publicSchema.definitions.find((entry) => entry.name === argument.name);
+                if (definition) {
+                    definition.kind = argument.kind;
+                    definition.type = argument.type;
+                    definition.appliesTo = argument.appliesTo;
+                    definition.schemaExpression = argument.schemaExpression;
+                }
+                return Promise.resolve({schema: publicSchema, table, workspace});
+            },
+            RenameSchemaDefinition: (argument) => {
+                const definition = publicSchema.definitions.find((entry) => entry.name === argument.oldName);
+                if (definition) definition.name = argument.newName;
+                return Promise.resolve({schema: publicSchema, table, workspace});
+            },
+            DeleteSchemaDefinition: (argument) => {
+                publicSchema.definitions = publicSchema.definitions.filter((entry) => entry.name !== argument.name);
+                return Promise.resolve({schema: publicSchema, table, workspace});
+            },
         };
         // Wails generated bindings resolve methods through this object.
         (window as Window & {go: unknown}).go = {main: {App: api}};
-    }, {table, workspace});
+    }, {table, workspace, publicSchema});
     await page.goto("/");
     await page.getByRole("button", {name: "File"}).click();
     await page.getByRole("navigation", {name: "Application menu"}).getByRole("button", {name: "Open project"}).click();
@@ -236,6 +279,32 @@ test("shows backend log entries in the GUI panel", async ({page}) => {
     }})));
     await page.getByRole("button", {name: /Logs/}).click();
     await expect(page.getByText("workspace refresh failed")).toBeVisible();
+});
+
+test("edits a public Schema definition from the project explorer", async ({page}) => {
+    await page.getByRole("button", {name: "#GameID"}).first().click();
+    await expect(page.getByText("Public Schema")).toBeVisible();
+    const expression = page.locator(".schema-editor-form textarea");
+    await expect(expression).toHaveValue("string");
+    await expression.fill(`string & =~"^[a-z]+$"`);
+    await page.getByRole("button", {name: "Apply"}).click();
+    await expect(expression).toHaveValue(`string & =~"^[a-z]+$"`);
+    await expect(page.getByText("Usages")).toBeVisible();
+    await expect(page.getByText("#PrimaryKey")).toBeVisible();
+});
+
+test("creates and renames a public Schema definition", async ({page}) => {
+    await page.getByRole("button", {name: "#GameID"}).first().click();
+    await page.getByRole("button", {name: "New definition"}).click();
+    await page.getByLabel("Name", {exact: true}).fill("Rarity");
+    await page.getByLabel("Type", {exact: true}).selectOption("enum");
+    await page.locator(".schema-editor-form textarea").fill(`"N" | "R"`);
+    await page.getByRole("button", {name: "Create"}).click();
+    await expect(page.getByRole("button", {name: "#Rarity"})).toBeVisible();
+    await page.getByRole("button", {name: "Rename"}).click();
+    await page.locator(".schema-rename-input").fill("RarityTier");
+    await page.getByRole("button", {name: "Confirm rename"}).click();
+    await expect(page.getByRole("button", {name: "#RarityTier"})).toBeVisible();
 });
 
 test("does not save an unchanged empty cell on blur", async ({page}) => {

@@ -11,6 +11,8 @@ export function ClearCell(arg1:workspace.CellUpdate):Promise<workspace.CellUpdat
 
 export function CreateRow(arg1:workspace.RowCreate):Promise<workspace.RowCreateResult>;
 
+export function CreateSchemaDefinition(arg1:workspace.SchemaDefinitionCreate):Promise<workspace.SchemaEditResult>;
+
 export function CreateTable(arg1:workspace.TableCreate):Promise<workspace.TableCreateResult>;
 
 export function CurrentWorkspace():Promise<workspace.View|boolean>;
@@ -19,7 +21,11 @@ export function DeleteColumn(arg1:workspace.ColumnDelete):Promise<workspace.Colu
 
 export function DeleteRow(arg1:workspace.RowDelete):Promise<workspace.RowDeleteResult>;
 
+export function DeleteSchemaDefinition(arg1:workspace.SchemaDefinitionDelete):Promise<workspace.SchemaEditResult>;
+
 export function Export():Promise<workspace.ExportResult>;
+
+export function GetPublicSchema(arg1:string):Promise<document.PublicSchema>;
 
 export function GetTable(arg1:string):Promise<document.Table>;
 
@@ -37,11 +43,15 @@ export function RenameColumn(arg1:workspace.ColumnRename):Promise<workspace.Colu
 
 export function RenameRow(arg1:workspace.RowRename):Promise<workspace.RowRenameResult>;
 
+export function RenameSchemaDefinition(arg1:workspace.SchemaDefinitionRename):Promise<workspace.SchemaEditResult>;
+
 export function SelectProject():Promise<workspace.View>;
 
 export function SetCellFormula(arg1:workspace.FormulaSet):Promise<workspace.FormulaSetResult>;
 
 export function SetColumnSchema(arg1:workspace.ColumnSchemaSet):Promise<workspace.ColumnSchemaSetResult>;
+
+export function SetSchemaDefinition(arg1:workspace.SchemaDefinitionSet):Promise<workspace.SchemaEditResult>;
 
 export function Undo(arg1:string):Promise<workspace.HistoryResult>;
 

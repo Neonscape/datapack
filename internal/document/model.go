@@ -64,10 +64,12 @@ type CSVExport struct {
 }
 
 type SchemaDefinition struct {
-	Name      string           `json:"name"`
-	Kind      string           `json:"kind"`
-	AppliesTo []string         `json:"appliesTo,omitempty"`
-	Schema    schemamodel.Node `json:"schema"`
+	Name             string           `json:"name"`
+	Kind             string           `json:"kind"`
+	Type             string           `json:"type,omitempty"`
+	AppliesTo        []string         `json:"appliesTo,omitempty"`
+	Schema           schemamodel.Node `json:"schema"`
+	SchemaExpression string           `json:"schemaExpression"`
 }
 
 type PublicSchema struct {

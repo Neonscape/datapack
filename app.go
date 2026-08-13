@@ -82,6 +82,28 @@ func (a *App) GetTable(path string) (document.Table, error) {
 	return a.workspace.GetTable(path)
 }
 
+// GetPublicSchema returns the structured representation of one public Schema
+// file in the currently open project.
+func (a *App) GetPublicSchema(path string) (document.PublicSchema, error) {
+	return a.workspace.GetPublicSchema(path)
+}
+
+func (a *App) CreateSchemaDefinition(create workspace.SchemaDefinitionCreate) (workspace.SchemaEditResult, error) {
+	return a.workspace.CreateSchemaDefinition(create)
+}
+
+func (a *App) SetSchemaDefinition(set workspace.SchemaDefinitionSet) (workspace.SchemaEditResult, error) {
+	return a.workspace.SetSchemaDefinition(set)
+}
+
+func (a *App) RenameSchemaDefinition(rename workspace.SchemaDefinitionRename) (workspace.SchemaEditResult, error) {
+	return a.workspace.RenameSchemaDefinition(rename)
+}
+
+func (a *App) DeleteSchemaDefinition(delete workspace.SchemaDefinitionDelete) (workspace.SchemaEditResult, error) {
+	return a.workspace.DeleteSchemaDefinition(delete)
+}
+
 func (a *App) CreateTable(create workspace.TableCreate) (workspace.TableCreateResult, error) {
 	return a.workspace.CreateTable(create)
 }

@@ -191,6 +191,41 @@ type ColumnMoveResult struct {
 	Workspace View           `json:"workspace"`
 }
 
+type SchemaDefinitionCreate struct {
+	Path             string   `json:"path"`
+	Name             string   `json:"name"`
+	Kind             string   `json:"kind"`
+	Type             string   `json:"type,omitempty"`
+	AppliesTo        []string `json:"appliesTo,omitempty"`
+	SchemaExpression string   `json:"schemaExpression"`
+}
+
+type SchemaDefinitionSet struct {
+	Path             string   `json:"path"`
+	Name             string   `json:"name"`
+	Kind             string   `json:"kind"`
+	Type             string   `json:"type,omitempty"`
+	AppliesTo        []string `json:"appliesTo,omitempty"`
+	SchemaExpression string   `json:"schemaExpression"`
+}
+
+type SchemaDefinitionRename struct {
+	Path    string `json:"path"`
+	OldName string `json:"oldName"`
+	NewName string `json:"newName"`
+}
+
+type SchemaDefinitionDelete struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+}
+
+type SchemaEditResult struct {
+	Schema    document.PublicSchema `json:"schema"`
+	Table     document.Table        `json:"table"`
+	Workspace View                  `json:"workspace"`
+}
+
 func NewService(configRoot string) *Service {
 	return &Service{configRoot: configRoot, history: map[string]*history{}}
 }
@@ -305,6 +340,224 @@ func (s *Service) GetTable(path string) (document.Table, error) {
 	}
 	s.log(logging.Debug, "table loaded", map[string]any{"path": path, "rows": len(table.Rows), "columns": len(table.Columns)})
 	return withTableMetadata(table, *s.current), nil
+}
+
+// GetPublicSchema loads a public Schema document that belongs to the current
+// project.
+func (s *Service) GetPublicSchema(path string) (document.PublicSchema, error) {
+	if s.current == nil {
+		err := fmt.Errorf("no project is open")
+		s.log(logging.Error, "get public schema failed", map[string]any{"path": path, "error": err.Error()})
+		return document.PublicSchema{}, err
+	}
+	if !containsSchemaFile(s.current.Tree.Root, path) {
+		err := fmt.Errorf("schema file %q is not part of the open project", path)
+		s.log(logging.Error, "get public schema failed", map[string]any{"path": path, "error": err.Error()})
+		return document.PublicSchema{}, err
+	}
+	schema, err := document.LoadPublicSchema(path)
+	if err != nil {
+		s.log(logging.Error, "get public schema failed", map[string]any{"path": path, "error": err.Error()})
+		return document.PublicSchema{}, err
+	}
+	s.log(logging.Debug, "public schema loaded", map[string]any{"path": path, "definitions": len(schema.Definitions)})
+	return schema, nil
+}
+
+func (s *Service) schemaDefinitionScope(path string) (string, error) {
+	if containsSchemaFile(s.current.Tree.Root, path) {
+		return "public", nil
+	}
+	if containsTable(s.current.Tree.Root, path) {
+		return "local", nil
+	}
+	return "", fmt.Errorf("path %q is not part of the open project", path)
+}
+
+func (s *Service) schemaDefinitionID(path, name string) (schemaregistry.ID, error) {
+	if containsSchemaFile(s.current.Tree.Root, path) {
+		schema, err := document.LoadPublicSchema(path)
+		if err != nil {
+			return "", err
+		}
+		return schemaregistry.ID(schema.Package + ".#" + name), nil
+	}
+	table, err := document.LoadTable(path)
+	if err != nil {
+		return "", err
+	}
+	logical := table.Name
+	if table.Namespace != "" {
+		logical = table.Namespace + "." + table.Name
+	}
+	return schemaregistry.ID(logical + "._local.#" + name), nil
+}
+
+// CreateSchemaDefinition adds one definition to a public Schema file or to a
+// table's local Schema, then refreshes the workspace snapshot.
+func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaEditResult, error) {
+	if s.current == nil {
+		return SchemaEditResult{}, fmt.Errorf("no project is open")
+	}
+	update := document.SchemaDefinitionUpdate{Kind: create.Kind, Type: create.Type, AppliesTo: create.AppliesTo, SchemaExpression: create.SchemaExpression}
+	scope, err := s.schemaDefinitionScope(create.Path)
+	if err != nil {
+		return SchemaEditResult{}, err
+	}
+	var result SchemaEditResult
+	if scope == "public" {
+		schema, err := document.CreatePublicSchemaDefinition(create.Path, create.Name, update)
+		if err != nil {
+			s.log(logging.Error, "create schema definition failed", map[string]any{"path": create.Path, "name": create.Name, "error": err.Error()})
+			return SchemaEditResult{}, err
+		}
+		result.Schema = schema
+	} else {
+		table, err := document.CreateLocalSchemaDefinition(create.Path, create.Name, update)
+		if err != nil {
+			s.log(logging.Error, "create local schema definition failed", map[string]any{"path": create.Path, "name": create.Name, "error": err.Error()})
+			return SchemaEditResult{}, err
+		}
+		result.Table = table
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return SchemaEditResult{}, err
+	}
+	if result.Table.Path != "" {
+		result.Table = withTableMetadata(result.Table, view)
+	}
+	result.Workspace = view
+	s.log(logging.Info, "schema definition created", map[string]any{"path": create.Path, "name": create.Name, "scope": scope})
+	return result, nil
+}
+
+// SetSchemaDefinition replaces one definition expression and metadata.
+func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult, error) {
+	if s.current == nil {
+		return SchemaEditResult{}, fmt.Errorf("no project is open")
+	}
+	update := document.SchemaDefinitionUpdate{Kind: set.Kind, Type: set.Type, AppliesTo: set.AppliesTo, SchemaExpression: set.SchemaExpression}
+	scope, err := s.schemaDefinitionScope(set.Path)
+	if err != nil {
+		return SchemaEditResult{}, err
+	}
+	var result SchemaEditResult
+	if scope == "public" {
+		schema, err := document.SetPublicSchemaDefinition(set.Path, set.Name, update)
+		if err != nil {
+			s.log(logging.Error, "set schema definition failed", map[string]any{"path": set.Path, "name": set.Name, "error": err.Error()})
+			return SchemaEditResult{}, err
+		}
+		result.Schema = schema
+	} else {
+		table, err := document.SetLocalSchemaDefinition(set.Path, set.Name, update)
+		if err != nil {
+			s.log(logging.Error, "set local schema definition failed", map[string]any{"path": set.Path, "name": set.Name, "error": err.Error()})
+			return SchemaEditResult{}, err
+		}
+		result.Table = table
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return SchemaEditResult{}, err
+	}
+	if result.Table.Path != "" {
+		result.Table = withTableMetadata(result.Table, view)
+	}
+	result.Workspace = view
+	s.log(logging.Info, "schema definition updated", map[string]any{"path": set.Path, "name": set.Name, "scope": scope})
+	return result, nil
+}
+
+// RenameSchemaDefinition renames a definition and rewrites every Schema
+// reference across all project source files.
+func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaEditResult, error) {
+	if s.current == nil {
+		return SchemaEditResult{}, fmt.Errorf("no project is open")
+	}
+	scope, err := s.schemaDefinitionScope(rename.Path)
+	if err != nil {
+		return SchemaEditResult{}, err
+	}
+	var paths []string
+	collectSourcePaths(s.current.Tree.Root, &paths)
+	var result SchemaEditResult
+	if scope == "public" {
+		schema, err := document.RenamePublicSchemaDefinition(rename.Path, rename.OldName, rename.NewName, paths)
+		if err != nil {
+			s.log(logging.Error, "rename schema definition failed", map[string]any{"path": rename.Path, "name": rename.OldName, "error": err.Error()})
+			return SchemaEditResult{}, err
+		}
+		result.Schema = schema
+	} else {
+		table, err := document.RenameLocalSchemaDefinition(rename.Path, rename.OldName, rename.NewName, paths)
+		if err != nil {
+			s.log(logging.Error, "rename local schema definition failed", map[string]any{"path": rename.Path, "name": rename.OldName, "error": err.Error()})
+			return SchemaEditResult{}, err
+		}
+		result.Table = table
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return SchemaEditResult{}, err
+	}
+	if result.Table.Path != "" {
+		result.Table = withTableMetadata(result.Table, view)
+	}
+	result.Workspace = view
+	s.log(logging.Info, "schema definition renamed", map[string]any{"path": rename.Path, "old": rename.OldName, "new": rename.NewName})
+	return result, nil
+}
+
+// DeleteSchemaDefinition removes a definition unless it is still referenced.
+func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaEditResult, error) {
+	if s.current == nil {
+		return SchemaEditResult{}, fmt.Errorf("no project is open")
+	}
+	scope, err := s.schemaDefinitionScope(delete.Path)
+	if err != nil {
+		return SchemaEditResult{}, err
+	}
+	id, err := s.schemaDefinitionID(delete.Path, delete.Name)
+	if err != nil {
+		return SchemaEditResult{}, err
+	}
+	for _, definition := range s.current.Schemas.Definitions {
+		if definition.ID != id || len(definition.Usages) == 0 {
+			continue
+		}
+		usage := definition.Usages[0]
+		err := fmt.Errorf("Schema %s is referenced by %s field %s", id, usage.Path, usage.Field)
+		s.log(logging.Warn, "schema definition delete blocked", map[string]any{"path": delete.Path, "name": delete.Name, "error": err.Error()})
+		return SchemaEditResult{}, err
+	}
+	var result SchemaEditResult
+	if scope == "public" {
+		schema, err := document.DeletePublicSchemaDefinition(delete.Path, delete.Name)
+		if err != nil {
+			s.log(logging.Error, "delete schema definition failed", map[string]any{"path": delete.Path, "name": delete.Name, "error": err.Error()})
+			return SchemaEditResult{}, err
+		}
+		result.Schema = schema
+	} else {
+		table, err := document.DeleteLocalSchemaDefinition(delete.Path, delete.Name)
+		if err != nil {
+			s.log(logging.Error, "delete local schema definition failed", map[string]any{"path": delete.Path, "name": delete.Name, "error": err.Error()})
+			return SchemaEditResult{}, err
+		}
+		result.Table = table
+	}
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return SchemaEditResult{}, err
+	}
+	if result.Table.Path != "" {
+		result.Table = withTableMetadata(result.Table, view)
+	}
+	result.Workspace = view
+	s.log(logging.Info, "schema definition deleted", map[string]any{"path": delete.Path, "name": delete.Name, "scope": scope})
+	return result, nil
 }
 
 func (s *Service) CreateTable(create TableCreate) (TableCreateResult, error) {
@@ -776,6 +1029,27 @@ func containsTable(node projecttree.Node, path string) bool {
 		}
 	}
 	return false
+}
+
+func containsSchemaFile(node projecttree.Node, path string) bool {
+	if node.Kind == projecttree.NodeSchemaFile && node.Path == path {
+		return true
+	}
+	for _, child := range node.Children {
+		if containsSchemaFile(child, path) {
+			return true
+		}
+	}
+	return false
+}
+
+func collectSourcePaths(node projecttree.Node, paths *[]string) {
+	if (node.Kind == projecttree.NodeTable || node.Kind == projecttree.NodeSchemaFile) && node.Path != "" {
+		*paths = append(*paths, node.Path)
+	}
+	for _, child := range node.Children {
+		collectSourcePaths(child, paths)
+	}
 }
 
 func validTableName(value string) bool {
