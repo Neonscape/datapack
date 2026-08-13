@@ -44,6 +44,7 @@ const workspace = {
         {id: "rpg.item._local.#Position", kind: "type", path: table.path, table: "rpg.item", usages: []},
     ]},
     foreignKeys: {diagnostics: []},
+    compile: {mode: "manual", pending: false, compiledAt: "2026-08-13T12:00:00Z", diagnostics: []},
 };
 
 test.beforeEach(async ({page}) => {
@@ -91,9 +92,12 @@ test.beforeEach(async ({page}) => {
                 publicSchema.definitions = publicSchema.definitions.filter((entry) => entry.name !== argument.name);
                 return Promise.resolve({schema: publicSchema, table, workspace});
             },
+            SetCompileMode: (mode) => Promise.resolve({...workspace, settings: {...workspace.settings, build: {...workspace.settings.build, mode}}, compile: {...workspace.compile, mode}}),
+            Compile: () => Promise.resolve({workspace: {...workspace, compile: {...workspace.compile, pending: false}}}),
         };
         // Wails generated bindings resolve methods through this object.
         (window as Window & {go: unknown}).go = {main: {App: api}};
+        (window as Window & {__mock: unknown}).__mock = {table, workspace};
     }, {table, workspace, publicSchema});
     await page.goto("/");
     await page.getByRole("button", {name: "File"}).click();
@@ -256,6 +260,36 @@ test("shows local references without prefix and inserts picked references", asyn
     await expect(schema).toHaveValue("#Position & common.#NonNegative");
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeHidden();
+});
+
+test("toggles compile mode between manual and auto", async ({page}) => {
+    await expect(page.getByRole("button", {name: "Toggle compile mode"})).toHaveText("Manual compile");
+    await expect(page.getByRole("button", {name: "Compile", exact: true})).toBeDisabled();
+    await page.getByRole("button", {name: "Toggle compile mode"}).click();
+    await expect(page.getByRole("button", {name: "Toggle compile mode"})).toHaveText("Auto compile");
+    await expect(page.getByRole("button", {name: "Compile", exact: true})).toBeHidden();
+    await page.getByRole("button", {name: "Toggle compile mode"}).click();
+    await expect(page.getByRole("button", {name: "Toggle compile mode"})).toHaveText("Manual compile");
+});
+
+test("compiles manually after pending edits", async ({page}) => {
+    await page.evaluate(() => {
+        const mock = (window as Window & {__mock: {table: unknown; workspace: {compile: {pending: boolean}}}}).__mock;
+        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        api.UpdateCell = () => Promise.resolve({table: mock.table, workspace: {...mock.workspace, compile: {...mock.workspace.compile, pending: true}}});
+    });
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    await page.mouse.dblclick(box.x + 565, box.y + 50);
+    await page.locator("textarea").fill("Iron Sword");
+    await page.mouse.click(box.x + 1000, box.y + 200);
+    await expect(page.getByRole("button", {name: "Toggle compile mode"})).toHaveText(/pending/);
+    await expect(page.getByRole("button", {name: "Compile", exact: true})).toBeEnabled();
+    await page.getByRole("button", {name: "Compile", exact: true}).click();
+    await expect(page.getByRole("button", {name: "Compile", exact: true})).toBeDisabled();
+    await expect(page.getByRole("button", {name: "Toggle compile mode"})).not.toHaveText(/pending/);
 });
 
 test("creates and opens a table from the project explorer", async ({page}) => {

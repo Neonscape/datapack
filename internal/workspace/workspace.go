@@ -16,6 +16,7 @@ import (
 	"cuelang.org/go/cue/load"
 	"cuelang.org/go/cue/parser"
 	"cuelang.org/go/cue/token"
+	"datapack/internal/compiler"
 	"datapack/internal/document"
 	"datapack/internal/export/csv"
 	"datapack/internal/foreignkey"
@@ -31,13 +32,26 @@ type View struct {
 	Tree        projecttree.Tree     `json:"tree"`
 	Schemas     schemaregistry.Index `json:"schemas"`
 	ForeignKeys foreignkey.Summary   `json:"foreignKeys"`
+	Compile     CompileState         `json:"compile"`
+}
+
+// CompileState carries the current build-mode state and the outcome of the
+// most recent full compile.
+type CompileState struct {
+	Mode        string                `json:"mode"`
+	Pending     bool                  `json:"pending"`
+	CompiledAt  string                `json:"compiledAt,omitempty"`
+	Diagnostics []compiler.Diagnostic `json:"diagnostics"`
 }
 
 type Service struct {
-	configRoot string
-	current    *View
-	history    map[string]*history
-	logger     *logging.Logger
+	configRoot       string
+	current          *View
+	history          map[string]*history
+	logger           *logging.Logger
+	revision         int
+	compiledRevision int
+	compileState     CompileState
 }
 
 type history struct {
@@ -129,6 +143,46 @@ type RowRenameResult struct {
 
 type ExportResult struct {
 	Files []string `json:"files"`
+}
+
+type CompileResult struct {
+	Workspace View `json:"workspace"`
+}
+
+// Compile runs one full compile and publishes the outcome into the workspace.
+func (s *Service) Compile() (CompileResult, error) {
+	if s.current == nil {
+		return CompileResult{}, fmt.Errorf("no project is open")
+	}
+	s.compile()
+	return CompileResult{Workspace: *s.current}, nil
+}
+
+// SetCompileMode switches between auto and manual compilation and persists the
+// user-level editor settings.
+func (s *Service) SetCompileMode(mode string) (View, error) {
+	if s.current == nil {
+		return View{}, fmt.Errorf("no project is open")
+	}
+	if mode != "auto" && mode != "manual" {
+		return View{}, fmt.Errorf("unsupported build mode %q", mode)
+	}
+	settings := s.current.Settings
+	settings.Build.Mode = mode
+	if err := SaveEditorSettings(s.configRoot, settings); err != nil {
+		s.log(logging.Error, "save editor settings failed", map[string]any{"error": err.Error()})
+		return View{}, err
+	}
+	s.current.Settings = settings
+	tree, err := projecttree.Scan(s.current.Project.Path, s.current.Project.Config.TableRoots, s.current.Project.Config.SchemaRoots, s.current.Project.Config.Exclude)
+	if err != nil {
+		s.log(logging.Error, "workspace refresh failed", map[string]any{"error": err.Error()})
+		return View{}, fmt.Errorf("refresh project tree: %w", err)
+	}
+	view := buildView(s.current.Project, settings, tree)
+	s.publishView(&view)
+	s.log(logging.Info, "compile mode changed", map[string]any{"mode": mode})
+	return view, nil
 }
 
 type TableCreate struct {
@@ -272,10 +326,62 @@ func (s *Service) OpenProject(path string) (View, error) {
 		s.log(logging.Error, "open project failed", map[string]any{"path": path, "error": err.Error()})
 		return View{}, err
 	}
+	s.revision = 0
+	s.compiledRevision = 0
 	view := buildView(project, settings, tree)
 	s.current = &view
-	s.log(logging.Info, "open project completed", map[string]any{"path": path, "schemas": len(view.Schemas.Definitions), "duration_ms": time.Since(started).Milliseconds()})
+	s.compile()
+	view = *s.current
+	s.log(logging.Info, "open project completed", map[string]any{"path": path, "schemas": len(view.Schemas.Definitions), "compile_diagnostics": len(view.Compile.Diagnostics), "duration_ms": time.Since(started).Milliseconds()})
 	return view, nil
+}
+
+// compile runs one full compile against the current tree and publishes the
+// result into the current view.
+func (s *Service) compile() compiler.Result {
+	started := time.Now()
+	var publicSchemas []document.PublicSchema
+	var tables []document.Table
+	collectDocuments(s.current.Tree.Root, &publicSchemas, &tables)
+	result := compiler.CompileAll(publicSchemas, tables)
+	appendTreeDiagnostics(s.current.Tree.Root, &result)
+	diagnostics := result.Diagnostics
+	if diagnostics == nil {
+		diagnostics = []compiler.Diagnostic{}
+	}
+	s.compileState = CompileState{
+		Mode:        s.current.Settings.Build.Mode,
+		CompiledAt:  time.Now().UTC().Format(time.RFC3339),
+		Diagnostics: diagnostics,
+	}
+	s.compiledRevision = s.revision
+	if s.current != nil {
+		s.current.Compile = s.compileState
+	}
+	s.log(logging.Info, "compile completed", map[string]any{"diagnostics": len(result.Diagnostics), "mode": s.compileState.Mode, "duration_ms": time.Since(started).Milliseconds()})
+	return result
+}
+
+func appendTreeDiagnostics(node projecttree.Node, result *compiler.Result) {
+	if node.Kind == projecttree.NodeDamaged {
+		for _, diagnostic := range node.Diagnostics {
+			result.Diagnostics = append(result.Diagnostics, compiler.Diagnostic{Path: node.Path, Message: diagnostic.Message})
+		}
+	}
+	for _, child := range node.Children {
+		appendTreeDiagnostics(child, result)
+	}
+}
+
+// publishView stamps the compile state onto a freshly built view.
+func (s *Service) publishView(view *View) {
+	view.Compile = s.compileState
+	view.Compile.Mode = s.current.Settings.Build.Mode
+	view.Compile.Pending = s.compiledRevision < s.revision
+	if view.Compile.Diagnostics == nil {
+		view.Compile.Diagnostics = []compiler.Diagnostic{}
+	}
+	s.current = view
 }
 
 func buildSchemaIndex(tree projecttree.Tree) schemaregistry.Index {
@@ -445,7 +551,7 @@ func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaE
 		}
 		result.Table = table
 	}
-	view, err := s.refreshCurrentView()
+	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
@@ -495,7 +601,7 @@ func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult
 		}
 		result.Table = table
 	}
-	view, err := s.refreshCurrentView()
+	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
@@ -535,7 +641,7 @@ func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaE
 		}
 		result.Table = table
 	}
-	view, err := s.refreshCurrentView()
+	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
@@ -585,7 +691,7 @@ func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaE
 		}
 		result.Table = table
 	}
-	view, err := s.refreshCurrentView()
+	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
@@ -896,7 +1002,7 @@ _editor: {columns: {}}
 		_ = os.Remove(directory)
 		return TableCreateResult{}, fmt.Errorf("validate created table: %w", err)
 	}
-	view, err := s.refreshCurrentView()
+	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return TableCreateResult{}, err
 	}
@@ -973,7 +1079,7 @@ func (s *Service) edit(path string, operation func() (document.Table, error)) (d
 		s.log(logging.Error, "table edit failed", map[string]any{"path": path, "error": err.Error()})
 		return document.Table{}, View{}, err
 	}
-	view, err := s.refreshCurrentView()
+	view, err := s.refreshAfterEdit()
 	if err != nil {
 		s.log(logging.Error, "workspace refresh failed after edit", map[string]any{"path": path, "error": err.Error()})
 		return document.Table{}, View{}, err
@@ -1014,7 +1120,7 @@ func (s *Service) restoreHistory(path string, undo bool) (HistoryResult, error) 
 	if err != nil {
 		return HistoryResult{}, err
 	}
-	view, err := s.refreshCurrentView()
+	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return HistoryResult{}, err
 	}
@@ -1130,7 +1236,7 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 	if err != nil {
 		return RowRenameResult{}, err
 	}
-	view, err := s.refreshCurrentView()
+	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return RowRenameResult{}, err
 	}
@@ -1139,30 +1245,26 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 
 // Export writes configured CSV files only when the current workspace has no
 // Schema or foreign-key diagnostics.
+// Export writes configured CSV files only when a full compile is clean. The
+// exporter receives the compiled package and never re-validates data.
 func (s *Service) Export() (ExportResult, error) {
 	if s.current == nil {
 		err := fmt.Errorf("no project is open")
 		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
 		return ExportResult{}, err
 	}
-	if len(s.current.Schemas.Diagnostics) > 0 {
-		err := fmt.Errorf("export blocked by %d Schema diagnostics", len(s.current.Schemas.Diagnostics))
+	compiled := s.compile()
+	if len(compiled.Diagnostics) > 0 {
+		err := fmt.Errorf("export blocked by %d diagnostics: %s", len(compiled.Diagnostics), compiled.Diagnostics[0].Message)
 		s.log(logging.Warn, "export blocked", map[string]any{"error": err.Error()})
 		return ExportResult{}, err
 	}
-	if len(s.current.ForeignKeys.Diagnostics) > 0 {
-		err := fmt.Errorf("export blocked by %d foreign key diagnostics", len(s.current.ForeignKeys.Diagnostics))
-		s.log(logging.Warn, "export blocked", map[string]any{"error": err.Error()})
-		return ExportResult{}, err
-	}
-	var tables []document.Table
-	collectTables(s.current.Tree.Root, &tables)
 	destination, err := exportDirectory(s.current.Project)
 	if err != nil {
 		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
 		return ExportResult{}, err
 	}
-	result, err := csv.Export(destination, tables)
+	result, err := csv.Export(destination, compiled.Package)
 	if err != nil {
 		s.log(logging.Error, "export failed", map[string]any{"destination": destination, "error": err.Error()})
 		return ExportResult{}, err
@@ -1311,9 +1413,24 @@ func (s *Service) refreshCurrentView() (View, error) {
 		s.log(logging.Error, "workspace refresh failed", map[string]any{"error": err.Error()})
 		return View{}, fmt.Errorf("refresh project tree: %w", err)
 	}
+	s.revision++
 	view := buildView(project, s.current.Settings, tree)
-	s.current = &view
-	s.log(logging.Debug, "workspace refresh completed", map[string]any{"schemas": len(view.Schemas.Definitions), "duration_ms": time.Since(started).Milliseconds()})
+	s.publishView(&view)
+	s.log(logging.Debug, "workspace refresh completed", map[string]any{"schemas": len(view.Schemas.Definitions), "revision": s.revision, "duration_ms": time.Since(started).Milliseconds()})
+	return view, nil
+}
+
+// refreshAfterEdit refreshes the workspace snapshot and, in auto mode,
+// immediately compiles the edited sources.
+func (s *Service) refreshAfterEdit() (View, error) {
+	view, err := s.refreshCurrentView()
+	if err != nil {
+		return View{}, err
+	}
+	if s.current.Settings.Build.Mode == "auto" {
+		s.compile()
+		view = *s.current
+	}
 	return view, nil
 }
 
@@ -1376,13 +1493,21 @@ func validNamespace(value string) bool {
 
 func withDiagnostics(table document.Table, view View) document.Table {
 	evaluated := formula.Evaluate(table)
-	for _, diagnostic := range evaluated.Diagnostics {
-		table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: diagnostic.RowID, Column: diagnostic.Column, Message: diagnostic.Message})
-	}
-	appendCueDiagnostics(&table, evaluated.Rows)
-	for _, diagnostic := range view.ForeignKeys.Diagnostics {
-		if diagnostic.Path == table.Path {
+	if view.Compile.Mode == "manual" {
+		for _, diagnostic := range view.Compile.Diagnostics {
+			if diagnostic.Path == table.Path {
+				table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: diagnostic.RowID, Column: diagnostic.Column, Message: diagnostic.Message})
+			}
+		}
+	} else {
+		for _, diagnostic := range evaluated.Diagnostics {
 			table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: diagnostic.RowID, Column: diagnostic.Column, Message: diagnostic.Message})
+		}
+		appendCueDiagnostics(&table, evaluated.Rows)
+		for _, diagnostic := range view.ForeignKeys.Diagnostics {
+			if diagnostic.Path == table.Path {
+				table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: diagnostic.RowID, Column: diagnostic.Column, Message: diagnostic.Message})
+			}
 		}
 	}
 	for _, formula := range table.Formulas {

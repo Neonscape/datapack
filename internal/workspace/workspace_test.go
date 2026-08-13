@@ -983,6 +983,112 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestOpenProjectCompilesWorkspace(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	view, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Compile.Mode != "auto" || view.Compile.Pending || len(view.Compile.Diagnostics) != 0 || view.Compile.CompiledAt == "" {
+		t.Fatalf("compile state = %#v", view.Compile)
+	}
+}
+
+func TestManualModeDefersCompileUntilRequested(t *testing.T) {
+	projectRoot := t.TempDir()
+	configRoot := t.TempDir()
+	writeFile(t, SettingsPath(configRoot), `{
+  "version": 1,
+  "build": {"mode": "manual"}
+}`)
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {price: int & >=0}
+rows: {sword: {price: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(configRoot)
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.UpdateCell(CellUpdate{Path: path, RowID: "sword", Column: "price", Expression: "-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Table.Diagnostics) != 0 {
+		t.Fatalf("manual mode evaluated diagnostics on edit: %#v", result.Table.Diagnostics)
+	}
+	if !result.Workspace.Compile.Pending {
+		t.Fatalf("compile state = %#v", result.Workspace.Compile)
+	}
+	compiled, err := service.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if compiled.Workspace.Compile.Pending || len(compiled.Workspace.Compile.Diagnostics) == 0 {
+		t.Fatalf("compile state = %#v", compiled.Workspace.Compile)
+	}
+	table, err := service.GetTable(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasCellDiagnostic(table, "sword", "price") {
+		t.Fatalf("compiled diagnostics = %#v", table.Diagnostics)
+	}
+	if _, err := service.Export(); err == nil {
+		t.Fatal("Export() accepted compile diagnostics in manual mode")
+	}
+}
+
+func TestSetCompileModePersistsSettings(t *testing.T) {
+	projectRoot := t.TempDir()
+	configRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(configRoot)
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	view, err := service.SetCompileMode("manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Compile.Mode != "manual" || view.Settings.Build.Mode != "manual" {
+		t.Fatalf("view = %#v", view)
+	}
+	settings, err := LoadEditorSettings(configRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Build.Mode != "manual" {
+		t.Fatalf("settings = %#v", settings)
+	}
+	if _, err := service.SetCompileMode("invalid"); err == nil {
+		t.Fatal("SetCompileMode() accepted an invalid mode")
+	}
+}
+
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

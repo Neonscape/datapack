@@ -158,6 +158,17 @@ func (a *App) Export() (workspace.ExportResult, error) {
 	return a.workspace.Export()
 }
 
+// Compile runs one full compile and returns the refreshed workspace view.
+func (a *App) Compile() (workspace.CompileResult, error) {
+	return a.workspace.Compile()
+}
+
+// SetCompileMode switches between auto and manual compilation and persists
+// the user-level editor settings.
+func (a *App) SetCompileMode(mode string) (workspace.View, error) {
+	return a.workspace.SetCompileMode(mode)
+}
+
 // AddColumn adds a column and initializes its value for every existing row.
 func (a *App) AddColumn(add workspace.ColumnAdd) (workspace.ColumnAddResult, error) {
 	return a.workspace.AddColumn(add)

@@ -9,6 +9,8 @@ export function AddRow(arg1:workspace.RowAdd):Promise<workspace.RowAddResult>;
 
 export function ClearCell(arg1:workspace.CellUpdate):Promise<workspace.CellUpdateResult>;
 
+export function Compile():Promise<workspace.CompileResult>;
+
 export function CreateRow(arg1:workspace.RowCreate):Promise<workspace.RowCreateResult>;
 
 export function CreateSchemaDefinition(arg1:workspace.SchemaDefinitionCreate):Promise<workspace.SchemaEditResult>;
@@ -50,6 +52,8 @@ export function SelectProject():Promise<workspace.View>;
 export function SetCellFormula(arg1:workspace.FormulaSet):Promise<workspace.FormulaSetResult>;
 
 export function SetColumnSchema(arg1:workspace.ColumnSchemaSet):Promise<workspace.ColumnSchemaSetResult>;
+
+export function SetCompileMode(arg1:string):Promise<workspace.View>;
 
 export function SetSchemaDefinition(arg1:workspace.SchemaDefinitionSet):Promise<workspace.SchemaEditResult>;
 

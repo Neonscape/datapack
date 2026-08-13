@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type GridCell, type GridColumn, type GridSelection, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddColumn, ClearCell, CreateRow, CreateSchemaDefinition, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, Export, GetPublicSchema, GetTable, MoveColumn, Paste, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, SelectProject, SetCellFormula, SetColumnSchema, SetSchemaDefinition, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, Export, GetPublicSchema, GetTable, MoveColumn, Paste, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetSchemaDefinition, Undo, UpdateCell} from "../wailsjs/go/main/App";
 import {EventsOn} from "../wailsjs/runtime/runtime";
 
 type LogEntry = {
@@ -68,6 +68,12 @@ type WorkspaceView = {
     };
     schemas: SchemaIndex;
     foreignKeys: ForeignKeySummary;
+    compile: {
+        mode: "auto" | "manual";
+        pending: boolean;
+        compiledAt?: string;
+        diagnostics: {path: string; table?: string; field?: string; rowID?: string; column?: string; message: string}[];
+    };
 };
 
 type SchemaUsage = {
@@ -1043,6 +1049,32 @@ function App() {
         }
     }
 
+    async function toggleCompileMode() {
+        if (!workspace) return;
+        setError("");
+        try {
+            const mode = workspace.compile.mode === "auto" ? "manual" : "auto";
+            const view = await SetCompileMode(mode) as WorkspaceView;
+            setWorkspace(view);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
+    async function compileProject() {
+        if (!workspace) return;
+        setError("");
+        try {
+            const result = await Compile() as {workspace: WorkspaceView};
+            setWorkspace(result.workspace);
+            if (table) {
+                setTable(await GetTable(table.path) as TableDocument);
+            }
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
     return (
         <main className="app-shell" onContextMenu={(event) => event.preventDefault()}>
             <header className="app-header">
@@ -1066,7 +1098,9 @@ function App() {
                 </nav>
                 <span className="project-name">{workspace?.tree.root.name ?? "No project open"}</span>
                 <div className="header-actions">
-                    {workspace && <span className={`build-mode build-mode-${workspace.settings.build.mode}`}>{workspace.settings.build.mode === "auto" ? "Auto compile" : "Manual compile"}</span>}
+                    {workspace && <button className={`build-mode build-mode-${workspace.compile.mode} build-mode-toggle`} aria-label="Toggle compile mode" title="Switch between auto and manual compile" onClick={toggleCompileMode}>{workspace.compile.mode === "auto" ? "Auto compile" : "Manual compile"}{workspace.compile.pending ? " · pending" : ""}</button>}
+                    {workspace && workspace.compile.mode === "manual" && <button className="compile-button" disabled={!workspace.compile.pending} onClick={compileProject}>Compile</button>}
+                    {workspace && workspace.compile.diagnostics.length > 0 && <span className="compile-errors" title="Compile diagnostics">{workspace.compile.diagnostics.length}</span>}
                     {workspace && <button className="export-button" onClick={exportProject}>Export CSV</button>}
                 </div>
             </header>
@@ -1115,6 +1149,13 @@ function App() {
                         {(workspace.foreignKeys.diagnostics ?? []).length > 0 && <div className="schema-diagnostics">
                             {(workspace.foreignKeys.diagnostics ?? []).map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.rowID}:${diagnostic.column}:${diagnostic.message}`}>
                                 <code>{diagnostic.rowID}.{diagnostic.column}</code>
+                                <span>{diagnostic.message}</span>
+                            </div>)}
+                        </div>}
+                        {workspace.compile.mode === "manual" && workspace.compile.diagnostics.length > 0 && <div className="schema-diagnostics compile-diagnostics">
+                            <div className="schema-diagnostics-title">Compile diagnostics</div>
+                            {workspace.compile.diagnostics.map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.path}:${diagnostic.rowID ?? ""}:${diagnostic.column ?? ""}:${diagnostic.message}`}>
+                                <code>{[diagnostic.rowID, diagnostic.column].filter(Boolean).join(".") || diagnostic.field || diagnostic.table || "compile"}</code>
                                 <span>{diagnostic.message}</span>
                             </div>)}
                         </div>}

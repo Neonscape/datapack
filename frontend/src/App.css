@@ -131,6 +131,11 @@
     font-weight: 600;
 }
 
+.build-mode-toggle {
+    border: 1px solid transparent;
+    cursor: pointer;
+}
+
 .build-mode-auto {
     color: #11633c;
     background: #e2f4e9;
@@ -139,6 +144,50 @@
 .build-mode-manual {
     color: #805a0a;
     background: #fff3d6;
+}
+
+.compile-button {
+    border: 1px solid #9eb8bf;
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: #285460;
+    background: #ffffff;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.compile-button:hover:not(:disabled) {
+    background: #edf5f6;
+}
+
+.compile-button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.compile-errors {
+    display: grid;
+    place-items: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    color: #ffffff;
+    background: #b34848;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.compile-diagnostics {
+    border-top: 1px solid #e1caca;
+}
+
+.schema-diagnostics-title {
+    padding: 8px 10px 4px;
+    color: #863e3e;
+    font-size: 12px;
+    font-weight: 700;
 }
 
 .workbench {

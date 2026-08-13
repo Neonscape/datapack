@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"datapack/internal/compiler"
 	"datapack/internal/document"
 )
 
@@ -21,7 +22,11 @@ _export: {csv: {enabled: true, columns: ["id", "name", "tags"]}}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := Export(filepath.Join(root, "exports"), []document.Table{table})
+	compiled := compiler.CompileAll(nil, []document.Table{table})
+	if compiled.Package == nil {
+		t.Fatalf("compile diagnostics = %#v", compiled.Diagnostics)
+	}
+	result, err := Export(filepath.Join(root, "exports"), compiled.Package)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +39,7 @@ _export: {csv: {enabled: true, columns: ["id", "name", "tags"]}}`)
 	}
 }
 
-func TestExportLeavesExistingOutputWhenValidationFails(t *testing.T) {
+func TestExportBlocksOnValidationProblems(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "item.cue")
 	writeFile(t, path, `package item
@@ -49,8 +54,12 @@ _export: {csv: {enabled: true, columns: ["id", "price"]}}`)
 	}
 	destination := filepath.Join(root, "exports")
 	writeFile(t, filepath.Join(destination, "previous.csv"), "previous")
-	if _, err := Export(destination, []document.Table{table}); err == nil {
-		t.Fatal("Export() accepted an invalid table")
+	compiled := compiler.CompileAll(nil, []document.Table{table})
+	if compiled.Package != nil {
+		t.Fatal("CompileAll() produced a package despite invalid rows")
+	}
+	if _, err := Export(destination, compiled.Package); err == nil {
+		t.Fatal("Export() accepted a nil compiled package")
 	}
 	contents, err := os.ReadFile(filepath.Join(destination, "previous.csv"))
 	if err != nil || string(contents) != "previous" {
@@ -80,7 +89,11 @@ _export: {csv: {enabled: true, columns: ["id", "baseAttack", "attack"]}}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := Export(filepath.Join(root, "exports"), []document.Table{table})
+	compiled := compiler.CompileAll(nil, []document.Table{table})
+	if compiled.Package == nil {
+		t.Fatalf("compile diagnostics = %#v", compiled.Diagnostics)
+	}
+	result, err := Export(filepath.Join(root, "exports"), compiled.Package)
 	if err != nil {
 		t.Fatal(err)
 	}

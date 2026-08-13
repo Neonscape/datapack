@@ -73,3 +73,39 @@ func validateEditorSettings(settings EditorSettings) error {
 	}
 	return nil
 }
+
+// SaveEditorSettings atomically replaces the user-level editor settings.
+func SaveEditorSettings(configRoot string, settings EditorSettings) error {
+	if err := validateEditorSettings(settings); err != nil {
+		return err
+	}
+	path := SettingsPath(configRoot)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create settings directory: %w", err)
+	}
+	encoded, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode editor settings: %w", err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".datapack-settings-*")
+	if err != nil {
+		return fmt.Errorf("create temporary settings: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if _, err := temporary.Write(encoded); err != nil {
+		temporary.Close()
+		return fmt.Errorf("write temporary settings: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		temporary.Close()
+		return fmt.Errorf("sync temporary settings: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close temporary settings: %w", err)
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return fmt.Errorf("replace editor settings: %w", err)
+	}
+	return nil
+}

@@ -14,6 +14,10 @@ export function ClearCell(arg1) {
   return window['go']['main']['App']['ClearCell'](arg1);
 }
 
+export function Compile() {
+  return window['go']['main']['App']['Compile']();
+}
+
 export function CreateRow(arg1) {
   return window['go']['main']['App']['CreateRow'](arg1);
 }
@@ -96,6 +100,10 @@ export function SetCellFormula(arg1) {
 
 export function SetColumnSchema(arg1) {
   return window['go']['main']['App']['SetColumnSchema'](arg1);
+}
+
+export function SetCompileMode(arg1) {
+  return window['go']['main']['App']['SetCompileMode'](arg1);
 }
 
 export function SetSchemaDefinition(arg1) {
