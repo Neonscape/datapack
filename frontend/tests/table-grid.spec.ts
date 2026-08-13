@@ -86,6 +86,19 @@ test("supports pointer editing, row menus, and selected-column actions", async (
     await expect(page.getByRole("button", {name: "Delete row"})).toBeHidden();
 });
 
+test("uses the column menu for the ID header", async ({page}) => {
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    await page.mouse.click(box.x + 85, box.y + 15, {button: "right"});
+    await expect(page.getByRole("button", {name: "Add to right"})).toBeEnabled();
+    await expect(page.getByRole("button", {name: "Add to left"})).toBeDisabled();
+    await expect(page.getByRole("button", {name: "Delete column"})).toBeDisabled();
+});
+
+
 test("edits formula cells with the application inline editor", async ({page}) => {
     const pageErrors: Error[] = [];
     const calls: string[] = [];
