@@ -865,9 +865,9 @@ function App() {
                     <button className="open-button open-button-large" onClick={selectProject}>Open project</button>
                 </section>
             )}
+            <LogPanel/>
             {error && <div className="error-toast" role="alert">{error}</div>}
             {notice && <div className="notice-toast" role="status">{notice}</div>}
-            <LogPanel/>
             {dialog && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setDialog(null)}>
                 <form className="structure-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); submitStructureDialog(); }}>
                     <h2>{dialog.mode === "add" ? "Add column" : dialog.mode === "schema" ? "Edit column schema" : dialog.mode === "rename" ? "Rename column" : dialog.mode === "move" ? "Move column" : "Delete column"}</h2>

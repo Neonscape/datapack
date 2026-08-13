@@ -142,9 +142,8 @@
 }
 
 .workbench {
-    height: calc(100vh - 49px);
     min-height: 0;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     display: grid;
     grid-template-columns: minmax(210px, 280px) minmax(0, 1fr) minmax(220px, 300px);
 }
@@ -230,6 +229,8 @@
     align-items: center;
     justify-content: center;
     flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
     padding: 28px;
     text-align: center;
 }
@@ -788,15 +789,11 @@
 }
 
 .log-panel {
-    position: fixed;
-    right: 16px;
-    bottom: 16px;
-    z-index: 20;
-    width: min(680px, calc(100vw - 32px));
-    border: 1px solid #b8cbd0;
-    border-radius: 4px;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid #c8d5d9;
     background: #f8fbfb;
-    box-shadow: 0 5px 18px rgba(23, 51, 59, 0.16);
     color: #29434a;
 }
 
@@ -821,6 +818,9 @@
 }
 
 .log-panel-body {
+    display: flex;
+    flex-direction: column;
+    height: 200px;
     border-top: 1px solid #d4e1e3;
 }
 
@@ -842,7 +842,8 @@
 }
 
 .log-list {
-    max-height: 220px;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow: auto;
     border-top: 1px solid #e1eaeb;
     background: #fff;
