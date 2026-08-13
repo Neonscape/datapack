@@ -42,6 +42,10 @@ export function GetTable(arg1) {
   return window['go']['main']['App']['GetTable'](arg1);
 }
 
+export function LogPath() {
+  return window['go']['main']['App']['LogPath']();
+}
+
 export function MoveColumn(arg1) {
   return window['go']['main']['App']['MoveColumn'](arg1);
 }

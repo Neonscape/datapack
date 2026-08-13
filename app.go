@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"datapack/internal/document"
+	"datapack/internal/logging"
 	"datapack/internal/workspace"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -13,22 +15,38 @@ import (
 type App struct {
 	ctx       context.Context
 	workspace *workspace.Service
+	logger    *logging.Logger
+	logPath   string
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
+	configRoot, err := os.UserConfigDir()
+	if err != nil {
+		panic(fmt.Sprintf("resolve user config directory: %v", err))
+	}
+	logger, logPath, err := logging.NewUserLogger(configRoot)
+	if err != nil {
+		panic(fmt.Sprintf("create application logger: %v", err))
+	}
 	service, err := workspace.NewUserService()
 	if err != nil {
 		panic(fmt.Sprintf("create workspace service: %v", err))
 	}
-	return &App{workspace: service}
+	service.SetLogger(logger)
+	logger.Info("application created", map[string]any{"log_path": logPath})
+	return &App{workspace: service, logger: logger, logPath: logPath}
 }
 
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.logger.AddSink(func(entry logging.Entry) { runtime.EventsEmit(ctx, "log:entry", entry) })
+	a.logger.Info("application started", nil)
 }
+
+func (a *App) LogPath() string { return a.logPath }
 
 // SelectProject lets the user choose a data project and returns its source tree.
 func (a *App) SelectProject() (workspace.View, error) {

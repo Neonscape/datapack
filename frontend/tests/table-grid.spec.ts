@@ -227,6 +227,17 @@ test("keeps navigation visible after creating a draft row", async ({page}) => {
     await expect(page.getByText("Schemas", {exact: true})).toBeVisible();
 });
 
+test("shows backend log entries in the GUI panel", async ({page}) => {
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("log:entry", {detail: {
+        time: "2026-08-13T12:00:00Z",
+        level: "error",
+        message: "workspace refresh failed",
+        fields: {path: "tables/item.cue"},
+    }})));
+    await page.getByRole("button", {name: /Logs/}).click();
+    await expect(page.getByText("workspace refresh failed")).toBeVisible();
+});
+
 test("does not save an unchanged empty cell on blur", async ({page}) => {
     const pageErrors: Error[] = [];
     page.on("pageerror", (error) => pageErrors.push(error));

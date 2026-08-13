@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
@@ -13,6 +14,7 @@ import (
 	"datapack/internal/export/csv"
 	"datapack/internal/foreignkey"
 	"datapack/internal/formula"
+	"datapack/internal/logging"
 	"datapack/internal/projecttree"
 	"datapack/internal/schemaregistry"
 )
@@ -29,6 +31,7 @@ type Service struct {
 	configRoot string
 	current    *View
 	history    map[string]*history
+	logger     *logging.Logger
 }
 
 type history struct {
@@ -192,6 +195,16 @@ func NewService(configRoot string) *Service {
 	return &Service{configRoot: configRoot, history: map[string]*history{}}
 }
 
+func (s *Service) SetLogger(logger *logging.Logger) {
+	s.logger = logger
+}
+
+func (s *Service) log(level logging.Level, message string, fields map[string]any) {
+	if s.logger != nil {
+		s.logger.Log(level, message, fields)
+	}
+}
+
 func NewUserService() (*Service, error) {
 	configRoot, err := os.UserConfigDir()
 	if err != nil {
@@ -201,20 +214,26 @@ func NewUserService() (*Service, error) {
 }
 
 func (s *Service) OpenProject(path string) (View, error) {
+	started := time.Now()
+	s.log(logging.Info, "open project started", map[string]any{"path": path})
 	project, err := LoadProject(path)
 	if err != nil {
+		s.log(logging.Error, "open project failed", map[string]any{"path": path, "error": err.Error()})
 		return View{}, err
 	}
 	settings, err := LoadEditorSettings(s.configRoot)
 	if err != nil {
+		s.log(logging.Error, "open project failed", map[string]any{"path": path, "error": err.Error()})
 		return View{}, err
 	}
 	tree, err := projecttree.Scan(project.Path, project.Config.TableRoots, project.Config.SchemaRoots, project.Config.Exclude)
 	if err != nil {
+		s.log(logging.Error, "open project failed", map[string]any{"path": path, "error": err.Error()})
 		return View{}, err
 	}
 	view := buildView(project, settings, tree)
 	s.current = &view
+	s.log(logging.Info, "open project completed", map[string]any{"path": path, "schemas": len(view.Schemas.Definitions), "duration_ms": time.Since(started).Milliseconds()})
 	return view, nil
 }
 
@@ -269,15 +288,22 @@ func (s *Service) Current() (View, bool) {
 // an untrusted frontend request.
 func (s *Service) GetTable(path string) (document.Table, error) {
 	if s.current == nil {
-		return document.Table{}, fmt.Errorf("no project is open")
+		err := fmt.Errorf("no project is open")
+		s.log(logging.Error, "get table failed", map[string]any{"path": path, "error": err.Error()})
+		return document.Table{}, err
 	}
 	if !containsTable(s.current.Tree.Root, path) {
-		return document.Table{}, fmt.Errorf("table %q is not part of the open project", path)
+		err := fmt.Errorf("table %q is not part of the open project", path)
+		s.log(logging.Error, "get table failed", map[string]any{"path": path, "error": err.Error()})
+		return document.Table{}, err
 	}
 	table, err := document.LoadTable(path)
 	if err != nil {
-		return document.Table{}, fmt.Errorf("load table: %w", err)
+		err = fmt.Errorf("load table: %w", err)
+		s.log(logging.Error, "get table failed", map[string]any{"path": path, "error": err.Error()})
+		return document.Table{}, err
 	}
+	s.log(logging.Debug, "table loaded", map[string]any{"path": path, "rows": len(table.Rows), "columns": len(table.Columns)})
 	return withTableMetadata(table, *s.current), nil
 }
 
@@ -399,16 +425,20 @@ func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
 }
 
 func (s *Service) edit(path string, operation func() (document.Table, error)) (document.Table, View, error) {
+	started := time.Now()
 	before, err := os.ReadFile(path)
 	if err != nil {
+		s.log(logging.Error, "table edit failed", map[string]any{"path": path, "error": err.Error()})
 		return document.Table{}, View{}, fmt.Errorf("record edit source: %w", err)
 	}
 	table, err := operation()
 	if err != nil {
+		s.log(logging.Error, "table edit failed", map[string]any{"path": path, "error": err.Error()})
 		return document.Table{}, View{}, err
 	}
 	view, err := s.refreshCurrentView()
 	if err != nil {
+		s.log(logging.Error, "workspace refresh failed after edit", map[string]any{"path": path, "error": err.Error()})
 		return document.Table{}, View{}, err
 	}
 	record := s.history[path]
@@ -418,6 +448,7 @@ func (s *Service) edit(path string, operation func() (document.Table, error)) (d
 	}
 	record.undo = append(record.undo, before)
 	record.redo = nil
+	s.log(logging.Info, "table edit completed", map[string]any{"path": path, "duration_ms": time.Since(started).Milliseconds()})
 	return table, view, nil
 }
 
@@ -573,24 +604,33 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 // Schema or foreign-key diagnostics.
 func (s *Service) Export() (ExportResult, error) {
 	if s.current == nil {
-		return ExportResult{}, fmt.Errorf("no project is open")
+		err := fmt.Errorf("no project is open")
+		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
+		return ExportResult{}, err
 	}
 	if len(s.current.Schemas.Diagnostics) > 0 {
-		return ExportResult{}, fmt.Errorf("export blocked by %d Schema diagnostics", len(s.current.Schemas.Diagnostics))
+		err := fmt.Errorf("export blocked by %d Schema diagnostics", len(s.current.Schemas.Diagnostics))
+		s.log(logging.Warn, "export blocked", map[string]any{"error": err.Error()})
+		return ExportResult{}, err
 	}
 	if len(s.current.ForeignKeys.Diagnostics) > 0 {
-		return ExportResult{}, fmt.Errorf("export blocked by %d foreign key diagnostics", len(s.current.ForeignKeys.Diagnostics))
+		err := fmt.Errorf("export blocked by %d foreign key diagnostics", len(s.current.ForeignKeys.Diagnostics))
+		s.log(logging.Warn, "export blocked", map[string]any{"error": err.Error()})
+		return ExportResult{}, err
 	}
 	var tables []document.Table
 	collectTables(s.current.Tree.Root, &tables)
 	destination, err := exportDirectory(s.current.Project)
 	if err != nil {
+		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
 		return ExportResult{}, err
 	}
 	result, err := csv.Export(destination, tables)
 	if err != nil {
+		s.log(logging.Error, "export failed", map[string]any{"destination": destination, "error": err.Error()})
 		return ExportResult{}, err
 	}
+	s.log(logging.Info, "export completed", map[string]any{"files": len(result.Files), "destination": destination})
 	return ExportResult{Files: result.Files}, nil
 }
 
@@ -713,13 +753,16 @@ func collectTables(node projecttree.Node, tables *[]document.Table) {
 }
 
 func (s *Service) refreshCurrentView() (View, error) {
+	started := time.Now()
 	project := s.current.Project
 	tree, err := projecttree.Scan(project.Path, project.Config.TableRoots, project.Config.SchemaRoots, project.Config.Exclude)
 	if err != nil {
+		s.log(logging.Error, "workspace refresh failed", map[string]any{"error": err.Error()})
 		return View{}, fmt.Errorf("refresh project tree: %w", err)
 	}
 	view := buildView(project, s.current.Settings, tree)
 	s.current = &view
+	s.log(logging.Debug, "workspace refresh completed", map[string]any{"schemas": len(view.Schemas.Definitions), "duration_ms": time.Since(started).Milliseconds()})
 	return view, nil
 }
 

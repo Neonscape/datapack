@@ -23,6 +23,8 @@ export function Export():Promise<workspace.ExportResult>;
 
 export function GetTable(arg1:string):Promise<document.Table>;
 
+export function LogPath():Promise<string>;
+
 export function MoveColumn(arg1:workspace.ColumnMove):Promise<workspace.ColumnMoveResult>;
 
 export function OpenProject(arg1:string):Promise<workspace.View>;
