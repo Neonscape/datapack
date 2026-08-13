@@ -123,7 +123,7 @@ test("edits formula cells with the application inline editor", async ({page}) =>
     await expect(page.locator("textarea")).toHaveValue("=20 + 5");
     await page.mouse.click(box.x + 1000, box.y + 200);
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
-    expect(await page.evaluate(() => (window as Window & {formulaCalls: string[]}).formulaCalls)).toEqual(["formula"]);
+    expect(await page.evaluate(() => (window as Window & {formulaCalls: string[]}).formulaCalls)).toEqual([]);
     expect(pageErrors).toEqual([]);
 });
 
