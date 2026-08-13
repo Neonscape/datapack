@@ -186,6 +186,70 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestSetColumnSchemaPrunesUnusedImport(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+import "example.com/game/schema:common"
+#PrimaryKey: string
+#Row: {price: int & common.#NonNegative}
+rows: {sword: {price: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	table, err := SetColumnSchema(path, "price", "int")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.Columns[0].SchemaExpression != "int" {
+		t.Fatalf("column = %#v", table.Columns[0])
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(source), "import") {
+		t.Fatalf("unused import was not pruned: %s", source)
+	}
+}
+
+func TestSetColumnSchemaKeepsUsedImport(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+import "example.com/game/schema:common"
+#PrimaryKey: common.#GameID
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	if _, err := SetColumnSchema(path, "name", "string & != \"\""); err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(source), `import "example.com/game/schema:common"`) {
+		t.Fatalf("used import was pruned: %s", source)
+	}
+}
+
+func TestDeleteColumnPrunesUnusedImport(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+import "example.com/game/schema:common"
+#PrimaryKey: string
+#Row: {name: string, price: int & common.#NonNegative}
+rows: {sword: {name: "Sword", price: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	if _, err := DeleteColumn(path, "price"); err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(source), "import") {
+		t.Fatalf("unused import was not pruned: %s", source)
+	}
+}
+
 func TestRenameLocalSchemaDefinitionPropagatesReferences(t *testing.T) {
 	root := t.TempDir()
 	tablePath := root + "/item.cue"

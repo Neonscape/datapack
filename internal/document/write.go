@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -316,6 +317,7 @@ func AddColumn(path, name, schemaExpression, initialExpression string, position 
 			return Table{}, err
 		}
 	}
+	pruneUnusedImports(file)
 	candidate, err := format.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
@@ -346,6 +348,7 @@ func SetColumnSchema(path, name, schemaExpression string) (Table, error) {
 		return Table{}, fmt.Errorf("column %q does not exist", name)
 	}
 	field.Value = schema
+	pruneUnusedImports(file)
 	candidate, err := format.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
@@ -367,6 +370,7 @@ func DeleteColumn(path, name string) (Table, error) {
 	if err := removeColumn(file, name); err != nil {
 		return Table{}, err
 	}
+	pruneUnusedImports(file)
 	candidate, err := format.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
@@ -816,6 +820,67 @@ func cloneExpression(expression ast.Expr) ast.Expr {
 		return expression
 	}
 	return clone
+}
+
+// pruneUnusedImports removes import declarations whose package is no longer
+// referenced by any Schema or data expression in the file. Unqualified imports
+// and aliased imports are left untouched.
+func pruneUnusedImports(file *ast.File) {
+	referenced := map[string]bool{}
+	collect := func(expression ast.Expr) {
+		ast.Walk(expression, func(node ast.Node) bool {
+			selector, ok := node.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if identifier, ok := selector.X.(*ast.Ident); ok && identifier.Name != "_local" {
+				referenced[identifier.Name] = true
+			}
+			return true
+		}, nil)
+	}
+	fields := fieldsOfFile(file)
+	for _, name := range []string{"#PrimaryKey", "#Row", "rows", "_local"} {
+		field := fields[name]
+		if field == nil {
+			continue
+		}
+		for _, nested := range orderedStructFields(field.Value) {
+			collect(nested.Value)
+		}
+	}
+	for _, declaration := range file.Decls {
+		field, ok := declaration.(*ast.Field)
+		if !ok || !strings.HasPrefix(labelOf(field), "#") {
+			continue
+		}
+		collect(field.Value)
+	}
+	for index := 0; index < len(file.Decls); index++ {
+		declaration := file.Decls[index]
+		imports, ok := declaration.(*ast.ImportDecl)
+		if !ok {
+			continue
+		}
+		kept := make([]*ast.ImportSpec, 0, len(imports.Specs))
+		for _, spec := range imports.Specs {
+			if spec.Name != nil {
+				kept = append(kept, spec)
+				continue
+			}
+			value, err := strconv.Unquote(spec.Path.Value)
+			marker := strings.LastIndex(value, ":")
+			if err != nil || marker < 0 || referenced[value[marker+1:]] {
+				kept = append(kept, spec)
+			}
+		}
+		if len(kept) == 0 {
+			file.Decls = append(file.Decls[:index], file.Decls[index+1:]...)
+			index--
+			continue
+		}
+		imports.Specs = kept
+	}
 }
 
 func validIdentifier(value string) bool {

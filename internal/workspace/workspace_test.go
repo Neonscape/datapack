@@ -946,6 +946,43 @@ _schema: {version: 1, definitions: {Damage: {kind: "type", type: "integer"}}}`)
 	}
 }
 
+func TestSetColumnSchemaRemovesUnusedImport(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	writeFile(t, filepath.Join(projectRoot, "cue.mod", "module.cue"), `module: "example.com/game"`)
+	writeFile(t, filepath.Join(projectRoot, "schema", "common.cue"), `package common
+#DamageBaseValue: int & >=0
+_schema: {version: 1, definitions: {DamageBaseValue: {kind: "type", type: "integer"}}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, tablePath, `package item
+import "example.com/game/schema:common"
+#PrimaryKey: string
+#Row: {damage: common.#DamageBaseValue}
+rows: {sword: {damage: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.SetColumnSchema(ColumnSchemaSet{Path: tablePath, Name: "damage", SchemaExpression: "int"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile(tablePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(source), "import") {
+		t.Fatalf("unused import was not pruned: %s", source)
+	}
+	for _, diagnostic := range result.Table.Diagnostics {
+		if strings.Contains(diagnostic.Message, "imported and not used") {
+			t.Fatalf("table diagnostics = %#v", result.Table.Diagnostics)
+		}
+	}
+}
+
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

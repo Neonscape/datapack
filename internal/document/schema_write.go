@@ -150,6 +150,7 @@ func CreatePublicSchemaDefinition(path, name string, update SchemaDefinitionUpda
 	if err := upsertPublicDefinition(file, name, update, schema, true); err != nil {
 		return PublicSchema{}, err
 	}
+	pruneUnusedImports(file)
 	candidate, err := format.Node(file)
 	if err != nil {
 		return PublicSchema{}, fmt.Errorf("format updated schema: %w", err)
@@ -173,6 +174,7 @@ func SetPublicSchemaDefinition(path, name string, update SchemaDefinitionUpdate)
 	if err := upsertPublicDefinition(file, name, update, schema, false); err != nil {
 		return PublicSchema{}, err
 	}
+	pruneUnusedImports(file)
 	candidate, err := format.Node(file)
 	if err != nil {
 		return PublicSchema{}, fmt.Errorf("format updated schema: %w", err)
@@ -208,6 +210,7 @@ func DeletePublicSchemaDefinition(path, name string) (PublicSchema, error) {
 	if !removeNamedField(definitionsField.Value, name) {
 		return PublicSchema{}, fmt.Errorf("Schema definition %q is not registered in _schema.definitions", name)
 	}
+	pruneUnusedImports(file)
 	candidate, err := format.Node(file)
 	if err != nil {
 		return PublicSchema{}, fmt.Errorf("format updated schema: %w", err)
@@ -249,6 +252,7 @@ func RenamePublicSchemaDefinition(path, oldName, newName string, referencePaths 
 		}
 		for _, file := range files {
 			renameSchemaReferences(file, oldName, newName)
+			pruneUnusedImports(file)
 		}
 		return nil
 	})
@@ -350,6 +354,7 @@ func CreateLocalSchemaDefinition(path, name string, update SchemaDefinitionUpdat
 	if err := ensureLocalDefinition(file, name, update, schema, true); err != nil {
 		return Table{}, err
 	}
+	pruneUnusedImports(file)
 	candidate, err := format.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
@@ -373,6 +378,7 @@ func SetLocalSchemaDefinition(path, name string, update SchemaDefinitionUpdate) 
 	if err := ensureLocalDefinition(file, name, update, schema, false); err != nil {
 		return Table{}, err
 	}
+	pruneUnusedImports(file)
 	candidate, err := format.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
@@ -399,6 +405,7 @@ func DeleteLocalSchemaDefinition(path, name string) (Table, error) {
 			removeNamedField(localDefinitions.Value, name)
 		}
 	}
+	pruneUnusedImports(file)
 	candidate, err := format.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
@@ -432,6 +439,7 @@ func RenameLocalSchemaDefinition(path, oldName, newName string, referencePaths [
 		}
 		for _, file := range files {
 			renameSchemaReferences(file, oldName, newName)
+			pruneUnusedImports(file)
 		}
 		return nil
 	})
