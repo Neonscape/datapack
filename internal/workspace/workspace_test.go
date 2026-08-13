@@ -231,6 +231,32 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestCreateRowWithDiagnosticsPreservesNavigationSnapshot(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {price: int & >=0}
+rows: {}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {}, formulas: {}}
+_editor: {columns: {}}`)
+	writeFile(t, filepath.Join(projectRoot, "schema", "common.cue"), `package common
+#GameID: string
+_schema: {version: 1, definitions: {GameID: {kind: "type", type: "string"}}}`)
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.CreateRow(RowCreate{Path: path, RowID: "sword", Values: map[string]string{"price": "-1"}, Formulas: map[string]string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Table.Diagnostics) == 0 || result.Workspace.Tree.Root.Name == "" || findNodeByKind(result.Workspace.Tree.Root, "rpg.item", projecttree.NodeTable) == nil || len(result.Workspace.Schemas.Definitions) != 1 {
+		t.Fatalf("CreateRow() = %#v", result)
+	}
+}
+
 func TestAddRowRefreshesCurrentWorkspace(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)

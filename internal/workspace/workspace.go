@@ -478,7 +478,7 @@ func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
 	if err != nil {
 		return RowCreateResult{}, err
 	}
-	return RowCreateResult{Table: withTableMetadata(table, view)}, nil
+	return RowCreateResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
@@ -494,7 +494,7 @@ func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
 	if err != nil {
 		return CellUpdateResult{}, err
 	}
-	return CellUpdateResult{Table: withTableMetadata(table, view)}, nil
+	return CellUpdateResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {

@@ -215,6 +215,18 @@ test("groups history commands under Edit", async ({page}) => {
     await expect(page.getByRole("button", {name: /Undo/})).toBeHidden();
 });
 
+test("keeps navigation visible after creating a draft row", async ({page}) => {
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    await page.mouse.click(box.x + 55, box.y + 80);
+    await page.locator("textarea").fill("new_row");
+    await page.locator("textarea").press("Enter");
+    await expect(page.getByRole("button", {name: "rpg.item"})).toBeVisible();
+    await expect(page.getByText("Schemas", {exact: true})).toBeVisible();
+});
+
 test("does not save an unchanged empty cell on blur", async ({page}) => {
     const pageErrors: Error[] = [];
     page.on("pageerror", (error) => pageErrors.push(error));
