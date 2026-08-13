@@ -70,6 +70,10 @@ type TableDocument = {
     diagnostics?: { rowID: string; column?: string; message: string }[];
 };
 
+function schemaDefinitions(workspace: WorkspaceView | null): SchemaDefinition[] {
+    return workspace?.schemas?.definitions ?? [];
+}
+
 function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; onOpenTable: (path: string) => void }) {
     const isFile = node.kind === "tableData" || node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "damaged";
     const openTable = node.kind === "tableData" && node.path ? () => onOpenTable(node.path!) : undefined;
@@ -79,7 +83,7 @@ function Tree({node, depth = 0, onOpenTable}: { node: TreeNode; depth?: number; 
                 <span className={`node-icon node-${node.kind}`} aria-hidden="true"/>
                 <span>{node.name}</span>
             </button>
-            {node.children?.map((child) => <Tree key={`${child.kind}:${child.path ?? child.name}`} node={child} depth={depth + 1} onOpenTable={onOpenTable}/>) }
+            {node.children?.map((child) => <Tree key={`${child.kind}:${child.path ?? child.name}:${child.name}`} node={child} depth={depth + 1} onOpenTable={onOpenTable}/>) }
         </div>
     );
 }
@@ -303,6 +307,9 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
         const value = editorRef.current.value;
         const target = inlineEditor;
         setInlineEditor(null);
+        // A blank placeholder cell has no persisted value to clear. Avoid a
+        // needless workspace refresh when the user simply dismisses it.
+        if (value.trim() === target.value.trim()) return;
         void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: value, displayData: value});
     };
     const openInlineAt = (column: number, row: number, bounds: {x: number; y: number; width: number; height: number}) => {
@@ -596,7 +603,7 @@ function App() {
             const view = await SelectProject() as WorkspaceView;
             if (view?.project?.path) {
                 setWorkspace(view);
-                setSelectedSchema(view.schemas.definitions[0] ?? null);
+                setSelectedSchema(schemaDefinitions(view)[0] ?? null);
                 setTable(null);
                 setCellError(null);
             }
@@ -785,7 +792,7 @@ function App() {
                     <aside className="schema-explorer">
                         <div className="panel-title">Schemas</div>
                         <div className="schema-list">
-                            {workspace.schemas.definitions.map((definition) => <button
+                            {schemaDefinitions(workspace).map((definition) => <button
                                 className={`schema-row ${selectedSchema?.id === definition.id ? "schema-row-selected" : ""}`}
                                 key={definition.id}
                                 onClick={() => { setSelectedSchema(definition); setTable(null); setCellError(null); }}
@@ -795,14 +802,14 @@ function App() {
                                 <span className="usage-count">{definition.usages?.length ?? 0}</span>
                             </button>)}
                         </div>
-                        {(workspace.schemas.diagnostics?.length ?? 0) > 0 && <div className="schema-diagnostics">
-                            {workspace.schemas.diagnostics?.map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.path}:${diagnostic.field}:${diagnostic.message}`}>
+                        {(workspace.schemas.diagnostics ?? []).length > 0 && <div className="schema-diagnostics">
+                            {(workspace.schemas.diagnostics ?? []).map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.path}:${diagnostic.field}:${diagnostic.message}`}>
                                 <code>{diagnostic.field}</code>
                                 <span>{diagnostic.message}</span>
                             </div>)}
                         </div>}
-                        {(workspace.foreignKeys.diagnostics?.length ?? 0) > 0 && <div className="schema-diagnostics">
-                            {workspace.foreignKeys.diagnostics?.map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.rowID}:${diagnostic.column}:${diagnostic.message}`}>
+                        {(workspace.foreignKeys.diagnostics ?? []).length > 0 && <div className="schema-diagnostics">
+                            {(workspace.foreignKeys.diagnostics ?? []).map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.rowID}:${diagnostic.column}:${diagnostic.message}`}>
                                 <code>{diagnostic.rowID}.{diagnostic.column}</code>
                                 <span>{diagnostic.message}</span>
                             </div>)}

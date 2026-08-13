@@ -12,6 +12,7 @@ const table = {
         {name: "name", schemaExpression: "string", schema: {kind: "string"}},
         {name: "position", schemaExpression: "{x: int, y: int, label?: string}", schema: {kind: "struct", fields: [{name: "x"}, {name: "y"}, {name: "label", optional: true}]}},
         {name: "rarity", schemaExpression: `"N" | "R"`, schema: {kind: "enum", enumValues: [{expression: `"N"`}, {expression: `"R"`}]}},
+        {name: "testAttack", schemaExpression: "int", schema: {kind: "integer"}},
     ],
     rows: [{id: "sword", values: {tags: {expression: `["starter", "weapon"]`, display: `["starter", "weapon"]`}, position: {expression: `{x: 4, y: 8}`, display: `{x: 4, y: 8}`}, name: {expression: "20 + 5", display: "25", formula: true}, rarity: {expression: `"N"`, display: "N"}, effectID: {expression: `"burn"`, display: "burn"}}}],
     diagnostics: [{rowID: "sword", column: "effectID", message: "foreign key references missing row rpg.effect.burn"}, {rowID: "", message: "table has an invalid export configuration"}],
@@ -212,4 +213,44 @@ test("groups history commands under Edit", async ({page}) => {
     await expect(page.getByRole("button", {name: /Redo/})).toBeEnabled();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", {name: /Undo/})).toBeHidden();
+});
+
+test("does not save an unchanged empty cell on blur", async ({page}) => {
+    const pageErrors: Error[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error));
+    await page.evaluate(() => {
+        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const clearCell = api.ClearCell;
+        (window as Window & {clearCalls: number}).clearCalls = 0;
+        api.ClearCell = (...args) => {
+            (window as Window & {clearCalls: number}).clearCalls++;
+            return clearCell(...args);
+        };
+    });
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    await page.mouse.dblclick(box.x + 1075, box.y + 50);
+    await expect(page.locator("textarea")).toHaveValue("");
+    await page.mouse.click(box.x + 1250, box.y + 200);
+    await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
+    expect(await page.evaluate(() => (window as Window & {clearCalls: number}).clearCalls)).toBe(0);
+    expect(pageErrors).toEqual([]);
+});
+
+test("renders a workspace with null Schema collections", async ({page}) => {
+    await page.evaluate(() => {
+        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const selectProject = api.SelectProject;
+        api.SelectProject = async (...args) => {
+            const workspace = await selectProject(...args) as {schemas: Record<string, unknown>};
+            return {...workspace, schemas: {...workspace.schemas, definitions: null, diagnostics: null}};
+        };
+    });
+    await page.getByRole("button", {name: "File"}).click();
+    await page.getByRole("navigation", {name: "Application menu"}).getByRole("button", {name: "Open project"}).click();
+    await expect(page.getByText("Schemas", {exact: true})).toBeVisible();
+    await expect(page.locator(".schema-row")).toHaveCount(0);
 });

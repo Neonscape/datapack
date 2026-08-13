@@ -52,3 +52,10 @@ func TestBuildReportsMissingForeignKeyTarget(t *testing.T) {
 		t.Fatalf("diagnostics = %#v", index.Diagnostics)
 	}
 }
+
+func TestSummaryUsesEmptyDiagnosticsSlice(t *testing.T) {
+	summary := Build(nil).Summary()
+	if summary.Diagnostics == nil {
+		t.Fatalf("Summary() = %#v", summary)
+	}
+}

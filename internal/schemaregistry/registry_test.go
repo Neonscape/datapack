@@ -135,3 +135,10 @@ func TestIndexOrdersDefinitionsAndIncludesUsages(t *testing.T) {
 		t.Fatalf("usages = %#v", got)
 	}
 }
+
+func TestIndexUsesEmptyDiagnosticsSlice(t *testing.T) {
+	index := Build(nil, nil).Index()
+	if index.Definitions == nil || index.Diagnostics == nil {
+		t.Fatalf("Index() = %#v", index)
+	}
+}

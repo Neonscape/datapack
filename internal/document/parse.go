@@ -26,7 +26,14 @@ func LoadTable(path string) (Table, error) {
 		return Table{}, fmt.Errorf("parse table source: %w", err)
 	}
 	fields := fieldsOfFile(file)
-	document := Table{Path: path}
+	document := Table{
+		Path:        path,
+		Columns:     []Column{},
+		Rows:        []Row{},
+		ForeignKeys: []ForeignKey{},
+		Formulas:    []Formula{},
+		LocalSchema: []SchemaDefinition{},
+	}
 	if packageDecl := packageOfFile(file); packageDecl != nil && packageDecl.Name != nil {
 		document.Package = packageDecl.Name.Name
 	}
