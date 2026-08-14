@@ -346,12 +346,16 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
         return {
             kind: GridCellKind.Text,
             data: cell?.formula ? `=${cell.expression}` : cell?.expression ?? "",
-            displayData: cell?.formula ? `fx ${cell.display}` : cell?.display ?? "",
+            displayData: cell?.display ?? "",
             allowOverlay: false,
             themeOverride: error ? {
                 bgCell: "#fff1f1",
                 textDark: "#8a3030",
-            } : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined,
+            } : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : cell?.formula ? {
+                bgCell: "#e8f3f5",
+                textDark: "#1c5d73",
+                baseFontStyle: "700 13px sans-serif",
+            } : undefined,
         };
     };
     const editCell = async ([column, row]: Item, value: GridCell) => {
