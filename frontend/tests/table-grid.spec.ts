@@ -292,6 +292,32 @@ test("compiles manually after pending edits", async ({page}) => {
     await expect(page.getByRole("button", {name: "Toggle compile mode"})).not.toHaveText(/pending/);
 });
 
+test("edits a cell through the formula bar", async ({page}) => {
+    await page.evaluate(() => {
+        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const updateCell = api.UpdateCell;
+        (window as Window & {formulaBarCalls: {rowID: string; column: string; expression: string}[]}).formulaBarCalls = [];
+        api.UpdateCell = (...args) => {
+            const argument = args[0] as {rowID: string; column: string; expression: string};
+            (window as Window & {formulaBarCalls: {rowID: string; column: string; expression: string}[]}).formulaBarCalls.push(argument);
+            return updateCell(...args);
+        };
+    });
+    const formulaBar = page.getByLabel("Formula bar");
+    await expect(formulaBar).toBeDisabled();
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    await page.mouse.click(box.x + 565, box.y + 50);
+    await expect(formulaBar).toBeEnabled();
+    await expect(formulaBar).toHaveValue("=20 + 5");
+    await formulaBar.dblclick();
+    await formulaBar.fill("Steel Sword");
+    await formulaBar.blur();
+    expect(await page.evaluate(() => (window as Window & {formulaBarCalls: {path: string; rowID: string; column: string; expression: string}[]}).formulaBarCalls)).toEqual([{path: "/project/tables/item.cue", rowID: "sword", column: "name", expression: "Steel Sword"}]);
+});
+
 test("creates and opens a table from the project explorer", async ({page}) => {
     await page.getByRole("button", {name: "File"}).click();
     await page.getByRole("button", {name: "New table"}).click();

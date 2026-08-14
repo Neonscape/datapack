@@ -275,8 +275,12 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
     const [foreignKeyEditor, setForeignKeyEditor] = useState<ForeignKeyEditor | null>(null);
     const [arrayEditor, setArrayEditor] = useState<ArrayEditor | null>(null);
     const [structEditor, setStructEditor] = useState<StructEditor | null>(null);
+    const [selectedCell, setSelectedCell] = useState<{column: number; row: number} | null>(null);
+    const [formulaEditing, setFormulaEditing] = useState(false);
+    const [formulaValue, setFormulaValue] = useState("");
     const editorRef = useRef<HTMLTextAreaElement | null>(null);
     const foreignKeyEditorRef = useRef<HTMLInputElement | null>(null);
+    const formulaBarRef = useRef<HTMLInputElement | null>(null);
     const dataEditorRef = useRef<DataEditorRef | null>(null);
     const gridRef = useRef<HTMLDivElement | null>(null);
     const lastCellBounds = useRef<{cell: Item; bounds: {x: number; y: number; width: number; height: number}} | null>(null);
@@ -316,6 +320,17 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
         };
     }, []);
     const rowFor = (row: number): TableDocument["rows"][number] => isDraft(row) ? {id: draft.id, values: Object.fromEntries(Object.entries(draft.values).map(([name, expression]) => [name, {expression, display: expression, formula: false}]))} : table.rows[row];
+    const rawCellValue = (column: number, row: number): string => {
+        const source = rowFor(row);
+        if (column === 0) return source.id;
+        const cell = source.values[table.columns[column - 1].name];
+        return cell?.formula ? `=${cell.expression}` : cell?.expression ?? "";
+    };
+    const selectedCellLabel = selectedCell ? `${selectedCell.column === 0 ? "id" : table.columns[selectedCell.column - 1].name} · ${rowFor(selectedCell.row).id || "draft"}` : "";
+    useEffect(() => {
+        if (formulaEditing || !selectedCell) return;
+        setFormulaValue(rawCellValue(selectedCell.column, selectedCell.row));
+    }, [selectedCell, table, draft, formulaEditing]);
     const errorFor = (rowID: string, column: string) => table.diagnostics?.find((diagnostic) => diagnostic.rowID === rowID && (!diagnostic.column || diagnostic.column === column));
     const focusDiagnostic = (diagnostic: NonNullable<TableDocument["diagnostics"]>[number]) => {
         const row = table.rows.findIndex((entry) => entry.id === diagnostic.rowID);
@@ -506,6 +521,44 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
                 return <button key={`${location}:${diagnostic.message}:${index}`} className="table-diagnostic" disabled={!navigable} onClick={() => focusDiagnostic(diagnostic)}><code>{location}</code><span>{diagnostic.message}</span></button>;
             })}</div>
         </section>}
+        <div className="formula-bar">
+            <span className="formula-bar-cell">{selectedCellLabel}</span>
+            <input
+                ref={formulaBarRef}
+                className="formula-bar-input"
+                aria-label="Formula bar"
+                value={formulaValue}
+                disabled={!selectedCell}
+                readOnly={!formulaEditing}
+                placeholder="Select a cell to edit its value"
+                onChange={(event) => setFormulaValue(event.target.value)}
+                onDoubleClick={() => {
+                    if (!selectedCell) return;
+                    setInlineEditor(null);
+                    setFormulaEditing(true);
+                    window.requestAnimationFrame(() => formulaBarRef.current?.select());
+                }}
+                onBlur={() => {
+                    if (!formulaEditing || !selectedCell) return;
+                    const target = selectedCell;
+                    setFormulaEditing(false);
+                    const value = formulaValue.trim();
+                    if (value === rawCellValue(target.column, target.row).trim()) return;
+                    void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: value, displayData: value});
+                }}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                    }
+                    if (event.key === "Escape") {
+                        setFormulaValue(rawCellValue(selectedCell!.column, selectedCell!.row));
+                        setFormulaEditing(false);
+                        formulaBarRef.current?.blur();
+                    }
+                }}
+            />
+        </div>
         <div ref={gridRef} className="table-grid">
             <DataEditor
                 ref={dataEditorRef}
@@ -529,6 +582,8 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
                 }}
                 onCellClicked={([column, row], event) => {
                     setSelectedColumn(null);
+                    setSelectedCell({column, row});
+                    setFormulaEditing(false);
                     const gridBounds = gridRef.current?.getBoundingClientRect();
                     const bounds = {x: event.bounds.x - (gridBounds?.x ?? 0), y: event.bounds.y - (gridBounds?.y ?? 0), width: event.bounds.width, height: event.bounds.height};
                     lastCellBounds.current = {cell: [column, row], bounds};
