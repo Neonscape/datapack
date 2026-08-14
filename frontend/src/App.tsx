@@ -283,7 +283,6 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
     const formulaBarRef = useRef<HTMLInputElement | null>(null);
     const dataEditorRef = useRef<DataEditorRef | null>(null);
     const gridRef = useRef<HTMLDivElement | null>(null);
-    const lastCellBounds = useRef<{cell: Item; bounds: {x: number; y: number; width: number; height: number}} | null>(null);
     const columns: GridColumn[] = [
         {id: "id", title: "ID", width: 160, style: "highlight"},
         ...table.columns.map((column) => ({id: column.name, title: column.name, width: 170})),
@@ -532,8 +531,8 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
                 readOnly={!formulaEditing}
                 placeholder="Select a cell to edit its value"
                 onChange={(event) => setFormulaValue(event.target.value)}
-                onDoubleClick={() => {
-                    if (!selectedCell) return;
+                onClick={() => {
+                    if (!selectedCell || formulaEditing) return;
                     setInlineEditor(null);
                     setFormulaEditing(true);
                     window.requestAnimationFrame(() => formulaBarRef.current?.select());
@@ -580,14 +579,17 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
                         setSelectedColumn(selectedColumns.length === 1 && selectedColumns[0] > 0 ? selectedColumns[0] : null);
                     }
                 }}
-                onCellClicked={([column, row], event) => {
+                onCellClicked={([column, row]) => {
                     setSelectedColumn(null);
                     setSelectedCell({column, row});
                     setFormulaEditing(false);
+                }}
+                onCellActivated={([column, row]) => {
+                    if (column < 0 || row < 0) return;
+                    const rect = dataEditorRef.current?.getBounds(column, row);
                     const gridBounds = gridRef.current?.getBoundingClientRect();
-                    const bounds = {x: event.bounds.x - (gridBounds?.x ?? 0), y: event.bounds.y - (gridBounds?.y ?? 0), width: event.bounds.width, height: event.bounds.height};
-                    lastCellBounds.current = {cell: [column, row], bounds};
-                    if (column >= 0) openInlineAt(column, row, bounds);
+                    const bounds = rect && gridBounds ? {x: rect.x - gridBounds.x, y: rect.y - gridBounds.y, width: rect.width, height: rect.height} : {x: 0, y: 0, width: 100, height: 24};
+                    openInlineAt(column, row, bounds);
                 }}
                 onHeaderClicked={(column) => {
                     setSelectedColumn(column === 0 ? null : column);
