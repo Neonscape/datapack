@@ -381,6 +381,73 @@ export namespace foreignkey {
 
 }
 
+export namespace navigation {
+	
+	export class Request {
+	    kind: string;
+	    path: string;
+	    rowID?: string;
+	    column?: string;
+	    reference?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Request(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.path = source["path"];
+	        this.rowID = source["rowID"];
+	        this.column = source["column"];
+	        this.reference = source["reference"];
+	    }
+	}
+	export class Target {
+	    kind: string;
+	    path: string;
+	    local?: boolean;
+	    definition?: string;
+	    rowID?: string;
+	    column?: string;
+	    references?: Target[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Target(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.path = source["path"];
+	        this.local = source["local"];
+	        this.definition = source["definition"];
+	        this.rowID = source["rowID"];
+	        this.column = source["column"];
+	        this.references = this.convertValues(source["references"], Target);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace projecttree {
 	
 	export class Node {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"datapack/internal/document"
+	"datapack/internal/navigation"
 	"datapack/internal/projecttree"
 )
 
@@ -1086,6 +1087,151 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 	if _, err := service.SetCompileMode("invalid"); err == nil {
 		t.Fatal("SetCompileMode() accepted an invalid mode")
+	}
+}
+
+func TestNavigateResolvesSchemaReference(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	schemaPath := filepath.Join(projectRoot, "schema", "common.cue")
+	writeFile(t, schemaPath, `package common
+#NonNegative: >=0
+_schema: {version: 1, definitions: {NonNegative: {kind: "constraint", appliesTo: ["integer"]}}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: string
+#Row: {price: int & common.#NonNegative}
+rows: {sword: {price: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	target, err := service.Navigate(navigation.Request{Kind: navigation.KindSchemaReference, Path: tablePath, Reference: "common.#NonNegative"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Path != schemaPath || target.Definition != "NonNegative" || target.Local {
+		t.Fatalf("target = %#v", target)
+	}
+}
+
+func TestNavigateResolvesLocalSchemaReference(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: string
+_local: {#Position: {x: number}}
+_schema: {localDefinitions: {Position: {kind: "type", type: "struct"}}}
+#Row: {position: _local.#Position}
+rows: {sword: {position: {x: 0}}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	target, err := service.Navigate(navigation.Request{Kind: navigation.KindSchemaReference, Path: tablePath, Reference: "_local.#Position"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Path != tablePath || target.Definition != "Position" || !target.Local {
+		t.Fatalf("target = %#v", target)
+	}
+}
+
+func TestNavigateResolvesForeignKey(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	effectPath := filepath.Join(projectRoot, "tables", "effect.cue")
+	writeFile(t, effectPath, `package effect
+#PrimaryKey: string
+#Row: {name: string}
+rows: {burn: {name: "Burn"}}
+_tool: {table: {namespace: "rpg", name: "effect"}}`)
+	itemPath := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, itemPath, `package item
+#PrimaryKey: string
+#Row: {effectID: string}
+rows: {sword: {effectID: "burn"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table: "rpg.effect"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	target, err := service.Navigate(navigation.Request{Kind: navigation.KindForeignKey, Path: itemPath, RowID: "burn", Column: "effectID"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Path != effectPath || target.RowID != "burn" || target.Column != "id" {
+		t.Fatalf("target = %#v", target)
+	}
+}
+
+func TestNavigateResolvesFormulaReference(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "growth.cue")
+	writeFile(t, tablePath, `package growth
+#PrimaryKey: string
+#Row: {baseAttack: int, attack: int}
+rows: {level_01: {baseAttack: 10}}
+_tool: {table: {namespace: "combat", name: "growth"}, formulas: {level_01: {attack: "baseAttack * 2"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	target, err := service.Navigate(navigation.Request{Kind: navigation.KindFormula, Path: tablePath, RowID: "level_01", Column: "attack"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Path != tablePath || target.RowID != "level_01" || target.Column != "baseAttack" {
+		t.Fatalf("target = %#v", target)
+	}
+}
+
+func TestNavigateResolvesPrimaryKeyReferences(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	effectPath := filepath.Join(projectRoot, "tables", "effect.cue")
+	writeFile(t, effectPath, `package effect
+#PrimaryKey: string
+#Row: {name: string}
+rows: {burn: {name: "Burn"}}
+_tool: {table: {namespace: "rpg", name: "effect"}}`)
+	itemPath := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, itemPath, `package item
+#PrimaryKey: string
+#Row: {effectID: string}
+rows: {sword: {effectID: "burn"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table: "rpg.effect"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	target, err := service.Navigate(navigation.Request{Kind: navigation.KindPrimaryKey, Path: effectPath, RowID: "burn"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Path != itemPath || target.RowID != "sword" || target.Column != "effectID" {
+		t.Fatalf("target = %#v", target)
 	}
 }
 

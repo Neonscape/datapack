@@ -66,6 +66,10 @@ export function MoveColumn(arg1) {
   return window['go']['main']['App']['MoveColumn'](arg1);
 }
 
+export function Navigate(arg1) {
+  return window['go']['main']['App']['Navigate'](arg1);
+}
+
 export function OpenProject(arg1) {
   return window['go']['main']['App']['OpenProject'](arg1);
 }

@@ -22,6 +22,7 @@ import (
 	"datapack/internal/foreignkey"
 	"datapack/internal/formula"
 	"datapack/internal/logging"
+	"datapack/internal/navigation"
 	"datapack/internal/projecttree"
 	"datapack/internal/schemaregistry"
 )
@@ -183,6 +184,137 @@ func (s *Service) SetCompileMode(mode string) (View, error) {
 	s.publishView(&view)
 	s.log(logging.Info, "compile mode changed", map[string]any{"mode": mode})
 	return view, nil
+}
+
+// Navigate resolves one semantic jump to a document and location.
+func (s *Service) Navigate(request navigation.Request) (navigation.Target, error) {
+	if s.current == nil {
+		return navigation.Target{}, fmt.Errorf("no project is open")
+	}
+	switch request.Kind {
+	case navigation.KindSchemaReference:
+		return s.navigateSchemaReference(request)
+	case navigation.KindForeignKey:
+		return s.navigateForeignKey(request)
+	case navigation.KindFormula:
+		return s.navigateFormula(request)
+	case navigation.KindPrimaryKey:
+		return s.navigatePrimaryKey(request)
+	default:
+		return navigation.Target{}, fmt.Errorf("unsupported navigation kind %q", request.Kind)
+	}
+}
+
+func (s *Service) navigateSchemaReference(request navigation.Request) (navigation.Target, error) {
+	reference := request.Reference
+	name := reference
+	if marker := strings.LastIndex(reference, ".#"); marker >= 0 {
+		name = reference[marker+2:]
+	} else {
+		name = strings.TrimPrefix(reference, "#")
+	}
+	id := ""
+	switch {
+	case strings.HasPrefix(reference, "_local.#"):
+		table, err := document.LoadTable(request.Path)
+		if err != nil {
+			return navigation.Target{}, err
+		}
+		id = logicalTableName(table) + "._local.#" + name
+	case strings.HasPrefix(reference, "#"):
+		schema, err := document.LoadPublicSchema(request.Path)
+		if err != nil {
+			return navigation.Target{}, err
+		}
+		id = schema.Package + ".#" + name
+	default:
+		id = reference
+	}
+	for _, definition := range s.current.Schemas.Definitions {
+		if string(definition.ID) == id {
+			return navigation.Target{
+				Kind:       navigation.KindSchemaReference,
+				Path:       definition.Path,
+				Local:      definition.Table != "",
+				Definition: name,
+			}, nil
+		}
+	}
+	return navigation.Target{}, fmt.Errorf("Schema reference %s not found", reference)
+}
+
+func (s *Service) navigateForeignKey(request navigation.Request) (navigation.Target, error) {
+	source, err := document.LoadTable(request.Path)
+	if err != nil {
+		return navigation.Target{}, err
+	}
+	targetTable := ""
+	for _, key := range source.ForeignKeys {
+		if key.Column == request.Column {
+			targetTable = key.Table
+			break
+		}
+	}
+	if targetTable == "" {
+		return navigation.Target{}, fmt.Errorf("column %q is not a foreign key", request.Column)
+	}
+	var tables []document.Table
+	collectTables(s.current.Tree.Root, &tables)
+	for _, table := range tables {
+		if logicalTableName(table) == targetTable {
+			return navigation.Target{Kind: navigation.KindForeignKey, Path: table.Path, RowID: request.RowID, Column: "id"}, nil
+		}
+	}
+	return navigation.Target{}, fmt.Errorf("foreign key target table %q not found", targetTable)
+}
+
+func (s *Service) navigateFormula(request navigation.Request) (navigation.Target, error) {
+	table, err := document.LoadTable(request.Path)
+	if err != nil {
+		return navigation.Target{}, err
+	}
+	for _, entry := range table.Formulas {
+		if entry.RowID != request.RowID || entry.Column != request.Column {
+			continue
+		}
+		references := formula.References(table, entry)
+		if len(references) == 0 {
+			return navigation.Target{}, fmt.Errorf("formula has no resolvable references")
+		}
+		first := references[0]
+		return navigation.Target{Kind: navigation.KindFormula, Path: table.Path, RowID: first.RowID, Column: first.Column}, nil
+	}
+	return navigation.Target{}, fmt.Errorf("no formula at %s.%s", request.RowID, request.Column)
+}
+
+func (s *Service) navigatePrimaryKey(request navigation.Request) (navigation.Target, error) {
+	table, err := document.LoadTable(request.Path)
+	if err != nil {
+		return navigation.Target{}, err
+	}
+	name := logicalTableName(table)
+	var tables []document.Table
+	collectTables(s.current.Tree.Root, &tables)
+	usages := foreignkey.Build(tables).Usages[foreignkey.Target{Table: name, RowID: request.RowID}]
+	if len(usages) == 0 {
+		return navigation.Target{}, fmt.Errorf("no references to %s.%s", name, request.RowID)
+	}
+	if len(usages) == 1 {
+		usage := usages[0]
+		return navigation.Target{Kind: navigation.KindPrimaryKey, Path: usage.Path, RowID: usage.RowID, Column: usage.Column}, nil
+	}
+	target := navigation.Target{Kind: navigation.KindPrimaryKey}
+	for _, usage := range usages {
+		target.References = append(target.References, navigation.Target{Kind: navigation.KindPrimaryKey, Path: usage.Path, RowID: usage.RowID, Column: usage.Column})
+	}
+	return target, nil
+}
+
+func logicalTableName(table document.Table) string {
+	if table.Namespace == "" {
+		return table.Name
+	}
+	return table.Namespace + "." + table.Name
 }
 
 type TableCreate struct {

@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type GridCell, type GridColumn, type GridSelection, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, Export, GetPublicSchema, GetTable, MoveColumn, Paste, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetSchemaDefinition, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, Export, GetPublicSchema, GetTable, MoveColumn, Navigate, Paste, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetSchemaDefinition, Undo, UpdateCell} from "../wailsjs/go/main/App";
 import {EventsOn} from "../wailsjs/runtime/runtime";
 
 type LogEntry = {
@@ -112,10 +112,28 @@ type TableDocument = {
     path: string;
     namespace: string;
     name: string;
-    columns: { name: string; optional?: boolean; schema: { kind: string; enumValues?: { expression: string }[]; fields?: {name: string; optional?: boolean}[] }; schemaExpression: string; foreignKeyTable?: string; foreignKeyOptions?: string[] }[];
+    columns: { name: string; optional?: boolean; schema: { kind: string; reference?: string; enumValues?: { expression: string }[]; fields?: {name: string; optional?: boolean}[] }; schemaExpression: string; foreignKeyTable?: string; foreignKeyOptions?: string[] }[];
     rows: { id: string; values: Record<string, { expression: string; display: string; formula?: boolean }> }[];
     diagnostics?: { rowID: string; column?: string; message: string }[];
     localSchema: SchemaDefinitionDocument[];
+};
+
+type NavRequest = {
+    kind: "schema-reference" | "foreign-key" | "formula-reference" | "primary-key-references";
+    path: string;
+    rowID?: string;
+    column?: string;
+    reference?: string;
+};
+
+type NavTarget = {
+    kind: string;
+    path: string;
+    local?: boolean;
+    definition?: string;
+    rowID?: string;
+    column?: string;
+    references?: NavTarget[];
 };
 
 type SchemaDefinitionDocument = {
@@ -263,7 +281,7 @@ const enumRenderer: CustomRenderer<EnumCell> = {
     </select>, disablePadding: true}),
 };
 
-function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput}: { table: TableDocument; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void> }) {
+function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onNavigate, focusTarget, onFocusDone}: { table: TableDocument; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
     const [draftError, setDraftError] = useState("");
     const [contextRow, setContextRow] = useState<number | null>(null);
@@ -330,6 +348,57 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
         if (formulaEditing || !selectedCell) return;
         setFormulaValue(rawCellValue(selectedCell.column, selectedCell.row));
     }, [selectedCell, table, draft, formulaEditing]);
+    const navigationRequestForCell = (column: number, row: number): NavRequest | null => {
+        if (isDraft(row)) return null;
+        const source = table.rows[row];
+        if (column === 0) {
+            return {kind: "primary-key-references", path: table.path, rowID: source.id};
+        }
+        const columnDefinition = table.columns[column - 1];
+        const cell = source.values[columnDefinition.name];
+        if (cell?.formula) {
+            return {kind: "formula-reference", path: table.path, rowID: source.id, column: columnDefinition.name};
+        }
+        if (columnDefinition.foreignKeyTable && cell) {
+            return {kind: "foreign-key", path: table.path, rowID: cell.display, column: columnDefinition.name};
+        }
+        if (columnDefinition.schema.kind === "reference" && columnDefinition.schema.reference) {
+            return {kind: "schema-reference", path: table.path, reference: columnDefinition.schema.reference};
+        }
+        return null;
+    };
+    useEffect(() => {
+        if (!focusTarget || focusTarget.path !== table.path) return;
+        if (!focusTarget.column || focusTarget.column === "#PrimaryKey") {
+            onFocusDone();
+            return;
+        }
+        const columnIndex = focusTarget.column === "id" ? 0 : table.columns.findIndex((entry) => entry.name === focusTarget.column) + 1;
+        if (columnIndex >= 0) {
+            const rowIndex = focusTarget.rowID ? table.rows.findIndex((entry) => entry.id === focusTarget.rowID) : -1;
+            if (rowIndex >= 0) {
+                setGridSelection({columns: CompactSelection.fromSingleSelection(columnIndex), rows: CompactSelection.fromSingleSelection(rowIndex), current: {cell: [columnIndex, rowIndex], range: {x: columnIndex, y: rowIndex, width: 1, height: 1}, rangeStack: []}});
+                dataEditorRef.current?.scrollTo(columnIndex, rowIndex, "both", 24, 48, {hAlign: "center", vAlign: "center"});
+                dataEditorRef.current?.focus();
+            } else {
+                setSelectedColumn(columnIndex === 0 ? null : columnIndex);
+                dataEditorRef.current?.scrollTo(columnIndex, 0, "horizontal", 24, 48, {hAlign: "center", vAlign: "start"});
+            }
+        }
+        onFocusDone();
+    }, [focusTarget, table]);
+    useEffect(() => {
+        const navigateShortcut = (event: KeyboardEvent) => {
+            if (event.key !== "F12" || !selectedCell) return;
+            event.preventDefault();
+            const request = navigationRequestForCell(selectedCell.column, selectedCell.row);
+            if (!request) return;
+            const gridBounds = gridRef.current?.getBoundingClientRect();
+            onNavigate(request, {x: gridBounds?.x ?? 0, y: gridBounds?.y ?? 0});
+        };
+        document.addEventListener("keydown", navigateShortcut);
+        return () => document.removeEventListener("keydown", navigateShortcut);
+    }, [selectedCell, table]);
     const errorFor = (rowID: string, column: string) => table.diagnostics?.find((diagnostic) => diagnostic.rowID === rowID && (!diagnostic.column || diagnostic.column === column));
     const focusDiagnostic = (diagnostic: NonNullable<TableDocument["diagnostics"]>[number]) => {
         const row = table.rows.findIndex((entry) => entry.id === diagnostic.rowID);
@@ -579,10 +648,17 @@ function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColum
                         setSelectedColumn(selectedColumns.length === 1 && selectedColumns[0] > 0 ? selectedColumns[0] : null);
                     }
                 }}
-                onCellClicked={([column, row]) => {
+                onCellClicked={([column, row], event) => {
                     setSelectedColumn(null);
                     setSelectedCell({column, row});
                     setFormulaEditing(false);
+                    if (event.ctrlKey || event.metaKey) {
+                        const request = navigationRequestForCell(column, row);
+                        if (request) {
+                            const gridBounds = gridRef.current?.getBoundingClientRect();
+                            onNavigate(request, {x: (gridBounds?.x ?? 0) + event.localEventX, y: (gridBounds?.y ?? 0) + event.localEventY});
+                        }
+                    }
                 }}
                 onCellActivated={([column, row]) => {
                     if (column < 0 || row < 0) return;
@@ -686,9 +762,10 @@ type TableDialog = {namespace: string; name: string};
 
 type SchemaDraft = {name: string; kind: "type" | "constraint"; type: string; appliesTo: string; expression: string};
 
-function SchemaEditor({state, usages, onSelect, onCreate, onApply, onRename, onDelete}: {
+function SchemaEditor({state, usages, onOpenUsage, onSelect, onCreate, onApply, onRename, onDelete}: {
     state: SchemaEditorState;
     usages: (name: string) => SchemaUsage[];
+    onOpenUsage: (usage: SchemaUsage) => void;
     onSelect: (name: string) => void;
     onCreate: (name: string, kind: "type" | "constraint", type: string, appliesTo: string[], expression: string) => Promise<void>;
     onApply: (name: string, kind: "type" | "constraint", type: string, appliesTo: string[], expression: string) => Promise<void>;
@@ -824,10 +901,10 @@ function SchemaEditor({state, usages, onSelect, onCreate, onApply, onRename, onD
                 </> : <div className="schema-editor-empty">Select or create a definition</div>}
                 <div className="schema-editor-usages">
                     <div className="schema-editor-usages-title">Usages</div>
-                    {selectedUsages.map((usage) => <div className="usage-row" key={`${usage.path}:${usage.field}`}>
+                    {selectedUsages.map((usage) => <button className="usage-row usage-row-action" key={`${usage.path}:${usage.field}`} onClick={() => onOpenUsage(usage)}>
                         <span>{usage.table ?? usage.path}</span>
                         <code>{usage.field}</code>
-                    </div>)}
+                    </button>)}
                     {state.selected && selectedUsages.length === 0 && <div className="schema-editor-empty">No usages</div>}
                 </div>
             </div>
@@ -846,6 +923,8 @@ function App() {
     const [dialog, setDialog] = useState<StructureDialog | null>(null);
     const [tableDialog, setTableDialog] = useState<TableDialog | null>(null);
     const [appMenu, setAppMenu] = useState<"file" | "edit" | null>(null);
+    const [focusTarget, setFocusTarget] = useState<{path: string; rowID: string; column: string; nonce: number} | null>(null);
+    const [navMenu, setNavMenu] = useState<{x: number; y: number; targets: NavTarget[]} | null>(null);
 
     async function pasteCells(row: number, column: number, text: string) {
         if (!table) return;
@@ -893,9 +972,13 @@ function App() {
     useEffect(() => {
         const closeMenu = (event: PointerEvent) => {
             if (!(event.target as Element | null)?.closest(".app-menu")) setAppMenu(null);
+            if (!(event.target as Element | null)?.closest(".nav-menu")) setNavMenu(null);
         };
         const closeOnEscape = (event: KeyboardEvent) => {
-            if (event.key === "Escape") setAppMenu(null);
+            if (event.key === "Escape") {
+                setAppMenu(null);
+                setNavMenu(null);
+            }
         };
         document.addEventListener("pointerdown", closeMenu);
         document.addEventListener("keydown", closeOnEscape);
@@ -933,21 +1016,71 @@ function App() {
     }
 
     async function openSchema(node: TreeNode) {
+        if (node.kind === "localSchema") {
+            await openSchemaByPath(node.path!, null, true);
+        } else {
+            const name = node.kind === "schemaDefinition" ? node.name.replace(/^#/, "") : null;
+            await openSchemaByPath(node.path!, name, false);
+        }
+    }
+
+    async function openSchemaByPath(path: string, definition: string | null, local: boolean) {
         setError("");
         try {
-            if (node.kind === "localSchema") {
-                const document = await GetTable(node.path!) as TableDocument;
+            if (local) {
+                const document = await GetTable(path) as TableDocument;
                 const logical = document.namespace ? `${document.namespace}.${document.name}` : document.name;
-                setSchemaDocument({path: node.path!, local: true, logicalTable: logical, definitions: document.localSchema, selected: document.localSchema[0]?.name ?? null});
+                setSchemaDocument({path, local: true, logicalTable: logical, definitions: document.localSchema, selected: definition ?? document.localSchema[0]?.name ?? null});
             } else {
-                const document = await GetPublicSchema(node.path!) as PublicSchemaDocument;
-                const name = node.kind === "schemaDefinition" ? node.name.replace(/^#/, "") : null;
-                setSchemaDocument({path: node.path!, local: false, package: document.package, definitions: document.definitions, selected: name ?? document.definitions[0]?.name ?? null});
+                const document = await GetPublicSchema(path) as PublicSchemaDocument;
+                setSchemaDocument({path, local: false, package: document.package, definitions: document.definitions, selected: definition ?? document.definitions[0]?.name ?? null});
             }
             setTable(null);
             setCellError(null);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
+    async function navigateTo(request: NavRequest, position: {x: number; y: number}) {
+        setError("");
+        try {
+            const target = await Navigate(request) as NavTarget;
+            applyNavigationTarget(target, position);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
+    function applyNavigationTarget(target: NavTarget, position: {x: number; y: number}) {
+        if (target.kind === "schema-reference") {
+            setNavMenu(null);
+            void openSchemaByPath(target.path, target.definition ?? null, !!target.local);
+            return;
+        }
+        if (target.references && target.references.length > 0) {
+            setNavMenu({x: position.x, y: position.y, targets: target.references});
+            return;
+        }
+        focusTableCell(target.path, target.rowID ?? "", target.column ?? "");
+    }
+
+    function focusTableCell(path: string, rowID: string, column: string) {
+        setNavMenu(null);
+        setFocusTarget({path, rowID, column, nonce: Date.now()});
+        if (table?.path !== path) {
+            void openTable(path);
+        }
+    }
+
+    function openUsage(usage: SchemaUsage) {
+        if (usage.table) {
+            focusTableCell(usage.path, "", usage.field === "#PrimaryKey" ? "" : usage.field);
+            return;
+        }
+        const definition = schemaDefinitions(workspace).find((entry) => entry.id === usage.field);
+        if (definition) {
+            void openSchemaByPath(definition.path, definition.id.split(".#")[1], !!definition.table);
         }
     }
 
@@ -1173,16 +1306,16 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable} onOpenSchema={openSchema}/></div>
                     </aside>
                     <section className={`editor-placeholder ${table ? "editor-table" : ""}`}>
-                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: ""})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <>
+                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: ""})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onOpenUsage={openUsage} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>
                             {selectedSchema.appliesTo && <div className="schema-applies">{selectedSchema.appliesTo.join(", ")}</div>}
                             <div className="usage-list">
-                                {(selectedSchema.usages ?? []).map((usage) => <div className="usage-row" key={`${usage.path}:${usage.field}`}>
+                                {(selectedSchema.usages ?? []).map((usage) => <button className="usage-row usage-row-action" key={`${usage.path}:${usage.field}`} onClick={() => openUsage(usage)}>
                                     <span>{usage.table ?? usage.path}</span>
                                     <code>{usage.field}</code>
-                                </div>)}
+                                </button>)}
                             </div>
                         </> : <>
                             <h1>No Schema definitions</h1>
@@ -1231,6 +1364,12 @@ function App() {
                 </section>
             )}
             <LogPanel/>
+            {navMenu && <div className="nav-menu" style={{left: navMenu.x, top: navMenu.y}} role="menu" aria-label="References">
+                {navMenu.targets.map((target, index) => <button key={index} onClick={() => focusTableCell(target.path, target.rowID ?? "", target.column ?? "")}>
+                    <code>{target.path}</code>
+                    <span>{target.rowID}{target.column ? `.${target.column}` : ""}</span>
+                </button>)}
+            </div>}
             {error && <div className="error-toast" role="alert">{error}</div>}
             {notice && <div className="notice-toast" role="status">{notice}</div>}
             {dialog && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setDialog(null)}>

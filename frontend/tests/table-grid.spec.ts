@@ -12,7 +12,7 @@ const table = {
         {name: "name", schemaExpression: "string", schema: {kind: "string"}},
         {name: "position", schemaExpression: "{x: int, y: int, label?: string}", schema: {kind: "struct", fields: [{name: "x"}, {name: "y"}, {name: "label", optional: true}]}},
         {name: "rarity", schemaExpression: `"N" | "R"`, schema: {kind: "enum", enumValues: [{expression: `"N"`}, {expression: `"R"`}]}},
-        {name: "testAttack", schemaExpression: "_local.#Position", schema: {kind: "reference"}},
+        {name: "testAttack", schemaExpression: "_local.#Position", schema: {kind: "reference", reference: "_local.#Position"}},
     ],
     rows: [{id: "sword", values: {tags: {expression: `["starter", "weapon"]`, display: `["starter", "weapon"]`}, position: {expression: `{x: 4, y: 8}`, display: `{x: 4, y: 8}`}, name: {expression: "20 + 5", display: "25", formula: true}, rarity: {expression: `"N"`, display: "N"}, effectID: {expression: `"burn"`, display: "burn"}}}],
     diagnostics: [{rowID: "sword", column: "effectID", message: "foreign key references missing row rpg.effect.burn"}, {rowID: "", message: "table has an invalid export configuration"}],
@@ -94,6 +94,7 @@ test.beforeEach(async ({page}) => {
             },
             SetCompileMode: (mode) => Promise.resolve({...workspace, settings: {...workspace.settings, build: {...workspace.settings.build, mode}}, compile: {...workspace.compile, mode}}),
             Compile: () => Promise.resolve({workspace: {...workspace, compile: {...workspace.compile, pending: false}}}),
+            Navigate: (request) => Promise.resolve({kind: request.kind, path: table.path, rowID: request.rowID, column: request.column, definition: request.reference}),
         };
         // Wails generated bindings resolve methods through this object.
         (window as Window & {go: unknown}).go = {main: {App: api}};
@@ -316,6 +317,46 @@ test("edits a cell through the formula bar", async ({page}) => {
     await formulaBar.fill("Steel Sword");
     await formulaBar.blur();
     expect(await page.evaluate(() => (window as Window & {formulaBarCalls: {path: string; rowID: string; column: string; expression: string}[]}).formulaBarCalls)).toEqual([{path: "/project/tables/item.cue", rowID: "sword", column: "name", expression: "Steel Sword"}]);
+});
+
+test("navigates from a foreign key cell with ctrl-click", async ({page}) => {
+    await page.evaluate(() => {
+        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const navigate = api.Navigate;
+        (window as Window & {navCalls: unknown[]}).navCalls = [];
+        api.Navigate = (...args) => {
+            (window as Window & {navCalls: unknown[]}).navCalls.push(args[0]);
+            return navigate(...args);
+        };
+    });
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    await page.keyboard.down("Control");
+    await page.mouse.click(box.x + 395, box.y + 50);
+    await page.keyboard.up("Control");
+    expect(await page.evaluate(() => (window as Window & {navCalls: unknown[]}).navCalls)).toEqual([{kind: "foreign-key", path: "/project/tables/item.cue", rowID: "burn", column: "effectID"}]);
+});
+
+test("navigates from a schema-reference column with ctrl-click", async ({page}) => {
+    await page.evaluate(() => {
+        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const navigate = api.Navigate;
+        (window as Window & {navCalls: unknown[]}).navCalls = [];
+        api.Navigate = (...args) => {
+            (window as Window & {navCalls: unknown[]}).navCalls.push(args[0]);
+            return navigate(...args);
+        };
+    });
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    await page.keyboard.down("Control");
+    await page.mouse.click(box.x + 1075, box.y + 50);
+    await page.keyboard.up("Control");
+    expect(await page.evaluate(() => (window as Window & {navCalls: unknown[]}).navCalls)).toEqual([{kind: "schema-reference", path: "/project/tables/item.cue", reference: "_local.#Position"}]);
 });
 
 test("creates and opens a table from the project explorer", async ({page}) => {

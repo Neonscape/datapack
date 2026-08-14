@@ -8,6 +8,25 @@ import (
 	"datapack/internal/schemamodel"
 )
 
+func TestReferencesReturnsSameAndCrossRowCells(t *testing.T) {
+	table := document.Table{
+		Namespace: "combat",
+		Name:      "growth",
+		Columns:   []document.Column{{Name: "baseAttack"}, {Name: "attack"}},
+		Formulas: []document.Formula{
+			{RowID: "level_01", Column: "attack", Expression: "baseAttack * 2"},
+			{RowID: "level_10", Column: "attack", Expression: "combat.growth.level_01.attack + baseAttack"},
+		},
+	}
+	references := References(table, table.Formulas[1])
+	if len(references) != 2 {
+		t.Fatalf("references = %#v", references)
+	}
+	if references[0] != (Reference{RowID: "level_01", Column: "attack"}) || references[1] != (Reference{RowID: "level_10", Column: "baseAttack"}) {
+		t.Fatalf("references = %#v", references)
+	}
+}
+
 func TestEvaluateCalculatesSameTableDependencies(t *testing.T) {
 	table := document.Table{
 		Namespace: "combat",

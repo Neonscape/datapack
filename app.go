@@ -7,6 +7,7 @@ import (
 
 	"datapack/internal/document"
 	"datapack/internal/logging"
+	"datapack/internal/navigation"
 	"datapack/internal/workspace"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -167,6 +168,11 @@ func (a *App) Compile() (workspace.CompileResult, error) {
 // the user-level editor settings.
 func (a *App) SetCompileMode(mode string) (workspace.View, error) {
 	return a.workspace.SetCompileMode(mode)
+}
+
+// Navigate resolves one semantic jump to a document and location.
+func (a *App) Navigate(request navigation.Request) (navigation.Target, error) {
+	return a.workspace.Navigate(request)
 }
 
 // AddColumn adds a column and initializes its value for every existing row.

@@ -28,6 +28,63 @@ type Diagnostic struct {
 	Message string `json:"message"`
 }
 
+// Reference identifies one same-table cell a formula reads.
+type Reference struct {
+	RowID  string `json:"rowID"`
+	Column string `json:"column"`
+}
+
+// References returns the cells a formula reads, in source order. Same-row
+// references carry the formula's own row ID; cross-row references carry the
+// referenced row ID.
+func References(table document.Table, formula document.Formula) []Reference {
+	tree, err := parser.Parse(formula.Expression)
+	if err != nil {
+		return nil
+	}
+	columns := map[string]bool{}
+	for _, column := range table.Columns {
+		columns[column.Name] = true
+	}
+	collector := referenceCollector{table: table, columns: columns, formula: formula}
+	ast.Walk(&tree.Node, &collector)
+	return collector.references
+}
+
+type referenceCollector struct {
+	table      document.Table
+	columns    map[string]bool
+	formula    document.Formula
+	references []Reference
+	seen       map[string]bool
+}
+
+func (collector *referenceCollector) add(rowID, column string) {
+	if collector.seen == nil {
+		collector.seen = map[string]bool{}
+	}
+	key := rowID + "." + column
+	if collector.seen[key] {
+		return
+	}
+	collector.seen[key] = true
+	collector.references = append(collector.references, Reference{RowID: rowID, Column: column})
+}
+
+func (collector *referenceCollector) Visit(node *ast.Node) {
+	switch value := (*node).(type) {
+	case *ast.IdentifierNode:
+		if collector.columns[value.Value] {
+			collector.add(collector.formula.RowID, value.Value)
+		}
+	case *ast.MemberNode:
+		path := memberPath(value)
+		if len(path) == 4 && path[0] == collector.table.Namespace && path[1] == collector.table.Name {
+			collector.add(path[2], path[3])
+		}
+	}
+}
+
 // Evaluate computes formulas into an in-memory result. It never changes the
 // fixed source values in document.Table.
 func Evaluate(table document.Table) Result {
