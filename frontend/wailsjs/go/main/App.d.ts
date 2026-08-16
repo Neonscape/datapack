@@ -3,6 +3,7 @@
 import {workspace} from '../models';
 import {document} from '../models';
 import {navigation} from '../models';
+import {schemamodel} from '../models';
 
 export function AddColumn(arg1:workspace.ColumnAdd):Promise<workspace.ColumnAddResult>;
 
@@ -41,6 +42,8 @@ export function Navigate(arg1:navigation.Request):Promise<navigation.Target>;
 export function OpenProject(arg1:string):Promise<workspace.View>;
 
 export function Paste(arg1:workspace.Paste):Promise<workspace.HistoryResult>;
+
+export function PrintSchema(arg1:schemamodel.Node):Promise<string>;
 
 export function Redo(arg1:string):Promise<workspace.HistoryResult>;
 

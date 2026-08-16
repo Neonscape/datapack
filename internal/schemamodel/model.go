@@ -29,9 +29,25 @@ type Value struct {
 	Expression string `json:"expression"`
 }
 
+// Requirement kinds classify a single conjunct in a field Schema.
+const (
+	RequirementCompare   = "compare"
+	RequirementRegex     = "regex"
+	RequirementNonEmpty  = "nonEmpty"
+	RequirementLength    = "length"
+	RequirementReference = "reference"
+	RequirementCustom    = "custom"
+)
+
 type Requirement struct {
-	Expression string `json:"expression"`
+	Kind       string `json:"kind,omitempty"`
+	Op         string `json:"op,omitempty"`
+	Value      string `json:"value,omitempty"`
+	Pattern    string `json:"pattern,omitempty"`
+	Min        *int   `json:"min,omitempty"`
+	Max        *int   `json:"max,omitempty"`
 	Reference  string `json:"reference,omitempty"`
+	Expression string `json:"expression,omitempty"`
 }
 
 type Field struct {
@@ -118,26 +134,18 @@ func parseAnd(expression *ast.BinaryExpr) (Node, error) {
 			return Node{}, err
 		}
 		if node.Kind == KindReference && result.Kind != KindUnknown {
-			result.Requirements = append(result.Requirements, Requirement{Expression: node.Reference, Reference: node.Reference})
+			result.Requirements = append(result.Requirements, Requirement{Kind: RequirementReference, Expression: node.Reference, Reference: node.Reference})
 			continue
 		}
 		if hasBaseType(node) {
 			if result.Kind != KindUnknown {
-				text, err := expressionText(part)
-				if err != nil {
-					return Node{}, err
-				}
-				result.Requirements = append(result.Requirements, Requirement{Expression: text})
+				result.Requirements = append(result.Requirements, classifyRequirement(part))
 				continue
 			}
 			result = mergeNode(result, node)
 			continue
 		}
-		text, err := expressionText(part)
-		if err != nil {
-			return Node{}, err
-		}
-		result.Requirements = append(result.Requirements, Requirement{Expression: text})
+		result.Requirements = append(result.Requirements, classifyRequirement(part))
 	}
 	return result, nil
 }
@@ -173,11 +181,7 @@ func parseOr(expression *ast.BinaryExpr) (Node, error) {
 			result = mergeNode(result, node)
 			continue
 		}
-		text, err := expressionText(part)
-		if err != nil {
-			return Node{}, err
-		}
-		result.Requirements = append(result.Requirements, Requirement{Expression: text})
+		result.Requirements = append(result.Requirements, classifyRequirement(part))
 	}
 	return result, nil
 }
@@ -275,4 +279,227 @@ func (v Value) String() string {
 		return unquoted
 	}
 	return v.Expression
+}
+
+// classifyRequirement turns one conjunct into a typed predicate while keeping
+// the raw expression for round-trip fidelity.
+func classifyRequirement(expression ast.Expr) Requirement {
+	text, err := expressionText(expression)
+	if err != nil {
+		text = ""
+	}
+	requirement := Requirement{Kind: RequirementCustom, Expression: text}
+	switch value := expression.(type) {
+	case *ast.UnaryExpr:
+		operand, err := expressionText(value.X)
+		if err != nil {
+			return requirement
+		}
+		switch value.Op {
+		case token.GEQ, token.GTR, token.LEQ, token.LSS, token.EQL:
+			requirement.Kind = RequirementCompare
+			requirement.Op = tokenSymbol(value.Op)
+			requirement.Value = operand
+		case token.NEQ:
+			if operand == `""` {
+				requirement.Kind = RequirementNonEmpty
+				requirement.Op = "!="
+				requirement.Value = `""`
+				return requirement
+			}
+			requirement.Kind = RequirementCompare
+			requirement.Op = "!="
+			requirement.Value = operand
+		case token.MAT, token.NMAT:
+			if pattern, ok := stringLiteral(value.X); ok {
+				requirement.Kind = RequirementRegex
+				requirement.Op = tokenSymbol(value.Op)
+				requirement.Pattern = pattern
+			}
+		}
+	case *ast.CallExpr:
+		if selector, ok := value.Fun.(*ast.SelectorExpr); ok {
+			if identifier, ok := selector.X.(*ast.Ident); ok && identifier.Name == "strings" {
+				arg, ok := integerLiteral(value.Args)
+				if ok {
+					name, _, err := ast.LabelName(selector.Sel)
+					if err == nil {
+						switch name {
+						case "MinRunes":
+							requirement.Kind = RequirementLength
+							requirement.Min = &arg
+						case "MaxRunes":
+							requirement.Kind = RequirementLength
+							requirement.Max = &arg
+						}
+					}
+				}
+			}
+		}
+	}
+	return requirement
+}
+
+func tokenSymbol(operator token.Token) string {
+	switch operator {
+	case token.GEQ:
+		return ">="
+	case token.GTR:
+		return ">"
+	case token.LEQ:
+		return "<="
+	case token.LSS:
+		return "<"
+	case token.EQL:
+		return "=="
+	case token.NEQ:
+		return "!="
+	case token.MAT:
+		return "=~"
+	case token.NMAT:
+		return "!~"
+	default:
+		return ""
+	}
+}
+
+func stringLiteral(expression ast.Expr) (string, bool) {
+	literal, ok := expression.(*ast.BasicLit)
+	if !ok || literal.Kind != token.STRING {
+		return "", false
+	}
+	value, err := strconv.Unquote(literal.Value)
+	return value, err == nil
+}
+
+func integerLiteral(arguments []ast.Expr) (int, bool) {
+	if len(arguments) != 1 {
+		return 0, false
+	}
+	literal, ok := arguments[0].(*ast.BasicLit)
+	if !ok || literal.Kind != token.INT {
+		return 0, false
+	}
+	value, err := strconv.Atoi(literal.Value)
+	return value, err == nil
+}
+
+// Print serializes a Node back into its canonical CUE expression.
+func Print(node Node) (string, error) {
+	if node.Kind == KindEnum {
+		values := make([]string, 0, len(node.EnumValues)+2)
+		for _, value := range node.EnumValues {
+			values = append(values, value.Expression)
+		}
+		if node.Default != nil {
+			values = append(values, "*"+node.Default.Expression)
+		}
+		if node.Nullable {
+			values = append(values, "null")
+		}
+		if len(values) == 0 {
+			return "", fmt.Errorf("enum Schema has no values")
+		}
+		return strings.Join(values, " | "), nil
+	}
+	conjunction := []string{}
+	base, err := baseExpression(node)
+	if err != nil {
+		return "", err
+	}
+	if base != "" {
+		conjunction = append(conjunction, base)
+	}
+	for _, requirement := range node.Requirements {
+		conjunction = append(conjunction, requirementExpression(requirement))
+	}
+	if len(conjunction) == 0 {
+		return "", fmt.Errorf("Schema has no type or requirements")
+	}
+	combined := strings.Join(conjunction, " & ")
+	disjunction := []string{}
+	if node.Default != nil {
+		disjunction = append(disjunction, "*"+node.Default.Expression)
+	}
+	if node.Nullable {
+		disjunction = append(disjunction, "null")
+	}
+	if len(disjunction) > 0 {
+		if len(conjunction) > 1 {
+			return "(" + combined + ") | " + strings.Join(disjunction, " | "), nil
+		}
+		return combined + " | " + strings.Join(disjunction, " | "), nil
+	}
+	return combined, nil
+}
+
+func baseExpression(node Node) (string, error) {
+	switch node.Kind {
+	case KindString:
+		return "string", nil
+	case KindInteger:
+		return "int", nil
+	case KindNumber:
+		return "number", nil
+	case KindBoolean:
+		return "bool", nil
+	case KindReference:
+		if node.Reference == "" {
+			return "", fmt.Errorf("reference Schema is missing its target")
+		}
+		return node.Reference, nil
+	case KindArray:
+		if node.Element == nil {
+			return "", fmt.Errorf("array Schema is missing its element type")
+		}
+		element, err := Print(*node.Element)
+		if err != nil {
+			return "", err
+		}
+		return "[..." + element + "]", nil
+	case KindStruct:
+		fields := make([]string, 0, len(node.Fields))
+		for _, field := range node.Fields {
+			schema, err := Print(field.Schema)
+			if err != nil {
+				return "", err
+			}
+			if field.Optional {
+				fields = append(fields, field.Name+"?: "+schema)
+			} else {
+				fields = append(fields, field.Name+": "+schema)
+			}
+		}
+		return "{" + strings.Join(fields, ", ") + "}", nil
+	case KindUnknown:
+		return "", nil
+	default:
+		return "", fmt.Errorf("unsupported Schema kind %q", node.Kind)
+	}
+}
+
+func requirementExpression(requirement Requirement) string {
+	switch requirement.Kind {
+	case RequirementCompare:
+		return requirement.Op + " " + requirement.Value
+	case RequirementRegex:
+		return requirement.Op + " " + strconv.Quote(requirement.Pattern)
+	case RequirementNonEmpty:
+		return `!= ""`
+	case RequirementLength:
+		if requirement.Min != nil {
+			return fmt.Sprintf("strings.MinRunes(%d)", *requirement.Min)
+		}
+		if requirement.Max != nil {
+			return fmt.Sprintf("strings.MaxRunes(%d)", *requirement.Max)
+		}
+		return requirement.Expression
+	case RequirementReference:
+		if requirement.Reference != "" {
+			return requirement.Reference
+		}
+		return requirement.Expression
+	default:
+		return requirement.Expression
+	}
 }

@@ -78,6 +78,10 @@ export function Paste(arg1) {
   return window['go']['main']['App']['Paste'](arg1);
 }
 
+export function PrintSchema(arg1) {
+  return window['go']['main']['App']['PrintSchema'](arg1);
+}
+
 export function Redo(arg1) {
   return window['go']['main']['App']['Redo'](arg1);
 }

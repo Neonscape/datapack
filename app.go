@@ -8,6 +8,7 @@ import (
 	"datapack/internal/document"
 	"datapack/internal/logging"
 	"datapack/internal/navigation"
+	"datapack/internal/schemamodel"
 	"datapack/internal/workspace"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -173,6 +174,11 @@ func (a *App) SetCompileMode(mode string) (workspace.View, error) {
 // Navigate resolves one semantic jump to a document and location.
 func (a *App) Navigate(request navigation.Request) (navigation.Target, error) {
 	return a.workspace.Navigate(request)
+}
+
+// PrintSchema serializes a structured Schema node back into CUE.
+func (a *App) PrintSchema(node schemamodel.Node) (string, error) {
+	return schemamodel.Print(node)
 }
 
 // AddColumn adds a column and initializes its value for every existing row.

@@ -95,6 +95,16 @@ test.beforeEach(async ({page}) => {
             SetCompileMode: (mode) => Promise.resolve({...workspace, settings: {...workspace.settings, build: {...workspace.settings.build, mode}}, compile: {...workspace.compile, mode}}),
             Compile: () => Promise.resolve({workspace: {...workspace, compile: {...workspace.compile, pending: false}}}),
             Navigate: (request) => Promise.resolve({kind: request.kind, path: table.path, rowID: request.rowID, column: request.column, definition: request.reference}),
+            PrintSchema: (node) => {
+                if (!node) return Promise.resolve("string");
+                if (node.kind === "enum") return Promise.resolve(`"N" | "R"`);
+                let expression = node.kind === "reference" ? (node.reference ?? "string") : node.kind;
+                for (const requirement of (node.requirements ?? [])) {
+                    if (requirement.kind === "compare") expression += ` ${requirement.op} ${requirement.value}`;
+                    if (requirement.kind === "reference") expression += ` & ${requirement.reference}`;
+                }
+                return Promise.resolve(expression);
+            },
         };
         // Wails generated bindings resolve methods through this object.
         (window as Window & {go: unknown}).go = {main: {App: api}};
@@ -240,25 +250,48 @@ test("edits the selected column Schema", async ({page}) => {
     await page.mouse.click(box.x + 565, box.y + 15, {button: "right"});
     await page.getByRole("button", {name: "Edit schema"}).click();
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeVisible();
+    await page.getByRole("button", {name: "自定义表达式", exact: true}).click();
     const schema = page.getByRole("textbox", {name: "CUE Schema"});
     await schema.fill("int & >=20");
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeHidden();
 });
 
-test("shows local references without prefix and inserts picked references", async ({page}) => {
+test("edits a column Schema with the structured editor", async ({page}) => {
+    await page.evaluate(() => {
+        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const setColumnSchema = api.SetColumnSchema;
+        (window as Window & {schemaCalls: {schemaExpression: string}[]}).schemaCalls = [];
+        api.SetColumnSchema = (...args) => {
+            (window as Window & {schemaCalls: {schemaExpression: string}[]}).schemaCalls.push(args[0] as {schemaExpression: string});
+            return setColumnSchema(...args);
+        };
+    });
     const canvas = page.locator("canvas:visible").first();
     const box = await canvas.boundingBox();
     expect(box).not.toBeNull();
     if (!box) return;
     await page.mouse.click(box.x + 1075, box.y + 15, {button: "right"});
     await page.getByRole("button", {name: "Edit schema"}).click();
-    const schema = page.getByRole("textbox", {name: "CUE Schema"});
-    await expect(schema).toHaveValue("#Position");
-    const picker = page.getByLabel("Insert Schema reference", {exact: true});
-    await expect(picker.locator("option")).toContainText(["Choose a reference", "#Position", "common.#GameID", "common.#NonNegative"]);
-    await picker.selectOption("common.#NonNegative");
-    await expect(schema).toHaveValue("#Position & common.#NonNegative");
+    await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeVisible();
+    await page.getByRole("combobox", {name: "基础类型"}).selectOption("integer");
+    await page.getByRole("button", {name: "添加条件"}).click();
+    await page.getByRole("combobox", {name: "比较运算符"}).selectOption(">=");
+    await page.getByRole("textbox", {name: "比较值"}).fill("10");
+    await page.getByRole("button", {name: "Apply"}).click();
+    await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeHidden();
+    expect(await page.evaluate(() => (window as Window & {schemaCalls: {schemaExpression: string}[]}).schemaCalls)).toEqual([{path: "/project/tables/item.cue", name: "testAttack", schemaExpression: "integer >= 10"}]);
+});
+
+test("edits enum values in the structured editor", async ({page}) => {
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    await page.mouse.click(box.x + 1075, box.y + 15, {button: "right"});
+    await page.getByRole("button", {name: "Edit schema"}).click();
+    await page.getByRole("combobox", {name: "基础类型"}).selectOption("enum");
+    await expect(page.getByRole("button", {name: "添加枚举值"})).toBeVisible();
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeHidden();
 });
@@ -403,11 +436,11 @@ test("shows backend log entries in the GUI panel", async ({page}) => {
 test("edits a public Schema definition from the project explorer", async ({page}) => {
     await page.getByRole("button", {name: "#GameID"}).first().click();
     await expect(page.getByText("Public Schema")).toBeVisible();
+    await page.getByRole("button", {name: "自定义表达式", exact: true}).click();
     const expression = page.locator(".schema-editor-form textarea");
     await expect(expression).toHaveValue("string");
     await expression.fill(`string & =~"^[a-z]+$"`);
     await page.getByRole("button", {name: "Apply"}).click();
-    await expect(expression).toHaveValue(`string & =~"^[a-z]+$"`);
     await expect(page.getByText("Usages")).toBeVisible();
     await expect(page.getByText("#PrimaryKey")).toBeVisible();
 });
@@ -417,6 +450,7 @@ test("creates and renames a public Schema definition", async ({page}) => {
     await page.getByRole("button", {name: "New definition"}).click();
     await page.getByLabel("Name", {exact: true}).fill("Rarity");
     await page.getByLabel("Type", {exact: true}).selectOption("enum");
+    await page.getByRole("button", {name: "自定义表达式", exact: true}).click();
     await page.locator(".schema-editor-form textarea").fill(`"N" | "R"`);
     await page.getByRole("button", {name: "Create"}).click();
     await expect(page.getByRole("button", {name: "#Rarity"})).toBeVisible();

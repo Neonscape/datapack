@@ -524,8 +524,14 @@ export namespace projecttree {
 export namespace schemamodel {
 	
 	export class Requirement {
-	    expression: string;
+	    kind?: string;
+	    op?: string;
+	    value?: string;
+	    pattern?: string;
+	    min?: number;
+	    max?: number;
 	    reference?: string;
+	    expression?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Requirement(source);
@@ -533,8 +539,14 @@ export namespace schemamodel {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.expression = source["expression"];
+	        this.kind = source["kind"];
+	        this.op = source["op"];
+	        this.value = source["value"];
+	        this.pattern = source["pattern"];
+	        this.min = source["min"];
+	        this.max = source["max"];
 	        this.reference = source["reference"];
+	        this.expression = source["expression"];
 	    }
 	}
 	export class Value {

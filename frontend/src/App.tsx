@@ -2,7 +2,8 @@ import {useEffect, useRef, useState} from 'react';
 import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type GridCell, type GridColumn, type GridSelection, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, Export, GetPublicSchema, GetTable, MoveColumn, Navigate, Paste, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetSchemaDefinition, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, Export, GetPublicSchema, GetTable, MoveColumn, Navigate, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetSchemaDefinition, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {schemamodel} from "../wailsjs/go/models";
 import {EventsOn} from "../wailsjs/runtime/runtime";
 
 type LogEntry = {
@@ -108,11 +109,33 @@ type ForeignKeySummary = {
     diagnostics?: { rowID: string; column: string; message: string }[];
 };
 
+type SchemaRequirement = {
+    kind?: string;
+    op?: string;
+    value?: string;
+    pattern?: string;
+    min?: number;
+    max?: number;
+    reference?: string;
+    expression?: string;
+};
+
+type SchemaNode = {
+    kind: string;
+    nullable?: boolean;
+    default?: {expression: string};
+    reference?: string;
+    enumValues?: {expression: string}[];
+    element?: SchemaNode;
+    fields?: {name: string; optional?: boolean; schema: SchemaNode}[];
+    requirements?: SchemaRequirement[];
+};
+
 type TableDocument = {
     path: string;
     namespace: string;
     name: string;
-    columns: { name: string; optional?: boolean; schema: { kind: string; reference?: string; enumValues?: { expression: string }[]; fields?: {name: string; optional?: boolean}[] }; schemaExpression: string; foreignKeyTable?: string; foreignKeyOptions?: string[] }[];
+    columns: { name: string; optional?: boolean; schema: SchemaNode; schemaExpression: string; foreignKeyTable?: string; foreignKeyOptions?: string[] }[];
     rows: { id: string; values: Record<string, { expression: string; display: string; formula?: boolean }> }[];
     diagnostics?: { rowID: string; column?: string; message: string }[];
     localSchema: SchemaDefinitionDocument[];
@@ -141,7 +164,7 @@ type SchemaDefinitionDocument = {
     kind: "type" | "constraint";
     type?: string;
     appliesTo?: string[];
-    schema: { kind: string };
+    schema: SchemaNode;
     schemaExpression: string;
 };
 
@@ -182,6 +205,20 @@ function schemaReferenceOptions(workspace: WorkspaceView | null): {label: string
     }
     options.sort((left, right) => left.label.localeCompare(right.label));
     return options;
+}
+
+function schemaTypeReferenceOptions(workspace: WorkspaceView | null): {label: string; value: string}[] {
+    return schemaDefinitions(workspace).filter((definition) => definition.kind === "type").map((definition) => ({
+        label: definition.id,
+        value: definition.id.includes("._local.#") ? `_local.#${definition.id.split(".#")[1]}` : definition.id,
+    }));
+}
+
+function schemaConstraintReferenceOptions(workspace: WorkspaceView | null): {label: string; value: string}[] {
+    return schemaDefinitions(workspace).filter((definition) => definition.kind === "constraint").map((definition) => ({
+        label: definition.id,
+        value: definition.id.includes("._local.#") ? `_local.#${definition.id.split(".#")[1]}` : definition.id,
+    }));
 }
 
 function Tree({node, depth = 0, onOpenTable, onOpenSchema}: { node: TreeNode; depth?: number; onOpenTable: (path: string) => void; onOpenSchema: (node: TreeNode) => void }) {
@@ -757,16 +794,206 @@ type StructureDialog = {
     second: string;
     schema: string;
     initial: string;
+    node?: SchemaNode;
+    custom?: boolean;
 };
 type TableDialog = {namespace: string; name: string};
 
-type SchemaDraft = {name: string; kind: "type" | "constraint"; type: string; appliesTo: string; expression: string};
+function predicateOptions(kind: string): {kind: string; label: string}[] {
+    if (kind === "string") {
+        return [
+            {kind: "compare", label: "比较"},
+            {kind: "regex", label: "正则"},
+            {kind: "nonEmpty", label: "非空"},
+            {kind: "length", label: "长度"},
+            {kind: "reference", label: "引用"},
+            {kind: "custom", label: "自定义"},
+        ];
+    }
+    if (kind === "integer" || kind === "number") {
+        return [
+            {kind: "compare", label: "比较"},
+            {kind: "reference", label: "引用"},
+            {kind: "custom", label: "自定义"},
+        ];
+    }
+    return [
+        {kind: "reference", label: "引用"},
+        {kind: "custom", label: "自定义"},
+    ];
+}
 
-function SchemaEditor({state, usages, onOpenUsage, onSelect, onCreate, onApply, onRename, onDelete}: {
+function newRequirement(kind: string): SchemaRequirement {
+    switch (kind) {
+        case "compare": return {kind, op: ">=", value: ""};
+        case "regex": return {kind, op: "=~", pattern: ""};
+        case "nonEmpty": return {kind};
+        case "length": return {kind, min: 1};
+        case "reference": return {kind, reference: ""};
+        default: return {kind: "custom", expression: ""};
+    }
+}
+
+function requirementError(requirement: SchemaRequirement): string {
+    switch (requirement.kind) {
+        case "compare":
+            return requirement.value?.trim() ? "" : "需要一个值";
+        case "regex":
+            if (!requirement.pattern) return "需要正则模式";
+            try {
+                new RegExp(requirement.pattern);
+                return "";
+            } catch {
+                return "正则无效";
+            }
+        case "length":
+            if (requirement.min != null && (!Number.isInteger(requirement.min) || requirement.min < 0)) return "最小长度须为非负整数";
+            if (requirement.max != null && (!Number.isInteger(requirement.max) || requirement.max < 0)) return "最大长度须为非负整数";
+            return "";
+        case "reference":
+            return requirement.reference ? "" : "需要选择一个约束 Schema";
+        case "custom":
+            return requirement.expression?.trim() ? "" : "需要表达式";
+        default:
+            return "";
+    }
+}
+
+function RequirementInput({requirement, baseType, constraintOptions, onChange}: {requirement: SchemaRequirement; baseType: string; constraintOptions: {label: string; value: string}[]; onChange: (requirement: SchemaRequirement) => void}) {
+    if (requirement.kind === "compare") {
+        return <span className="schema-req-input">
+            <select aria-label="比较运算符" value={requirement.op} onChange={(event) => onChange({...requirement, op: event.target.value})}>
+                {[">=", ">", "<=", "<", "==", "!="].map((op) => <option key={op} value={op}>{op}</option>)}
+            </select>
+            <input aria-label="比较值" value={requirement.value ?? ""} placeholder={baseType === "string" ? `"value"` : "0"} onChange={(event) => onChange({...requirement, value: event.target.value})}/>
+        </span>;
+    }
+    if (requirement.kind === "regex") {
+        return <input aria-label="正则模式" value={requirement.pattern ?? ""} placeholder="^[a-z]+$" onChange={(event) => onChange({...requirement, pattern: event.target.value})}/>;
+    }
+    if (requirement.kind === "nonEmpty") {
+        return <input aria-label="非空" disabled placeholder="非空（无需填写）"/>;
+    }
+    if (requirement.kind === "length") {
+        const mode = requirement.max != null ? "max" : "min";
+        return <span className="schema-req-input">
+            <select aria-label="长度方向" value={mode} onChange={(event) => onChange(event.target.value === "max" ? {...requirement, min: undefined, max: 1} : {...requirement, min: 1, max: undefined})}>
+                <option value="min">最小长度</option>
+                <option value="max">最大长度</option>
+            </select>
+            <input aria-label="长度值" type="number" min="0" value={mode === "max" ? (requirement.max ?? 1) : (requirement.min ?? 1)} onChange={(event) => onChange(mode === "max" ? {...requirement, max: Number(event.target.value)} : {...requirement, min: Number(event.target.value)})}/>
+        </span>;
+    }
+    if (requirement.kind === "reference") {
+        return <select aria-label="约束引用" value={requirement.reference ?? ""} onChange={(event) => onChange({...requirement, reference: event.target.value})}>
+            <option value="">选择一个约束 Schema</option>
+            {constraintOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>;
+    }
+    return <input aria-label="自定义表达式" value={requirement.expression ?? ""} placeholder=">=0" onChange={(event) => onChange({...requirement, expression: event.target.value})}/>;
+}
+
+function SchemaForm({value, onChange, workspace}: {value: SchemaNode; onChange: (node: SchemaNode) => void; workspace: WorkspaceView | null}) {
+    const kind = value.kind ?? "unknown";
+    const typeReferences = schemaTypeReferenceOptions(workspace);
+    const constraintReferences = schemaConstraintReferenceOptions(workspace);
+
+    const setKind = (next: string) => {
+        const base: SchemaNode = {kind: next, nullable: value.nullable, default: value.default};
+        if (next === "enum") base.enumValues = value.kind === "enum" ? value.enumValues : [];
+        if (next === "array") base.element = value.kind === "array" ? value.element : {kind: "string"};
+        if (next === "struct") base.fields = value.kind === "struct" ? value.fields : [];
+        if (next === "reference") base.reference = value.kind === "reference" ? value.reference : (typeReferences[0]?.value ?? "");
+        if (next !== "enum") base.requirements = value.requirements;
+        onChange(base);
+    };
+
+    const updateRequirement = (index: number, requirement: SchemaRequirement) => {
+        onChange({...value, requirements: (value.requirements ?? []).map((entry, position) => position === index ? requirement : entry)});
+    };
+    const addRequirement = () => {
+        const options = predicateOptions(kind);
+        onChange({...value, requirements: [...(value.requirements ?? []), newRequirement(options[0].kind)]});
+    };
+    const removeRequirement = (index: number) => {
+        onChange({...value, requirements: (value.requirements ?? []).filter((_, position) => position !== index)});
+    };
+
+    const requirements = value.requirements ?? [];
+
+    return <div className="schema-form">
+        <label className="schema-form-row">基础类型
+            <select aria-label="基础类型" value={kind} onChange={(event) => setKind(event.target.value)}>
+                {["string", "integer", "number", "boolean", "enum", "array", "struct", "reference"].map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+        </label>
+        {kind === "reference" && <label className="schema-form-row">类型 Schema
+            <select aria-label="类型 Schema" value={value.reference ?? ""} onChange={(event) => onChange({...value, reference: event.target.value})}>
+                <option value="">选择一个类型 Schema</option>
+                {typeReferences.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+        </label>}
+        {kind === "enum" && <div className="schema-form-block">
+            <div className="schema-form-block-title">枚举值</div>
+            {(value.enumValues ?? []).map((enumValue, index) => <div className="schema-enum-row" key={index}>
+                <input value={enumValue.expression} onChange={(event) => onChange({...value, enumValues: (value.enumValues ?? []).map((entry, position) => position === index ? {expression: event.target.value} : entry)})}/>
+                <button aria-label={`删除枚举值 ${index + 1}`} onClick={() => onChange({...value, enumValues: (value.enumValues ?? []).filter((_, position) => position !== index)})}>×</button>
+            </div>)}
+            <button type="button" className="schema-form-add" onClick={() => onChange({...value, enumValues: [...(value.enumValues ?? []), {expression: `""`}]})}>添加枚举值</button>
+        </div>}
+        {kind === "array" && <label className="schema-form-row">元素类型
+            <select aria-label="元素类型" value={value.element?.kind ?? "string"} onChange={(event) => onChange({...value, element: {kind: event.target.value}})}>
+                {["string", "integer", "number", "boolean", "reference"].map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+        </label>}
+        {kind === "array" && value.element?.kind === "reference" && <label className="schema-form-row">元素 Schema
+            <select aria-label="元素 Schema" value={value.element.reference ?? ""} onChange={(event) => onChange({...value, element: {...value.element!, reference: event.target.value}})}>
+                <option value="">选择一个类型 Schema</option>
+                {typeReferences.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+        </label>}
+        {kind === "struct" && <div className="schema-form-block">
+            <div className="schema-form-block-title">字段</div>
+            {(value.fields ?? []).map((field, index) => <div className="schema-enum-row" key={index}>
+                <input aria-label={`字段名 ${index + 1}`} value={field.name} placeholder="name" onChange={(event) => onChange({...value, fields: (value.fields ?? []).map((entry, position) => position === index ? {...entry, name: event.target.value} : entry)})}/>
+                <select aria-label={`字段类型 ${index + 1}`} value={field.schema.kind} onChange={(event) => onChange({...value, fields: (value.fields ?? []).map((entry, position) => position === index ? {...entry, schema: {kind: event.target.value}} : entry)})}>
+                    {["string", "integer", "number", "boolean", "enum", "reference"].map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+                <label className="schema-field-optional"><input type="checkbox" checked={!!field.optional} onChange={(event) => onChange({...value, fields: (value.fields ?? []).map((entry, position) => position === index ? {...entry, optional: event.target.checked} : entry)})}/>可选</label>
+                <button aria-label={`删除字段 ${index + 1}`} onClick={() => onChange({...value, fields: (value.fields ?? []).filter((_, position) => position !== index)})}>×</button>
+            </div>)}
+            <button type="button" className="schema-form-add" onClick={() => onChange({...value, fields: [...(value.fields ?? []), {name: "", schema: {kind: "string"}, optional: false}]})}>添加字段</button>
+        </div>}
+        {kind !== "enum" && <div className="schema-form-block">
+            <div className="schema-form-block-title">条件（合取，全部成立）</div>
+            {requirements.map((requirement, index) => {
+                const error = requirementError(requirement);
+                return <div className="schema-req-row" key={index}>
+                    <select aria-label="条件类型" value={requirement.kind ?? "custom"} onChange={(event) => updateRequirement(index, newRequirement(event.target.value))}>
+                        {predicateOptions(kind).map((option) => <option key={option.kind} value={option.kind}>{option.label}</option>)}
+                    </select>
+                    <RequirementInput requirement={requirement} baseType={kind} constraintOptions={constraintReferences} onChange={(next) => updateRequirement(index, next)}/>
+                    <button aria-label="删除条件" onClick={() => removeRequirement(index)}>×</button>
+                    {error && <span className="schema-req-error">{error}</span>}
+                </div>;
+            })}
+            <button type="button" className="schema-form-add" onClick={addRequirement}>添加条件</button>
+        </div>}
+        <div className="schema-form-row schema-form-flags">
+            <label><input type="checkbox" checked={!!value.nullable} onChange={(event) => onChange({...value, nullable: event.target.checked})}/>允许为空</label>
+            <label className="schema-default">默认值 <input value={value.default?.expression ?? ""} placeholder="可选" onChange={(event) => onChange({...value, default: event.target.value ? {expression: event.target.value} : undefined})}/></label>
+        </div>
+    </div>;
+}
+
+type SchemaDraft = {name: string; kind: "type" | "constraint"; type: string; appliesTo: string; expression: string; node: SchemaNode; custom: boolean};
+
+function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, onCreate, onApply, onRename, onDelete}: {
     state: SchemaEditorState;
     usages: (name: string) => SchemaUsage[];
     onOpenUsage: (usage: SchemaUsage) => void;
     onSelect: (name: string) => void;
+    workspace: WorkspaceView | null;
     onCreate: (name: string, kind: "type" | "constraint", type: string, appliesTo: string[], expression: string) => Promise<void>;
     onApply: (name: string, kind: "type" | "constraint", type: string, appliesTo: string[], expression: string) => Promise<void>;
     onRename: (oldName: string, newName: string) => Promise<void>;
@@ -792,11 +1019,13 @@ function SchemaEditor({state, usages, onOpenUsage, onSelect, onCreate, onApply, 
             type: definition.type ?? "",
             appliesTo: (definition.appliesTo ?? []).join(", "),
             expression: definition.schemaExpression,
+            node: definition.schema,
+            custom: false,
         } : null);
     }, [state.selected, state.definitions]);
 
     function startCreate() {
-        setDraft({name: "", kind: "type", type: "string", appliesTo: "", expression: "string"});
+        setDraft({name: "", kind: "type", type: "string", appliesTo: "", expression: "string", node: {kind: "string"}, custom: false});
         setCreating(true);
         setRenaming(false);
         setConfirmingDelete(false);
@@ -809,8 +1038,9 @@ function SchemaEditor({state, usages, onOpenUsage, onSelect, onCreate, onApply, 
         setEditorError("");
         try {
             const appliesTo = draft.appliesTo.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
-            if (creating) await onCreate(draft.name, draft.kind, draft.type, appliesTo, draft.expression);
-            else await onApply(draft.name, draft.kind, draft.type, appliesTo, draft.expression);
+            const expression = draft.custom ? draft.expression : await PrintSchema(draft.node as unknown as schemamodel.Node);
+            if (creating) await onCreate(draft.name, draft.kind, draft.type, appliesTo, expression);
+            else await onApply(draft.name, draft.kind, draft.type, appliesTo, expression);
         } catch (reason) {
             setEditorError(reason instanceof Error ? reason.message : String(reason));
         } finally {
@@ -870,7 +1100,13 @@ function SchemaEditor({state, usages, onOpenUsage, onSelect, onCreate, onApply, 
                     ) : (
                         <label>Applies to<input aria-label="Applies to" value={draft.appliesTo} placeholder="integer, number" onChange={(event) => setDraft({...draft, appliesTo: event.target.value})}/></label>
                     )}
-                    <label>Schema expression<textarea aria-label="Schema expression" rows={6} value={draft.expression} onChange={(event) => setDraft({...draft, expression: event.target.value})}/></label>
+                    <div className="schema-mode-toggle">
+                        <button type="button" className={!draft.custom ? "schema-mode-active" : ""} onClick={() => setDraft({...draft, custom: false})}>结构化</button>
+                        <button type="button" className={draft.custom ? "schema-mode-active" : ""} onClick={() => setDraft({...draft, custom: true})}>自定义表达式</button>
+                    </div>
+                    {draft.custom
+                        ? <label>Schema expression<textarea aria-label="Schema expression" rows={6} value={draft.expression} onChange={(event) => setDraft({...draft, expression: event.target.value})}/></label>
+                        : <SchemaForm value={draft.node} onChange={(node) => setDraft({...draft, node})} workspace={workspace}/>}
                     <div className="schema-editor-actions">
                         <button disabled={busy} onClick={submit}>{creating ? "Create" : "Apply"}</button>
                         {creating ? <button onClick={() => { setCreating(false); setDraft(null); }}>Cancel</button> : <>
@@ -1170,11 +1406,15 @@ function App() {
         setError("");
         setCellError(null);
         try {
+            let schemaExpression = dialog.schema;
+            if ((dialog.mode === "add" || dialog.mode === "schema") && !dialog.custom) {
+                schemaExpression = await PrintSchema((dialog.node ?? {kind: "string"}) as unknown as schemamodel.Node);
+            }
             let result;
             if (dialog.mode === "add") {
-                result = await AddColumn({path: table.path, name: dialog.name, schemaExpression: dialog.schema, initialExpression: dialog.initial, position: Number(dialog.second)});
+                result = await AddColumn({path: table.path, name: dialog.name, schemaExpression, initialExpression: dialog.initial, position: Number(dialog.second)});
             } else if (dialog.mode === "schema") {
-                result = await SetColumnSchema({path: table.path, name: dialog.name, schemaExpression: dialog.schema});
+                result = await SetColumnSchema({path: table.path, name: dialog.name, schemaExpression});
             } else if (dialog.mode === "rename") {
                 result = await RenameColumn({path: table.path, oldName: dialog.name, newName: dialog.second});
             } else if (dialog.mode === "move") {
@@ -1306,7 +1546,7 @@ function App() {
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable} onOpenSchema={openSchema}/></div>
                     </aside>
                     <section className={`editor-placeholder ${table ? "editor-table" : ""}`}>
-                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: ""})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onOpenUsage={openUsage} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <>
+                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`, node: {kind: "string"}, custom: false})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: "", node: table?.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onOpenUsage={openUsage} workspace={workspace} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <>
                             <div className="schema-kind">{selectedSchema.kind}</div>
                             <h1>{selectedSchema.id}</h1>
                             <p>{selectedSchema.path}</p>
@@ -1377,20 +1617,16 @@ function App() {
                     <h2>{dialog.mode === "add" ? "Add column" : dialog.mode === "schema" ? "Edit column schema" : dialog.mode === "rename" ? "Rename column" : dialog.mode === "move" ? "Move column" : "Delete column"}</h2>
                     {dialog.mode !== "schema" && <label>Column name<input autoFocus value={dialog.name} onChange={(event) => setDialog({...dialog, name: event.target.value})}/></label>}
                     {dialog.mode === "schema" && <label>Column name<input value={dialog.name} disabled/></label>}
-                    {dialog.mode === "add" && <>
-                        <label>CUE Schema<input value={dialog.schema} onChange={(event) => setDialog({...dialog, schema: event.target.value})}/></label>
-                        <label>Initial CUE value<input value={dialog.initial} onChange={(event) => setDialog({...dialog, initial: event.target.value})}/></label>
+                    {(dialog.mode === "add" || dialog.mode === "schema") && <>
+                        <div className="schema-mode-toggle">
+                            <button type="button" className={!dialog.custom ? "schema-mode-active" : ""} onClick={() => setDialog({...dialog, custom: false})}>结构化</button>
+                            <button type="button" className={dialog.custom ? "schema-mode-active" : ""} onClick={() => setDialog({...dialog, custom: true})}>自定义表达式</button>
+                        </div>
+                        {!dialog.custom
+                            ? <SchemaForm value={dialog.node ?? {kind: "string"}} onChange={(node) => setDialog({...dialog, node})} workspace={workspace}/>
+                            : <label>CUE Schema<textarea autoFocus value={dialog.schema} onChange={(event) => setDialog({...dialog, schema: event.target.value})}/></label>}
                     </>}
-                    {dialog.mode === "schema" && <label>CUE Schema<textarea autoFocus value={dialog.schema} onChange={(event) => setDialog({...dialog, schema: event.target.value})}/></label>}
-                    {dialog.mode === "schema" && <label>Insert Schema reference<select aria-label="Insert Schema reference" value="" onChange={(event) => {
-                        const option = schemaReferenceOptions(workspace).find((entry) => entry.value === event.target.value);
-                        if (!option) return;
-                        const current = dialog.schema.trim();
-                        setDialog({...dialog, schema: option.kind === "constraint" ? (current ? `${current} & ${option.value}` : option.value) : option.value});
-                    }}>
-                        <option value="">Choose a reference</option>
-                        {schemaReferenceOptions(workspace).map((option) => <option key={`${option.kind}:${option.value}`} value={option.value}>{option.label}</option>)}
-                    </select></label>}
+                    {dialog.mode === "add" && <label>Initial CUE value<input value={dialog.initial} onChange={(event) => setDialog({...dialog, initial: event.target.value})}/></label>}
                     {dialog.mode === "rename" && <label>New name<input value={dialog.second} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>}
                     {dialog.mode === "move" && <label>New zero-based position<input type="number" min="0" value={dialog.second} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>}
                     {dialog.mode === "delete" && <p>This removes the column, all row values, formulas, foreign-key metadata, and CSV export configuration that refer to it.</p>}
