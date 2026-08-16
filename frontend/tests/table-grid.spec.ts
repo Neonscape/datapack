@@ -56,6 +56,8 @@ const workspace = {
         {path: table.path, table: "rpg.item", rowID: "sword", column: "effectID", message: "missing target row"},
     ]},
     compile: {mode: "manual", pending: false, compiledAt: "2026-08-13T12:00:00Z", diagnostics: []},
+    canUndo: true,
+    canRedo: true,
 };
 
 test.beforeEach(async ({page}) => {
@@ -422,6 +424,32 @@ test("groups history commands under Edit", async ({page}) => {
     await expect(page.getByRole("button", {name: /Redo/})).toBeEnabled();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", {name: /Undo/})).toBeHidden();
+});
+
+test("undoes and redoes edits from the Edit menu", async ({page}) => {
+    await page.evaluate(() => {
+        const mock = (window as Window & {__mock: {workspace: {canUndo: boolean; canRedo: boolean}}}).__mock;
+        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        (window as Window & {undoCalls: string[]}).undoCalls = [];
+        api.Undo = () => {
+            (window as Window & {undoCalls: string[]}).undoCalls.push("undo");
+            return Promise.resolve({workspace: {...mock.workspace, canUndo: false, canRedo: true}, canUndo: false, canRedo: true});
+        };
+        api.Redo = () => {
+            (window as Window & {undoCalls: string[]}).undoCalls.push("redo");
+            return Promise.resolve({workspace: {...mock.workspace, canUndo: true, canRedo: false}, canUndo: true, canRedo: false});
+        };
+    });
+    await page.getByRole("button", {name: "Edit"}).click();
+    await page.getByRole("button", {name: /Undo/}).click();
+    await page.getByRole("button", {name: "Edit"}).click();
+    await expect(page.getByRole("button", {name: /Undo/})).toBeDisabled();
+    await expect(page.getByRole("button", {name: /Redo/})).toBeEnabled();
+    await page.getByRole("button", {name: /Redo/}).click();
+    await page.getByRole("button", {name: "Edit"}).click();
+    await expect(page.getByRole("button", {name: /Undo/})).toBeEnabled();
+    await expect(page.getByRole("button", {name: /Redo/})).toBeDisabled();
+    expect(await page.evaluate(() => (window as Window & {undoCalls: string[]}).undoCalls)).toEqual(["undo", "redo"]);
 });
 
 test("keeps navigation visible after creating a draft row", async ({page}) => {

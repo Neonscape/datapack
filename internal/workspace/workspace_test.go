@@ -512,13 +512,21 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	if err != nil || !pasted.CanUndo || pasted.CanRedo || pasted.Table.Rows[0].Values["name"].Expression != `"Steel Sword"` {
 		t.Fatalf("Paste() = %#v, %v", pasted, err)
 	}
-	undone, err := service.Undo(path)
-	if err != nil || undone.CanUndo || !undone.CanRedo || undone.Table.Rows[0].Values["name"].Expression != `"Sword"` {
+	undone, err := service.Undo()
+	if err != nil || undone.CanUndo || !undone.CanRedo {
 		t.Fatalf("Undo() = %#v, %v", undone, err)
 	}
-	redone, err := service.Redo(path)
-	if err != nil || !redone.CanUndo || redone.CanRedo || redone.Table.Rows[0].Values["name"].Expression != `"Steel Sword"` {
+	table, err := service.GetTable(path)
+	if err != nil || table.Rows[0].Values["name"].Expression != `"Sword"` {
+		t.Fatalf("GetTable() after undo = %#v, %v", table, err)
+	}
+	redone, err := service.Redo()
+	if err != nil || !redone.CanUndo || redone.CanRedo {
 		t.Fatalf("Redo() = %#v, %v", redone, err)
+	}
+	table, err = service.GetTable(path)
+	if err != nil || table.Rows[0].Values["name"].Expression != `"Steel Sword"` {
+		t.Fatalf("GetTable() after redo = %#v, %v", table, err)
 	}
 }
 
@@ -544,9 +552,196 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	if _, err := service.ClearCell(CellUpdate{Path: path, RowID: "sword", Column: "price"}); err != nil {
 		t.Fatal(err)
 	}
-	undone, err := service.Undo(path)
-	if err != nil || formulaExpressionForWorkspace(undone.Table, "sword", "price") != "20 + 5" {
-		t.Fatalf("Undo() = %#v, %v", undone, err)
+	if _, err := service.Undo(); err != nil {
+		t.Fatalf("Undo() = %v", err)
+	}
+	table, err := service.GetTable(path)
+	if err != nil || formulaExpressionForWorkspace(table, "sword", "price") != "20 + 5" {
+		t.Fatalf("GetTable() after undo = %#v, %v", table, err)
+	}
+}
+
+func TestSetSchemaDefinitionIsUndoable(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	schemaPath := filepath.Join(projectRoot, "schema", "common.cue")
+	writeFile(t, schemaPath, `package common
+#GameID: string
+_schema: {definitions: {GameID: {kind: "type", type: "string"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "tables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetSchemaDefinition(SchemaDefinitionSet{Path: schemaPath, Name: "GameID", Kind: "type", Type: "string", SchemaExpression: `string & =~"^[a-z]+$"`}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := service.GetPublicSchema(schemaPath)
+	if err != nil || schema.Definitions[0].SchemaExpression != "string" {
+		t.Fatalf("GetPublicSchema() after undo = %#v, %v", schema, err)
+	}
+	if _, err := service.Redo(); err != nil {
+		t.Fatal(err)
+	}
+	schema, err = service.GetPublicSchema(schemaPath)
+	if err != nil || schema.Definitions[0].SchemaExpression != `string & =~"^[a-z]+$"` {
+		t.Fatalf("GetPublicSchema() after redo = %#v, %v", schema, err)
+	}
+}
+
+func TestRenameSchemaDefinitionUndoRestoresReferences(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	schemaPath := filepath.Join(projectRoot, "schema", "common.cue")
+	writeFile(t, schemaPath, `package common
+#NonNegative: >=0
+_schema: {definitions: {NonNegative: {kind: "constraint", appliesTo: ["integer"]}}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: string
+#Row: {price: int & common.#NonNegative}
+rows: {sword: {price: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.RenameSchemaDefinition(SchemaDefinitionRename{Path: schemaPath, OldName: "NonNegative", NewName: "AtLeastZero"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	table, err := service.GetTable(tablePath)
+	if err != nil || table.Columns[0].SchemaExpression != "int & common.#NonNegative" {
+		t.Fatalf("GetTable() after undo = %#v, %v", table, err)
+	}
+}
+
+func TestCreateSchemaFileUndoDeletesFile(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "tables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.CreateSchemaFile("rules")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(result.Schema.Path); !os.IsNotExist(err) {
+		t.Fatal("schema file still exists after undo")
+	}
+	if _, err := service.Redo(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(result.Schema.Path); err != nil {
+		t.Fatal("schema file missing after redo")
+	}
+}
+
+func TestDeleteSchemaDefinitionUndoRestoresDefinition(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	schemaPath := filepath.Join(projectRoot, "schema", "common.cue")
+	writeFile(t, schemaPath, `package common
+#GameID: string
+#Rarity: "N"
+_schema: {definitions: {GameID: {kind: "type", type: "string"}, Rarity: {kind: "type", type: "enum"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "tables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.DeleteSchemaDefinition(SchemaDefinitionDelete{Path: schemaPath, Name: "Rarity"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := service.GetPublicSchema(schemaPath)
+	if err != nil || len(schema.Definitions) != 2 {
+		t.Fatalf("GetPublicSchema() after undo = %#v, %v", schema, err)
+	}
+}
+
+func TestRenameTableUndoRestoresPath(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "rpg", "item", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.RenameTable(TableRename{Path: tablePath, Namespace: "combat", Name: "item"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(tablePath); !os.IsNotExist(err) {
+		t.Fatal("old table path still exists after rename")
+	}
+	if _, err := service.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(tablePath); err != nil {
+		t.Fatal("old table path not restored after undo")
+	}
+	table, err := service.GetTable(tablePath)
+	if err != nil || table.Namespace != "rpg" {
+		t.Fatalf("GetTable() after undo = %#v, %v", table, err)
+	}
+}
+
+func TestDeleteTableUndoRestoresTable(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "rpg", "item", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.DeleteTable(TableDelete{Path: tablePath}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(tablePath); !os.IsNotExist(err) {
+		t.Fatal("table file still exists after delete")
+	}
+	if _, err := service.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(tablePath); err != nil {
+		t.Fatal("table file not restored after undo")
 	}
 }
 

@@ -135,6 +135,35 @@ function App() {
         }
     }
 
+    async function refreshOpenTabs() {
+        const open = tabs;
+        const refreshed: OpenTab[] = [];
+        for (const tab of open) {
+            try {
+                if (tab.kind === "table") {
+                    const document = await GetTable(tab.path) as TableDocument;
+                    refreshed.push({...tab, table: document});
+                } else if (tab.state.local) {
+                    const document = await GetTable(tab.state.path) as TableDocument;
+                    const logical = document.namespace ? `${document.namespace}.${document.name}` : document.name;
+                    const definitions = document.localSchema;
+                    refreshed.push({...tab, state: {...tab.state, logicalTable: logical, definitions, selected: definitions.some((entry) => entry.name === tab.state.selected) ? tab.state.selected : (definitions[0]?.name ?? null), creating: false}});
+                } else {
+                    const document = await GetPublicSchema(tab.state.path) as PublicSchemaDocument;
+                    const definitions = document.definitions;
+                    refreshed.push({...tab, state: {...tab.state, package: document.package, definitions, selected: definitions.some((entry) => entry.name === tab.state.selected) ? tab.state.selected : (definitions[0]?.name ?? null), creating: false}});
+                }
+            } catch {
+                continue;
+            }
+        }
+        setTabs(refreshed);
+        if (!refreshed.some((tab) => tab.id === activeTabId)) {
+            setActiveTabId(refreshed[0]?.id ?? null);
+            setSelectedSchema(null);
+        }
+    }
+
     async function pasteCells(row: number, column: number, text: string) {
         if (!table) return;
         const values = text.replace(/\r/g, "").split("\n").filter((line, index, lines) => line !== "" || index < lines.length - 1).map((line) => line.split("\t"));
@@ -160,23 +189,16 @@ function App() {
 
     useEffect(() => {
         const historyShortcut = (event: KeyboardEvent) => {
-            if (!table || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select")) return;
+            if (!activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select")) return;
             const redo = event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z");
             if (event.key.toLowerCase() !== "z" && !redo) return;
+            if (redo ? !workspace?.canRedo : !workspace?.canUndo) return;
             event.preventDefault();
-            void (async () => {
-                try {
-                    const result = redo ? await Redo(table.path) : await Undo(table.path);
-                    updateActiveTable(result.table as TableDocument);
-                    setWorkspace(result.workspace as WorkspaceView);
-                } catch (reason) {
-                    setError(reason instanceof Error ? reason.message : String(reason));
-                }
-            })();
+            void applyHistory(redo);
         };
         document.addEventListener("keydown", historyShortcut);
         return () => document.removeEventListener("keydown", historyShortcut);
-    }, [table]);
+    }, [activeTab, workspace, tabs]);
 
     useEffect(() => {
         const closeMenu = (event: PointerEvent) => {
@@ -523,12 +545,11 @@ function App() {
     }
 
     async function applyHistory(redo: boolean) {
-        if (!table) return;
         setError("");
         try {
-            const result = redo ? await Redo(table.path) : await Undo(table.path);
-            updateActiveTable(result.table as TableDocument);
+            const result = redo ? await Redo() : await Undo();
             setWorkspace(result.workspace as WorkspaceView);
+            await refreshOpenTabs();
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         }
@@ -587,8 +608,8 @@ function App() {
                     <div className="app-menu">
                         <button aria-expanded={appMenu === "edit"} onClick={() => setAppMenu(appMenu === "edit" ? null : "edit")}>Edit</button>
                         {appMenu === "edit" && <div className="app-menu-popover">
-                            <button disabled={!table} onClick={() => { setAppMenu(null); applyHistory(false); }}>Undo <kbd>Ctrl+Z</kbd></button>
-                            <button disabled={!table} onClick={() => { setAppMenu(null); applyHistory(true); }}>Redo <kbd>Ctrl+Y</kbd></button>
+                            <button disabled={!workspace?.canUndo} onClick={() => { setAppMenu(null); applyHistory(false); }}>Undo <kbd>Ctrl+Z</kbd></button>
+                            <button disabled={!workspace?.canRedo} onClick={() => { setAppMenu(null); applyHistory(true); }}>Redo <kbd>Ctrl+Y</kbd></button>
                         </div>}
                     </div>
                 </nav>

@@ -90,8 +90,8 @@ export function PrintSchema(arg1) {
   return window['go']['main']['App']['PrintSchema'](arg1);
 }
 
-export function Redo(arg1) {
-  return window['go']['main']['App']['Redo'](arg1);
+export function Redo() {
+  return window['go']['main']['App']['Redo']();
 }
 
 export function RenameColumn(arg1) {
@@ -130,8 +130,8 @@ export function SetSchemaDefinition(arg1) {
   return window['go']['main']['App']['SetSchemaDefinition'](arg1);
 }
 
-export function Undo(arg1) {
-  return window['go']['main']['App']['Undo'](arg1);
+export function Undo() {
+  return window['go']['main']['App']['Undo']();
 }
 
 export function UpdateCell(arg1) {

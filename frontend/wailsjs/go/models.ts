@@ -953,6 +953,8 @@ export namespace workspace {
 	    schemas: schemaregistry.Index;
 	    foreignKeys: foreignkey.Summary;
 	    compile: CompileState;
+	    canUndo: boolean;
+	    canRedo: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new View(source);
@@ -966,6 +968,8 @@ export namespace workspace {
 	        this.schemas = this.convertValues(source["schemas"], schemaregistry.Index);
 	        this.foreignKeys = this.convertValues(source["foreignKeys"], foreignkey.Summary);
 	        this.compile = this.convertValues(source["compile"], CompileState);
+	        this.canUndo = source["canUndo"];
+	        this.canRedo = source["canRedo"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

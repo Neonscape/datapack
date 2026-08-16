@@ -147,12 +147,12 @@ func (a *App) Paste(paste workspace.Paste) (workspace.HistoryResult, error) {
 	return a.workspace.Paste(paste)
 }
 
-func (a *App) Undo(path string) (workspace.HistoryResult, error) {
-	return a.workspace.Undo(path)
+func (a *App) Undo() (workspace.HistoryResult, error) {
+	return a.workspace.Undo()
 }
 
-func (a *App) Redo(path string) (workspace.HistoryResult, error) {
-	return a.workspace.Redo(path)
+func (a *App) Redo() (workspace.HistoryResult, error) {
+	return a.workspace.Redo()
 }
 
 // AddRow inserts a new table row using a complete CUE struct expression.

@@ -49,7 +49,7 @@ export function Paste(arg1:workspace.Paste):Promise<workspace.HistoryResult>;
 
 export function PrintSchema(arg1:schemamodel.Node):Promise<string>;
 
-export function Redo(arg1:string):Promise<workspace.HistoryResult>;
+export function Redo():Promise<workspace.HistoryResult>;
 
 export function RenameColumn(arg1:workspace.ColumnRename):Promise<workspace.ColumnRenameResult>;
 
@@ -69,6 +69,6 @@ export function SetCompileMode(arg1:string):Promise<workspace.View>;
 
 export function SetSchemaDefinition(arg1:workspace.SchemaDefinitionSet):Promise<workspace.SchemaEditResult>;
 
-export function Undo(arg1:string):Promise<workspace.HistoryResult>;
+export function Undo():Promise<workspace.HistoryResult>;
 
 export function UpdateCell(arg1:workspace.CellUpdate):Promise<workspace.CellUpdateResult>;

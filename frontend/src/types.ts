@@ -35,6 +35,8 @@ export type WorkspaceView = {
         compiledAt?: string;
         diagnostics: {path: string; table?: string; field?: string; rowID?: string; column?: string; message: string}[];
     };
+    canUndo: boolean;
+    canRedo: boolean;
 };
 
 export type SchemaUsage = {

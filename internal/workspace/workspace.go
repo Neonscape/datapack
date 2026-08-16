@@ -34,6 +34,8 @@ type View struct {
 	Schemas     schemaregistry.Index `json:"schemas"`
 	ForeignKeys foreignkey.Summary   `json:"foreignKeys"`
 	Compile     CompileState         `json:"compile"`
+	CanUndo     bool                 `json:"canUndo"`
+	CanRedo     bool                 `json:"canRedo"`
 }
 
 // CompileState carries the current build-mode state and the outcome of the
@@ -48,16 +50,12 @@ type CompileState struct {
 type Service struct {
 	configRoot       string
 	current          *View
-	history          map[string]*history
+	undoStack        []map[string][]byte
+	redoStack        []map[string][]byte
 	logger           *logging.Logger
 	revision         int
 	compiledRevision int
 	compileState     CompileState
-}
-
-type history struct {
-	undo [][]byte
-	redo [][]byte
 }
 
 type CellUpdate struct {
@@ -443,7 +441,7 @@ type SchemaEditResult struct {
 }
 
 func NewService(configRoot string) *Service {
-	return &Service{configRoot: configRoot, history: map[string]*history{}}
+	return &Service{configRoot: configRoot}
 }
 
 func (s *Service) SetLogger(logger *logging.Logger) {
@@ -537,6 +535,8 @@ func (s *Service) publishView(view *View) {
 	if view.Compile.Diagnostics == nil {
 		view.Compile.Diagnostics = []compiler.Diagnostic{}
 	}
+	view.CanUndo = len(s.undoStack) > 0
+	view.CanRedo = len(s.redoStack) > 0
 	s.current = view
 }
 
@@ -687,6 +687,7 @@ func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaE
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
+	snapshot := s.snapshotFiles(create.Path)
 	if scope == "local" {
 		normalized, err := s.normalizeSchemaReferences(create.Path, create.SchemaExpression)
 		if err != nil {
@@ -715,6 +716,7 @@ func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaE
 		}
 		result.Table = table
 	}
+	s.recordEdit(snapshot)
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return SchemaEditResult{}, err
@@ -737,6 +739,7 @@ func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
+	snapshot := s.snapshotFiles(set.Path)
 	if scope == "local" {
 		normalized, err := s.normalizeSchemaReferences(set.Path, set.SchemaExpression)
 		if err != nil {
@@ -765,6 +768,7 @@ func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult
 		}
 		result.Table = table
 	}
+	s.recordEdit(snapshot)
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return SchemaEditResult{}, err
@@ -789,6 +793,7 @@ func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaE
 	}
 	var paths []string
 	collectSourcePaths(s.current.Tree.Root, &paths)
+	snapshot := s.snapshotFiles(paths...)
 	var result SchemaEditResult
 	if scope == "public" {
 		schema, err := document.RenamePublicSchemaDefinition(rename.Path, rename.OldName, rename.NewName, paths)
@@ -805,6 +810,7 @@ func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaE
 		}
 		result.Table = table
 	}
+	s.recordEdit(snapshot)
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return SchemaEditResult{}, err
@@ -830,6 +836,7 @@ func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaE
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
+	snapshot := s.snapshotFiles(delete.Path)
 	for _, definition := range s.current.Schemas.Definitions {
 		if definition.ID != id || len(definition.Usages) == 0 {
 			continue
@@ -855,6 +862,7 @@ func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaE
 		}
 		result.Table = table
 	}
+	s.recordEdit(snapshot)
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return SchemaEditResult{}, err
@@ -1212,17 +1220,24 @@ func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
 			}
 		}
 	}
+	newDirectory := filepath.Join(s.current.Project.Root, s.current.Project.Config.TableRoots[0], rename.Namespace, rename.Name)
+	newPath := filepath.Join(newDirectory, rename.Name+".cue")
+	files := []string{rename.Path, newPath}
+	for _, reference := range references {
+		files = append(files, reference.Path)
+	}
+	snapshot := s.snapshotFiles(files...)
 	if _, err := document.RenameTable(rename.Path, rename.Namespace, rename.Name, references); err != nil {
 		return TableRenameResult{}, err
 	}
 	oldDirectory := filepath.Dir(rename.Path)
-	newDirectory := filepath.Join(s.current.Project.Root, s.current.Project.Config.TableRoots[0], rename.Namespace, rename.Name)
 	if err := os.MkdirAll(filepath.Dir(newDirectory), 0o755); err != nil {
 		return TableRenameResult{}, fmt.Errorf("create renamed table directory: %w", err)
 	}
 	if err := os.Rename(oldDirectory, newDirectory); err != nil {
 		return TableRenameResult{}, fmt.Errorf("move renamed table: %w", err)
 	}
+	s.recordEdit(snapshot)
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return TableRenameResult{}, err
@@ -1267,9 +1282,11 @@ func (s *Service) DeleteTable(delete TableDelete) (TableDeleteResult, error) {
 		s.log(logging.Warn, "table delete blocked", map[string]any{"path": delete.Path, "error": err.Error()})
 		return TableDeleteResult{}, err
 	}
+	snapshot := s.snapshotFiles(delete.Path)
 	if err := os.RemoveAll(filepath.Dir(delete.Path)); err != nil {
 		return TableDeleteResult{}, fmt.Errorf("delete table source: %w", err)
 	}
+	s.recordEdit(snapshot)
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return TableDeleteResult{}, err
@@ -1291,6 +1308,7 @@ func (s *Service) CreateSchemaFile(namespace string) (SchemaFileCreateResult, er
 	if _, err := os.Stat(path); err == nil {
 		return SchemaFileCreateResult{}, fmt.Errorf("schema namespace %q already exists", namespace)
 	}
+	snapshot := s.snapshotFiles(path)
 	if err := os.MkdirAll(directory, 0o755); err != nil {
 		return SchemaFileCreateResult{}, fmt.Errorf("create schema directory: %w", err)
 	}
@@ -1303,6 +1321,7 @@ func (s *Service) CreateSchemaFile(namespace string) (SchemaFileCreateResult, er
 		_ = os.Remove(path)
 		return SchemaFileCreateResult{}, fmt.Errorf("validate created schema: %w", err)
 	}
+	s.recordEdit(snapshot)
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return SchemaFileCreateResult{}, err
@@ -1342,15 +1361,15 @@ func (s *Service) Paste(paste Paste) (HistoryResult, error) {
 	if err != nil {
 		return HistoryResult{}, err
 	}
-	return s.historyResult(paste.Path, table, view), nil
+	return s.historyResult(table, view), nil
 }
 
-func (s *Service) Undo(path string) (HistoryResult, error) {
-	return s.restoreHistory(path, true)
+func (s *Service) Undo() (HistoryResult, error) {
+	return s.restoreHistory(true)
 }
 
-func (s *Service) Redo(path string) (HistoryResult, error) {
-	return s.restoreHistory(path, false)
+func (s *Service) Redo() (HistoryResult, error) {
+	return s.restoreHistory(false)
 }
 
 func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
@@ -1381,64 +1400,113 @@ func (s *Service) edit(path string, operation func() (document.Table, error)) (d
 		s.log(logging.Error, "table edit failed", map[string]any{"path": path, "error": err.Error()})
 		return document.Table{}, View{}, err
 	}
+	s.recordEdit(map[string][]byte{path: before})
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		s.log(logging.Error, "workspace refresh failed after edit", map[string]any{"path": path, "error": err.Error()})
 		return document.Table{}, View{}, err
 	}
-	record := s.history[path]
-	if record == nil {
-		record = &history{}
-		s.history[path] = record
-	}
-	record.undo = append(record.undo, before)
-	record.redo = nil
 	s.log(logging.Info, "table edit completed", map[string]any{"path": path, "duration_ms": time.Since(started).Milliseconds()})
 	return table, view, nil
 }
 
-func (s *Service) restoreHistory(path string, undo bool) (HistoryResult, error) {
+func (s *Service) restoreHistory(undo bool) (HistoryResult, error) {
 	if s.current == nil {
 		return HistoryResult{}, fmt.Errorf("no project is open")
 	}
-	if !containsTable(s.current.Tree.Root, path) {
-		return HistoryResult{}, fmt.Errorf("table %q is not part of the open project", path)
+	stack := &s.undoStack
+	opposite := &s.redoStack
+	if !undo {
+		stack, opposite = &s.redoStack, &s.undoStack
 	}
-	record := s.history[path]
-	if record == nil || (undo && len(record.undo) == 0) || (!undo && len(record.redo) == 0) {
+	if len(*stack) == 0 {
 		return HistoryResult{}, fmt.Errorf("nothing to %s", map[bool]string{true: "undo", false: "redo"}[undo])
 	}
-	current, err := os.ReadFile(path)
-	if err != nil {
-		return HistoryResult{}, fmt.Errorf("read history source: %w", err)
-	}
-	var target []byte
-	if undo {
-		target = record.undo[len(record.undo)-1]
-	} else {
-		target = record.redo[len(record.redo)-1]
-	}
-	table, err := document.RestoreSource(path, target)
-	if err != nil {
+	snapshot := (*stack)[len(*stack)-1]
+	*stack = (*stack)[:len(*stack)-1]
+	current := s.snapshotFiles(snapshotPaths(snapshot)...)
+	if err := s.restoreSnapshot(snapshot); err != nil {
 		return HistoryResult{}, err
 	}
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return HistoryResult{}, err
 	}
-	if undo {
-		record.undo = record.undo[:len(record.undo)-1]
-		record.redo = append(record.redo, current)
-	} else {
-		record.redo = record.redo[:len(record.redo)-1]
-		record.undo = append(record.undo, current)
-	}
-	return s.historyResult(path, table, view), nil
+	*opposite = append(*opposite, current)
+	view.CanUndo = len(s.undoStack) > 0
+	view.CanRedo = len(s.redoStack) > 0
+	s.current = &view
+	return HistoryResult{Workspace: view, CanUndo: view.CanUndo, CanRedo: view.CanRedo}, nil
 }
 
-func (s *Service) historyResult(path string, table document.Table, view View) HistoryResult {
-	record := s.history[path]
-	return HistoryResult{Table: withTableMetadata(table, view), Workspace: view, CanUndo: record != nil && len(record.undo) > 0, CanRedo: record != nil && len(record.redo) > 0}
+func (s *Service) historyResult(table document.Table, view View) HistoryResult {
+	return HistoryResult{Table: withTableMetadata(table, view), Workspace: view, CanUndo: len(s.undoStack) > 0, CanRedo: len(s.redoStack) > 0}
+}
+
+func (s *Service) snapshotFiles(paths ...string) map[string][]byte {
+	snapshot := map[string][]byte{}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			snapshot[path] = nil
+			continue
+		}
+		snapshot[path] = content
+	}
+	return snapshot
+}
+
+func (s *Service) recordEdit(snapshot map[string][]byte) {
+	s.undoStack = append(s.undoStack, snapshot)
+	s.redoStack = nil
+}
+
+func snapshotPaths(snapshot map[string][]byte) []string {
+	paths := make([]string, 0, len(snapshot))
+	for path := range snapshot {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func (s *Service) restoreSnapshot(snapshot map[string][]byte) error {
+	for path, content := range snapshot {
+		if content == nil {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("remove restored file: %w", err)
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return fmt.Errorf("create restored directory: %w", err)
+		}
+		if err := writeFileAtomic(path, content); err != nil {
+			return fmt.Errorf("restore source: %w", err)
+		}
+	}
+	return nil
+}
+
+func writeFileAtomic(path string, content []byte) error {
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".datapack-restore-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if _, err := temporary.Write(content); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
 }
 
 func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
