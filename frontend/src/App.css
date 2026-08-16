@@ -253,15 +253,15 @@
 
 .tree-toggle {
     flex: 0 0 auto;
-    width: 16px;
+    width: 18px;
     height: 20px;
     display: grid;
     place-items: center;
     padding: 0;
     border: 0;
-    color: #8a979e;
+    color: #6d7a81;
     background: transparent;
-    font-size: 10px;
+    font-size: 14px;
     cursor: pointer;
     line-height: 1;
 }
