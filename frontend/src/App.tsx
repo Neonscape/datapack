@@ -1270,7 +1270,8 @@ function App() {
 
     async function openSchema(node: TreeNode) {
         if (node.kind === "localSchema") {
-            await openSchemaByPath(node.path!, null, true);
+            const name = node.name.startsWith("#") ? node.name.replace(/^#/, "") : null;
+            await openSchemaByPath(node.path!, name, true);
         } else {
             const name = node.kind === "schemaDefinition" ? node.name.replace(/^#/, "") : null;
             await openSchemaByPath(node.path!, name, false);
