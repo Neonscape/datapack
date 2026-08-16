@@ -533,3 +533,16 @@ test("renames a table from the project tree", async ({page}) => {
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.getByRole("heading", {name: "Rename table"})).toBeHidden();
 });
+
+test("does not show a context menu for group nodes", async ({page}) => {
+    await page.getByRole("button", {name: "Tables", exact: true}).click({button: "right"});
+    await expect(page.locator(".tree-context-menu")).toHaveCount(0);
+});
+
+test("collapses and expands a namespace in the project tree", async ({page}) => {
+    const rpgRow = page.locator(".tree-row").filter({hasText: "rpg"}).first();
+    await rpgRow.locator(".tree-toggle").click();
+    await expect(page.getByRole("button", {name: "item", exact: true})).toBeHidden();
+    await rpgRow.locator(".tree-toggle").click();
+    await expect(page.getByRole("button", {name: "item", exact: true})).toBeVisible();
+});

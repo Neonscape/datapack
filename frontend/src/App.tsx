@@ -223,23 +223,31 @@ function schemaConstraintReferenceOptions(workspace: WorkspaceView | null): {lab
     }));
 }
 
-function Tree({node, depth = 0, namespace = "", onOpenTable, onOpenSchema, onContextMenu}: { node: TreeNode; depth?: number; namespace?: string; onOpenTable: (path: string) => void; onOpenSchema: (node: TreeNode) => void; onContextMenu: (node: TreeNode, position: {x: number; y: number}, namespace: string) => void }) {
+function Tree({node, depth = 0, namespace = "", parentKey = "", collapsed, onToggleCollapse, onOpenTable, onOpenSchema, onContextMenu}: { node: TreeNode; depth?: number; namespace?: string; parentKey?: string; collapsed: Set<string>; onToggleCollapse: (key: string) => void; onOpenTable: (path: string) => void; onOpenSchema: (node: TreeNode) => void; onContextMenu: (node: TreeNode, position: {x: number; y: number}, namespace: string) => void }) {
+    const key = `${parentKey}::${node.kind}:${node.name}`;
     const isFile = node.kind === "table" || node.kind === "schemaDefinition" || node.kind === "damaged";
     const isSchemaNode = node.kind === "schemaDefinition" || node.kind === "localSchema";
     const openTable = node.kind === "table" && node.path ? () => onOpenTable(node.path!) : undefined;
     const openSchema = isSchemaNode && node.path ? () => onOpenSchema(node) : undefined;
     const openAction = openTable ?? openSchema;
     const childNamespace = node.kind === "namespace" ? node.name : namespace;
+    const hasChildren = (node.children?.length ?? 0) > 0;
+    const isCollapsed = hasChildren && collapsed.has(key);
     return (
         <div className="tree-node">
-            <button className={`tree-row ${isFile ? "tree-file" : ""} ${openAction ? "tree-action" : ""}`} style={{paddingLeft: `${12 + depth * 16}px`}} onClick={openAction} onContextMenu={(event) => {
-                event.preventDefault();
-                onContextMenu(node, {x: event.clientX, y: event.clientY}, namespace);
-            }}>
-                <span className={`node-icon node-${node.kind}`} aria-hidden="true"/>
-                <span>{node.name}</span>
-            </button>
-            {node.children?.map((child) => <Tree key={`${child.kind}:${child.path ?? child.name}:${child.name}`} node={child} depth={depth + 1} namespace={childNamespace} onOpenTable={onOpenTable} onOpenSchema={onOpenSchema} onContextMenu={onContextMenu}/>) }
+            <div className={`tree-row ${isFile ? "tree-file" : ""} ${openAction ? "tree-action" : ""}`} style={{paddingLeft: `${12 + depth * 16}px`}}>
+                {hasChildren
+                    ? <button className="tree-toggle" type="button" tabIndex={-1} onClick={() => onToggleCollapse(key)}>{isCollapsed ? "▸" : "▾"}</button>
+                    : <span className="tree-toggle tree-toggle-spacer" aria-hidden="true"/>}
+                <button className={`tree-label ${openAction ? "tree-action" : ""}`} type="button" onClick={openAction} onContextMenu={(event) => {
+                    event.preventDefault();
+                    onContextMenu(node, {x: event.clientX, y: event.clientY}, namespace);
+                }}>
+                    <span className={`node-icon node-${node.kind}`} aria-hidden="true"/>
+                    <span>{node.name}</span>
+                </button>
+            </div>
+            {!isCollapsed && node.children?.map((child) => <Tree key={key} node={child} depth={depth + 1} namespace={childNamespace} parentKey={key} collapsed={collapsed} onToggleCollapse={onToggleCollapse} onOpenTable={onOpenTable} onOpenSchema={onOpenSchema} onContextMenu={onContextMenu}/>) }
         </div>
     );
 }
@@ -1197,6 +1205,7 @@ function App() {
     const [navMenu, setNavMenu] = useState<{x: number; y: number; targets: NavTarget[]} | null>(null);
     const [treeMenu, setTreeMenu] = useState<{node: TreeNode; namespace: string; x: number; y: number} | null>(null);
     const [treeDialog, setTreeDialog] = useState<TreeDialog | null>(null);
+    const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
 
     async function pasteCells(row: number, column: number, text: string) {
         if (!table) return;
@@ -1652,7 +1661,14 @@ function App() {
                 <section className="workbench">
                     <aside className="project-explorer">
                         <div className="panel-title">Project</div>
-                        <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable} onOpenSchema={openSchema} onContextMenu={(node, position, namespace) => setTreeMenu({node, namespace, x: position.x, y: position.y})}/></div>
+                        <div className="tree"><Tree node={workspace.tree.root} collapsed={collapsedNodes} onToggleCollapse={(key) => setCollapsedNodes((current) => {
+                            const next = new Set(current);
+                            if (next.has(key)) next.delete(key); else next.add(key);
+                            return next;
+                        })} onOpenTable={openTable} onOpenSchema={openSchema} onContextMenu={(node, position, namespace) => {
+                            if (node.kind === "project" || node.kind === "group" || node.kind === "damaged") return;
+                            setTreeMenu({node, namespace, x: position.x, y: position.y});
+                        }}/></div>
                     </aside>
                     <section className={`editor-placeholder ${table || schemaDocument || selectedSchema ? "editor-table" : ""}`}>
                         {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`, node: {kind: "string"}, custom: false})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: "", node: table?.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onOpenUsage={openUsage} workspace={workspace} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name, creating: false})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <section className="schema-detail">
