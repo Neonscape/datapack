@@ -14,18 +14,16 @@ import (
 type NodeKind string
 
 const (
-	NodeProject     NodeKind = "project"
-	NodeGroup       NodeKind = "group"
-	NodeDirectory   NodeKind = "directory"
-	NodeTable       NodeKind = "table"
-	NodeTableData   NodeKind = "tableData"
-	NodeLocalSchema NodeKind = "localSchema"
-	NodeSchemaFile  NodeKind = "schemaFile"
-	NodeSchemaDef   NodeKind = "schemaDefinition"
-	NodeDamaged     NodeKind = "damaged"
+	NodeProject          NodeKind = "project"
+	NodeNamespace        NodeKind = "namespace"
+	NodeGroup            NodeKind = "group"
+	NodeTable            NodeKind = "table"
+	NodeLocalSchema      NodeKind = "localSchema"
+	NodeSchemaDefinition NodeKind = "schemaDefinition"
+	NodeDamaged          NodeKind = "damaged"
 )
 
-// Node is a physical source-tree node. Table and Schema files are refined into
+// Node is a logical source-tree node. Tables and Schemas are refined into
 // logical views after CUE parsing is available.
 type Node struct {
 	Kind        NodeKind               `json:"kind"`
@@ -39,34 +37,95 @@ type Tree struct {
 	Root Node `json:"root"`
 }
 
-// Scan discovers CUE files declared by the project and turns valid table files
-// into logical table and local-schema nodes.
+type namespaceGroup struct {
+	tables  []Node
+	schemas []Node
+}
+
+// Scan discovers CUE files declared by the project and builds a namespace-
+// grouped logical tree. Tables use _tool.table.namespace and public Schema
+// files use package; both are treated as one namespace concept.
 func Scan(projectPath string, tableRoots, schemaRoots, excludes []string) (Tree, error) {
 	root := filepath.Dir(projectPath)
 	projectName := strings.TrimSuffix(filepath.Base(projectPath), filepath.Ext(projectPath))
 
-	tableNodes, err := scanRoots(root, tableRoots, excludes, NodeTable)
+	tableFiles, err := collectRootFiles(root, tableRoots, excludes)
 	if err != nil {
 		return Tree{}, err
 	}
-	schemaNodes, err := scanRoots(root, schemaRoots, excludes, NodeSchemaFile)
+	schemaFiles, err := collectRootFiles(root, schemaRoots, excludes)
 	if err != nil {
 		return Tree{}, err
+	}
+
+	groups := map[string]*namespaceGroup{}
+	order := []string{}
+	ensureNamespace := func(name string) *namespaceGroup {
+		if group, exists := groups[name]; exists {
+			return group
+		}
+		group := &namespaceGroup{}
+		groups[name] = group
+		order = append(order, name)
+		return group
+	}
+
+	damagedTables := []Node{}
+	damagedSchemas := []Node{}
+
+	for _, path := range tableFiles {
+		table := cuesource.ParseTableFile(path)
+		if len(table.Diagnostics) > 0 {
+			damagedTables = append(damagedTables, damagedNode(path, table.Diagnostics))
+			continue
+		}
+		group := ensureNamespace(table.Namespace)
+		group.tables = append(group.tables, tableNode(table))
+	}
+	for _, path := range schemaFiles {
+		schema := cuesource.ParseSchemaFile(path)
+		if len(schema.Diagnostics) > 0 {
+			damagedSchemas = append(damagedSchemas, damagedNode(path, schema.Diagnostics))
+			continue
+		}
+		group := ensureNamespace(schema.Package)
+		group.schemas = append(group.schemas, schemaDefinitionNodes(schema)...)
+	}
+
+	sort.Strings(order)
+	children := make([]Node, 0, len(order)+2)
+	for _, name := range order {
+		group := groups[name]
+		node := Node{Kind: NodeNamespace, Name: name}
+		if len(group.tables) > 0 {
+			sortNodes(group.tables)
+			node.Children = append(node.Children, Node{Kind: NodeGroup, Name: "Tables", Children: group.tables})
+		}
+		if len(group.schemas) > 0 {
+			sortNodes(group.schemas)
+			node.Children = append(node.Children, Node{Kind: NodeGroup, Name: "Schemas", Children: group.schemas})
+		}
+		children = append(children, node)
+	}
+	if len(damagedTables) > 0 {
+		sortNodes(damagedTables)
+		children = append(children, Node{Kind: NodeGroup, Name: "Tables", Children: damagedTables})
+	}
+	if len(damagedSchemas) > 0 {
+		sortNodes(damagedSchemas)
+		children = append(children, Node{Kind: NodeGroup, Name: "Schemas", Children: damagedSchemas})
 	}
 
 	return Tree{Root: Node{
-		Kind: NodeProject,
-		Name: projectName,
-		Path: root,
-		Children: []Node{
-			{Kind: NodeGroup, Name: "Tables", Children: tableNodes},
-			{Kind: NodeGroup, Name: "Schemas", Children: schemaNodes},
-		},
+		Kind:     NodeProject,
+		Name:     projectName,
+		Path:     root,
+		Children: children,
 	}}, nil
 }
 
-func scanRoots(projectRoot string, roots, excludes []string, fileKind NodeKind) ([]Node, error) {
-	result := make([]Node, 0, len(roots))
+func collectRootFiles(projectRoot string, roots, excludes []string) ([]string, error) {
+	var files []string
 	for _, configuredRoot := range roots {
 		root, err := resolveProjectPath(projectRoot, configuredRoot)
 		if err != nil {
@@ -79,82 +138,57 @@ func scanRoots(projectRoot string, roots, excludes []string, fileKind NodeKind) 
 		if !info.IsDir() {
 			return nil, fmt.Errorf("source root %q is not a directory", configuredRoot)
 		}
-
-		node, err := scanDirectory(projectRoot, root, excludes, fileKind)
-		if err != nil {
+		if err := walkDirectory(projectRoot, root, excludes, &files); err != nil {
 			return nil, err
 		}
-		result = append(result, node)
 	}
-	sortNodes(result)
-	return result, nil
+	return files, nil
 }
 
-func scanDirectory(projectRoot, directory string, excludes []string, fileKind NodeKind) (Node, error) {
+func walkDirectory(projectRoot, directory string, excludes []string, files *[]string) error {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
-		return Node{}, err
+		return err
 	}
-
-	node := Node{Kind: NodeDirectory, Name: filepath.Base(directory), Path: directory}
 	for _, entry := range entries {
 		path := filepath.Join(directory, entry.Name())
 		relative, err := filepath.Rel(projectRoot, path)
 		if err != nil {
-			return Node{}, err
+			return err
 		}
 		if isExcluded(filepath.ToSlash(relative), excludes) {
 			continue
 		}
 		if entry.IsDir() {
-			child, err := scanDirectory(projectRoot, path, excludes, fileKind)
-			if err != nil {
-				return Node{}, err
+			if err := walkDirectory(projectRoot, path, excludes, files); err != nil {
+				return err
 			}
-			node.Children = append(node.Children, child)
 			continue
 		}
 		if filepath.Ext(entry.Name()) == ".cue" {
-			if fileKind == NodeTable {
-				node.Children = append(node.Children, tableNode(path))
-			} else if fileKind == NodeSchemaFile {
-				node.Children = append(node.Children, schemaNode(path))
-			} else {
-				node.Children = append(node.Children, Node{Kind: fileKind, Name: entry.Name(), Path: path})
-			}
+			*files = append(*files, path)
 		}
 	}
-	sortNodes(node.Children)
-	return node, nil
+	return nil
 }
 
-func tableNode(path string) Node {
-	table := cuesource.ParseTableFile(path)
-	if len(table.Diagnostics) > 0 {
-		return Node{
-			Kind:        NodeDamaged,
-			Name:        filepath.Base(path),
-			Path:        path,
-			Diagnostics: table.Diagnostics,
-		}
-	}
+func tableNode(table cuesource.Table) Node {
 	return Node{
 		Kind: NodeTable,
-		Name: table.LogicalName(),
-		Path: path,
+		Name: table.Name,
+		Path: table.Path,
 		Children: []Node{
-			{Kind: NodeTableData, Name: "table", Path: path},
 			{
 				Kind:     NodeLocalSchema,
 				Name:     "local_schema",
-				Path:     path,
-				Children: definitionNodes(path, table.LocalDefinitions),
+				Path:     table.Path,
+				Children: localDefinitionNodes(table.Path, table.LocalDefinitions),
 			},
 		},
 	}
 }
 
-func definitionNodes(path string, definitions []string) []Node {
+func localDefinitionNodes(path string, definitions []string) []Node {
 	nodes := make([]Node, 0, len(definitions))
 	for _, definition := range definitions {
 		nodes = append(nodes, Node{Kind: NodeLocalSchema, Name: "#" + definition, Path: path})
@@ -162,30 +196,16 @@ func definitionNodes(path string, definitions []string) []Node {
 	return nodes
 }
 
-func schemaNode(path string) Node {
-	schema := cuesource.ParseSchemaFile(path)
-	if len(schema.Diagnostics) > 0 {
-		return Node{
-			Kind:        NodeDamaged,
-			Name:        filepath.Base(path),
-			Path:        path,
-			Diagnostics: schema.Diagnostics,
-		}
-	}
-	children := make([]Node, 0, len(schema.Definitions))
+func schemaDefinitionNodes(schema cuesource.SchemaFile) []Node {
+	nodes := make([]Node, 0, len(schema.Definitions))
 	for _, definition := range schema.Definitions {
-		children = append(children, Node{
-			Kind: NodeSchemaDef,
-			Name: "#" + definition.Name,
-			Path: path,
-		})
+		nodes = append(nodes, Node{Kind: NodeSchemaDefinition, Name: "#" + definition.Name, Path: schema.Path})
 	}
-	return Node{
-		Kind:     NodeSchemaFile,
-		Name:     schema.Package,
-		Path:     path,
-		Children: children,
-	}
+	return nodes
+}
+
+func damagedNode(path string, diagnostics []cuesource.Diagnostic) Node {
+	return Node{Kind: NodeDamaged, Name: filepath.Base(path), Path: path, Diagnostics: diagnostics}
 }
 
 func resolveProjectPath(projectRoot, configuredPath string) (string, error) {
@@ -211,13 +231,5 @@ func isExcluded(relative string, excludes []string) bool {
 }
 
 func sortNodes(nodes []Node) {
-	sort.Slice(nodes, func(i, j int) bool {
-		if nodes[i].Kind == NodeDirectory && nodes[j].Kind != NodeDirectory {
-			return true
-		}
-		if nodes[i].Kind != NodeDirectory && nodes[j].Kind == NodeDirectory {
-			return false
-		}
-		return nodes[i].Name < nodes[j].Name
-	})
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].Name < nodes[j].Name })
 }

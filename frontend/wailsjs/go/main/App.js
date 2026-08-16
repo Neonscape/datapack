@@ -26,6 +26,10 @@ export function CreateSchemaDefinition(arg1) {
   return window['go']['main']['App']['CreateSchemaDefinition'](arg1);
 }
 
+export function CreateSchemaFile(arg1) {
+  return window['go']['main']['App']['CreateSchemaFile'](arg1);
+}
+
 export function CreateTable(arg1) {
   return window['go']['main']['App']['CreateTable'](arg1);
 }
@@ -44,6 +48,10 @@ export function DeleteRow(arg1) {
 
 export function DeleteSchemaDefinition(arg1) {
   return window['go']['main']['App']['DeleteSchemaDefinition'](arg1);
+}
+
+export function DeleteTable(arg1) {
+  return window['go']['main']['App']['DeleteTable'](arg1);
 }
 
 export function Export() {
@@ -96,6 +104,10 @@ export function RenameRow(arg1) {
 
 export function RenameSchemaDefinition(arg1) {
   return window['go']['main']['App']['RenameSchemaDefinition'](arg1);
+}
+
+export function RenameTable(arg1) {
+  return window['go']['main']['App']['RenameTable'](arg1);
 }
 
 export function SelectProject() {

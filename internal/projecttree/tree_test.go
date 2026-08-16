@@ -32,10 +32,10 @@ func TestScanBuildsLogicalTableAndLocalSchemaNodes(t *testing.T) {
 	root := t.TempDir()
 	projectPath := filepath.Join(root, "game.dtproj")
 	writeFile(t, projectPath, "{}")
-	writeFile(t, filepath.Join(root, "tables", "item.cue"), `package item
-	#PrimaryKey: string
+	writeFile(t, filepath.Join(root, "tables", "rpg", "item", "item.cue"), `package item
+#PrimaryKey: string
 #Row: {name: string}
-rows: {sword: "sword"}
+rows: {sword: {name: "Sword"}}
 _local: {#Position: {x: number, y: number}}
 _tool: {table: {namespace: "rpg", name: "item"}}
 `)
@@ -47,8 +47,12 @@ _tool: {table: {namespace: "rpg", name: "item"}}
 	if err != nil {
 		t.Fatalf("Scan() error = %v", err)
 	}
-	table := find(tree.Root, "rpg.item")
-	if table == nil || table.Kind != NodeTable {
+	namespace := find(tree.Root, "rpg")
+	if namespace == nil || namespace.Kind != NodeNamespace {
+		t.Fatalf("namespace = %#v, want namespace node", namespace)
+	}
+	table := find(tree.Root, "item")
+	if table == nil || table.Kind != NodeTable || table.Path != filepath.Join(root, "tables", "rpg", "item", "item.cue") {
 		t.Fatalf("table = %#v, want logical table", table)
 	}
 	if got := find(*table, "local_schema"); got == nil || got.Kind != NodeLocalSchema {
@@ -66,7 +70,7 @@ func TestScanBuildsSchemaDefinitionNodes(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "tables"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(root, "schema", "common.cue"), `package common
+	writeFile(t, filepath.Join(root, "schema", "common", "common.cue"), `package common
 #GameID: string
 _schema: {definitions: {GameID: {kind: "type", type: "string"}}}
 `)
@@ -75,12 +79,47 @@ _schema: {definitions: {GameID: {kind: "type", type: "string"}}}
 	if err != nil {
 		t.Fatalf("Scan() error = %v", err)
 	}
-	file := find(tree.Root, "common")
-	if file == nil || file.Kind != NodeSchemaFile {
-		t.Fatalf("schema file = %#v", file)
+	namespace := find(tree.Root, "common")
+	if namespace == nil || namespace.Kind != NodeNamespace {
+		t.Fatalf("namespace = %#v, want namespace node", namespace)
 	}
-	if definition := find(*file, "#GameID"); definition == nil || definition.Kind != NodeSchemaDef {
+	definition := find(*namespace, "#GameID")
+	if definition == nil || definition.Kind != NodeSchemaDefinition {
 		t.Fatalf("schema definition = %#v", definition)
+	}
+}
+
+func TestScanGroupsSameNameTablesByNamespace(t *testing.T) {
+	root := t.TempDir()
+	projectPath := filepath.Join(root, "game.dtproj")
+	writeFile(t, projectPath, "{}")
+	writeFile(t, filepath.Join(root, "tables", "rpg", "item", "item.cue"), `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}}
+`)
+	writeFile(t, filepath.Join(root, "tables", "combat", "item", "item.cue"), `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {fist: {name: "Fist"}}
+_tool: {table: {namespace: "combat", name: "item"}}
+`)
+	if err := os.MkdirAll(filepath.Join(root, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	tree, err := Scan(projectPath, []string{"tables"}, []string{"schema"}, nil)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	rpg := find(tree.Root, "rpg")
+	combat := find(tree.Root, "combat")
+	if rpg == nil || combat == nil {
+		t.Fatalf("namespaces missing: rpg=%v combat=%v", rpg, combat)
+	}
+	if find(*rpg, "item") == nil || find(*combat, "item") == nil {
+		t.Fatal("same-named tables in different namespaces were not both discovered")
 	}
 }
 

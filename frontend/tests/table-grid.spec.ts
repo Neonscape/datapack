@@ -31,11 +31,18 @@ const workspace = {
     project: {path: "/project/game.dtproj", root: "/project"},
     settings: {build: {mode: "manual"}},
     tree: {root: {kind: "project", name: "game.dtproj", children: [
-        {kind: "tableData", name: "rpg.item", path: table.path},
-        {kind: "schemaDefinition", name: "#GameID", path: publicSchema.path},
-        {kind: "schemaFile", name: "common", path: publicSchema.path, children: [
-            {kind: "schemaDefinition", name: "#GameID", path: publicSchema.path},
-            {kind: "schemaDefinition", name: "#NonNegative", path: publicSchema.path},
+        {kind: "namespace", name: "rpg", children: [
+            {kind: "group", name: "Tables", children: [
+                {kind: "table", name: "item", path: table.path, children: [
+                    {kind: "localSchema", name: "local_schema", path: table.path},
+                ]},
+            ]},
+        ]},
+        {kind: "namespace", name: "common", children: [
+            {kind: "group", name: "Schemas", children: [
+                {kind: "schemaDefinition", name: "#GameID", path: publicSchema.path},
+                {kind: "schemaDefinition", name: "#NonNegative", path: publicSchema.path},
+            ]},
         ]},
     ]}},
     schemas: {definitions: [
@@ -105,6 +112,9 @@ test.beforeEach(async ({page}) => {
                 }
                 return Promise.resolve(expression);
             },
+            RenameTable: (argument) => Promise.resolve({table: {...table, namespace: argument.namespace, name: argument.name, path: `/project/tables/${argument.namespace}/${argument.name}/${argument.name}.cue`}, workspace}),
+            DeleteTable: () => Promise.resolve({workspace}),
+            CreateSchemaFile: (namespace) => Promise.resolve({schema: {...publicSchema, package: namespace, definitions: []}, workspace}),
         };
         // Wails generated bindings resolve methods through this object.
         (window as Window & {go: unknown}).go = {main: {App: api}};
@@ -113,7 +123,7 @@ test.beforeEach(async ({page}) => {
     await page.goto("/");
     await page.getByRole("button", {name: "File"}).click();
     await page.getByRole("navigation", {name: "Application menu"}).getByRole("button", {name: "Open project"}).click();
-    await page.getByRole("button", {name: "rpg.item", exact: true}).click();
+    await page.getByRole("button", {name: "item", exact: true}).click();
 });
 
 test("supports pointer editing, row menus, and selected-column actions", async ({page}) => {
@@ -418,8 +428,8 @@ test("keeps navigation visible after creating a draft row", async ({page}) => {
     await page.mouse.dblclick(box.x + 55, box.y + 80);
     await page.locator("textarea").fill("new_row");
     await page.locator("textarea").press("Enter");
-    await expect(page.getByRole("button", {name: "rpg.item", exact: true})).toBeVisible();
-    await expect(page.getByText("Schemas", {exact: true})).toBeVisible();
+    await expect(page.getByRole("button", {name: "item", exact: true})).toBeVisible();
+    await expect(page.locator(".schema-panel .panel-title")).toBeVisible();
 });
 
 test("shows backend log entries in the GUI panel", async ({page}) => {
@@ -496,6 +506,30 @@ test("renders a workspace with null Schema collections", async ({page}) => {
     });
     await page.getByRole("button", {name: "File"}).click();
     await page.getByRole("navigation", {name: "Application menu"}).getByRole("button", {name: "Open project"}).click();
-    await expect(page.getByText("Schemas", {exact: true})).toBeVisible();
+    await expect(page.locator(".schema-panel .panel-title")).toBeVisible();
     await expect(page.locator(".schema-row")).toHaveCount(0);
+});
+
+test("shows project tree context menu actions", async ({page}) => {
+    await page.getByRole("button", {name: "item", exact: true}).click({button: "right"});
+    await expect(page.getByRole("button", {name: "Rename table"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "Delete table"})).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", {name: "common", exact: true}).click({button: "right"});
+    await expect(page.getByRole("button", {name: "New schema"})).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", {name: "#GameID", exact: true}).click({button: "right"});
+    await expect(page.getByRole("button", {name: "Rename definition"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "Delete definition"})).toBeVisible();
+});
+
+test("renames a table from the project tree", async ({page}) => {
+    await page.getByRole("button", {name: "item", exact: true}).click({button: "right"});
+    await page.getByRole("button", {name: "Rename table"}).click();
+    await expect(page.getByRole("heading", {name: "Rename table"})).toBeVisible();
+    await page.getByLabel("Namespace", {exact: true}).fill("combat");
+    await page.getByRole("button", {name: "Apply"}).click();
+    await expect(page.getByRole("heading", {name: "Rename table"})).toBeHidden();
 });

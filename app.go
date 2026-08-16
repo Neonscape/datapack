@@ -110,6 +110,21 @@ func (a *App) CreateTable(create workspace.TableCreate) (workspace.TableCreateRe
 	return a.workspace.CreateTable(create)
 }
 
+// RenameTable changes a table's namespace and name and updates references.
+func (a *App) RenameTable(rename workspace.TableRename) (workspace.TableRenameResult, error) {
+	return a.workspace.RenameTable(rename)
+}
+
+// DeleteTable removes a table unless it is still referenced.
+func (a *App) DeleteTable(delete workspace.TableDelete) (workspace.TableDeleteResult, error) {
+	return a.workspace.DeleteTable(delete)
+}
+
+// CreateSchemaFile creates an empty public Schema package.
+func (a *App) CreateSchemaFile(namespace string) (workspace.SchemaFileCreateResult, error) {
+	return a.workspace.CreateSchemaFile(namespace)
+}
+
 // UpdateCell writes a valid CUE expression to an existing table cell.
 func (a *App) UpdateCell(update workspace.CellUpdate) (workspace.CellUpdateResult, error) {
 	return a.workspace.UpdateCell(update)

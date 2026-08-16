@@ -46,11 +46,14 @@ _schema: {definitions: {GameID: {kind: "type", type: "string"}}}
 	if view.Settings.Build.Mode != "manual" {
 		t.Fatalf("build mode = %q, want manual", view.Settings.Build.Mode)
 	}
-	if got := findNode(view.Tree.Root, "rpg.item"); got == nil || got.Kind != projecttree.NodeTable {
+	if got := findNodeByKind(view.Tree.Root, "rpg", projecttree.NodeNamespace); got == nil {
+		t.Fatalf("namespace was not discovered: %#v", view.Tree)
+	}
+	if got := findNode(view.Tree.Root, "item"); got == nil || got.Kind != projecttree.NodeTable {
 		t.Fatalf("table source was not discovered: %#v", view.Tree)
 	}
-	if got := findNodeByKind(view.Tree.Root, "common", projecttree.NodeSchemaFile); got == nil {
-		t.Fatalf("schema source was not discovered: %#v", view.Tree)
+	if got := findNodeByKind(view.Tree.Root, "common", projecttree.NodeNamespace); got == nil {
+		t.Fatalf("schema namespace was not discovered: %#v", view.Tree)
 	}
 	if got := findNode(view.Tree.Root, "ignored.cue"); got != nil {
 		t.Fatalf("excluded source was discovered: %#v", got)
@@ -253,7 +256,7 @@ _schema: {version: 1, definitions: {GameID: {kind: "type", type: "string"}}}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Table.Diagnostics) == 0 || result.Workspace.Tree.Root.Name == "" || findNodeByKind(result.Workspace.Tree.Root, "rpg.item", projecttree.NodeTable) == nil || len(result.Workspace.Schemas.Definitions) != 1 {
+	if len(result.Table.Diagnostics) == 0 || result.Workspace.Tree.Root.Name == "" || findNodeByKind(result.Workspace.Tree.Root, "item", projecttree.NodeTable) == nil || len(result.Workspace.Schemas.Definitions) != 1 {
 		t.Fatalf("CreateRow() = %#v", result)
 	}
 }
@@ -661,6 +664,129 @@ func TestCreateTableAddsItToTheCurrentProject(t *testing.T) {
 	}
 	if _, err := service.CreateTable(TableCreate{Namespace: "combat", Name: "skill"}); err == nil {
 		t.Fatal("CreateTable() accepted duplicate table")
+	}
+}
+
+func TestCreateTableAllowsSameNameAcrossNamespaces(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "tables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.CreateTable(TableCreate{Namespace: "rpg", Name: "item"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.CreateTable(TableCreate{Namespace: "combat", Name: "item"}); err != nil {
+		t.Fatalf("CreateTable() rejected same-named table in another namespace: %v", err)
+	}
+}
+
+func TestRenameTableMovesDirectoryAndUpdatesReferences(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	effectPath := filepath.Join(projectRoot, "tables", "rpg", "effect", "effect.cue")
+	writeFile(t, effectPath, `package effect
+#PrimaryKey: string
+#Row: {name: string}
+rows: {burn: {name: "Burn"}}
+_tool: {table: {namespace: "rpg", name: "effect"}}`)
+	itemPath := filepath.Join(projectRoot, "tables", "rpg", "item", "item.cue")
+	writeFile(t, itemPath, `package item
+#PrimaryKey: string
+#Row: {effectID: string}
+rows: {sword: {effectID: "burn"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table: "rpg.effect"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.RenameTable(TableRename{Path: effectPath, Namespace: "magic", Name: "effect"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Table.Namespace != "magic" || result.Table.Name != "effect" {
+		t.Fatalf("table = %#v", result.Table)
+	}
+	if _, err := os.Stat(effectPath); !os.IsNotExist(err) {
+		t.Fatal("old table directory still exists")
+	}
+	item, err := document.LoadTable(itemPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.ForeignKeys[0].Table != "magic.effect" {
+		t.Fatalf("foreign key = %#v", item.ForeignKeys)
+	}
+}
+
+func TestDeleteTableBlocksWhenReferenced(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	effectPath := filepath.Join(projectRoot, "tables", "rpg", "effect", "effect.cue")
+	writeFile(t, effectPath, `package effect
+#PrimaryKey: string
+#Row: {name: string}
+rows: {burn: {name: "Burn"}}
+_tool: {table: {namespace: "rpg", name: "effect"}}`)
+	itemPath := filepath.Join(projectRoot, "tables", "rpg", "item", "item.cue")
+	writeFile(t, itemPath, `package item
+#PrimaryKey: string
+#Row: {effectID: string}
+rows: {sword: {effectID: "burn"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table: "rpg.effect"}}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.DeleteTable(TableDelete{Path: effectPath}); err == nil {
+		t.Fatal("DeleteTable() accepted a referenced table")
+	}
+	if _, err := service.DeleteTable(TableDelete{Path: itemPath}); err != nil {
+		t.Fatalf("DeleteTable() = %v", err)
+	}
+	if _, err := os.Stat(itemPath); !os.IsNotExist(err) {
+		t.Fatal("deleted table directory still exists")
+	}
+}
+
+func TestCreateSchemaFileAddsNamespace(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "tables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.CreateSchemaFile("rules")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Schema.Package != "rules" {
+		t.Fatalf("schema = %#v", result.Schema)
+	}
+	if got := findNodeByKind(result.Workspace.Tree.Root, "rules", projecttree.NodeNamespace); got == nil {
+		t.Fatalf("schema namespace was not discovered: %#v", result.Workspace.Tree)
+	}
+	if _, err := service.CreateSchemaFile("rules"); err == nil {
+		t.Fatal("CreateSchemaFile() accepted a duplicate namespace")
 	}
 }
 

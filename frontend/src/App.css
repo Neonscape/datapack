@@ -280,12 +280,21 @@
 .node-project { background: #126c7b; border-radius: 50%; }
 .node-group { background: #d3911c; }
 .node-directory { background: #ddae51; }
+.node-namespace { background: #126c7b; border-radius: 50%; }
 .node-table { background: #32829c; border-radius: 50%; }
 .node-tableData { background: #4f8fb0; }
 .node-localSchema { background: #7786a8; }
 .node-schemaFile { background: #7587ba; }
 .node-schemaDefinition { background: #9a71af; }
 .node-damaged { background: #c44949; border-radius: 50%; }
+
+.tree-context-menu {
+    min-width: 180px;
+}
+
+.tree-context-danger {
+    color: #a33d3d !important;
+}
 
 .editor-placeholder,
 .welcome {

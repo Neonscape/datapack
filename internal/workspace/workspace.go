@@ -327,6 +327,30 @@ type TableCreateResult struct {
 	Workspace View           `json:"workspace"`
 }
 
+type TableRename struct {
+	Path      string `json:"path"`
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
+
+type TableRenameResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
+type TableDelete struct {
+	Path string `json:"path"`
+}
+
+type TableDeleteResult struct {
+	Workspace View `json:"workspace"`
+}
+
+type SchemaFileCreateResult struct {
+	Schema    document.PublicSchema `json:"schema"`
+	Workspace View                  `json:"workspace"`
+}
+
 type ColumnAdd struct {
 	Path              string `json:"path"`
 	Name              string `json:"name"`
@@ -540,10 +564,18 @@ func buildView(project Project, settings EditorSettings, tree projecttree.Tree) 
 }
 
 func collectDocuments(node projecttree.Node, publicSchemas *[]document.PublicSchema, tables *[]document.Table) {
+	seen := map[string]bool{}
+	collectDocumentsInto(node, publicSchemas, tables, seen)
+}
+
+func collectDocumentsInto(node projecttree.Node, publicSchemas *[]document.PublicSchema, tables *[]document.Table, seenSchemas map[string]bool) {
 	switch node.Kind {
-	case projecttree.NodeSchemaFile:
-		if schema, err := document.LoadPublicSchema(node.Path); err == nil {
-			*publicSchemas = append(*publicSchemas, schema)
+	case projecttree.NodeSchemaDefinition:
+		if node.Path != "" && !seenSchemas[node.Path] {
+			seenSchemas[node.Path] = true
+			if schema, err := document.LoadPublicSchema(node.Path); err == nil {
+				*publicSchemas = append(*publicSchemas, schema)
+			}
 		}
 	case projecttree.NodeTable:
 		if table, err := document.LoadTable(node.Path); err == nil {
@@ -551,7 +583,7 @@ func collectDocuments(node projecttree.Node, publicSchemas *[]document.PublicSch
 		}
 	}
 	for _, child := range node.Children {
-		collectDocuments(child, publicSchemas, tables)
+		collectDocumentsInto(child, publicSchemas, tables, seenSchemas)
 	}
 }
 
@@ -1096,13 +1128,13 @@ func (s *Service) CreateTable(create TableCreate) (TableCreateResult, error) {
 			return TableCreateResult{}, fmt.Errorf("table %q already exists", create.Namespace+"."+create.Name)
 		}
 	}
-	directory := filepath.Join(s.current.Project.Root, s.current.Project.Config.TableRoots[0], create.Name)
+	directory := filepath.Join(s.current.Project.Root, s.current.Project.Config.TableRoots[0], create.Namespace, create.Name)
 	path := filepath.Join(directory, create.Name+".cue")
-	if err := os.Mkdir(directory, 0o755); err != nil {
-		if os.IsExist(err) {
-			return TableCreateResult{}, fmt.Errorf("table directory %q already exists", create.Name)
-		}
+	if err := os.MkdirAll(directory, 0o755); err != nil {
 		return TableCreateResult{}, fmt.Errorf("create table directory: %w", err)
+	}
+	if _, err := os.Stat(path); err == nil {
+		return TableCreateResult{}, fmt.Errorf("table %q already exists", create.Namespace+"."+create.Name)
 	}
 	source := fmt.Sprintf(`package %s
 
@@ -1139,6 +1171,144 @@ _editor: {columns: {}}
 		return TableCreateResult{}, err
 	}
 	return TableCreateResult{Table: withTableMetadata(table, view), Workspace: view}, nil
+}
+
+// RenameTable changes a table's namespace and name, moves its source directory,
+// and updates every foreign-key reference to it.
+func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
+	if s.current == nil {
+		return TableRenameResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, rename.Path) {
+		return TableRenameResult{}, fmt.Errorf("table %q is not part of the open project", rename.Path)
+	}
+	if !validTableName(rename.Name) || !validNamespace(rename.Namespace) {
+		return TableRenameResult{}, fmt.Errorf("table name and namespace must use lowercase letters, digits, and underscores")
+	}
+	source, err := document.LoadTable(rename.Path)
+	if err != nil {
+		return TableRenameResult{}, err
+	}
+	oldName := logicalTableName(source)
+	var tables []document.Table
+	collectTables(s.current.Tree.Root, &tables)
+	for _, table := range tables {
+		if table.Path == rename.Path {
+			continue
+		}
+		if table.Namespace == rename.Namespace && table.Name == rename.Name {
+			return TableRenameResult{}, fmt.Errorf("table %q already exists", rename.Namespace+"."+rename.Name)
+		}
+	}
+	newName := rename.Namespace + "." + rename.Name
+	references := []document.TableReference{}
+	for _, table := range tables {
+		if table.Path == rename.Path {
+			continue
+		}
+		for _, key := range table.ForeignKeys {
+			if key.Table == oldName {
+				references = append(references, document.TableReference{Path: table.Path, Column: key.Column, OldTable: oldName, NewTable: newName})
+			}
+		}
+	}
+	if _, err := document.RenameTable(rename.Path, rename.Namespace, rename.Name, references); err != nil {
+		return TableRenameResult{}, err
+	}
+	oldDirectory := filepath.Dir(rename.Path)
+	newDirectory := filepath.Join(s.current.Project.Root, s.current.Project.Config.TableRoots[0], rename.Namespace, rename.Name)
+	if err := os.MkdirAll(filepath.Dir(newDirectory), 0o755); err != nil {
+		return TableRenameResult{}, fmt.Errorf("create renamed table directory: %w", err)
+	}
+	if err := os.Rename(oldDirectory, newDirectory); err != nil {
+		return TableRenameResult{}, fmt.Errorf("move renamed table: %w", err)
+	}
+	view, err := s.refreshAfterEdit()
+	if err != nil {
+		return TableRenameResult{}, err
+	}
+	table, err := document.LoadTable(filepath.Join(newDirectory, rename.Name+".cue"))
+	if err != nil {
+		return TableRenameResult{}, fmt.Errorf("reload renamed table: %w", err)
+	}
+	s.log(logging.Info, "table renamed", map[string]any{"path": rename.Path, "old": oldName, "new": newName})
+	return TableRenameResult{Table: withTableMetadata(table, view), Workspace: view}, nil
+}
+
+// DeleteTable removes a table source directory unless another table references
+// it through a foreign key.
+func (s *Service) DeleteTable(delete TableDelete) (TableDeleteResult, error) {
+	if s.current == nil {
+		return TableDeleteResult{}, fmt.Errorf("no project is open")
+	}
+	if !containsTable(s.current.Tree.Root, delete.Path) {
+		return TableDeleteResult{}, fmt.Errorf("table %q is not part of the open project", delete.Path)
+	}
+	source, err := document.LoadTable(delete.Path)
+	if err != nil {
+		return TableDeleteResult{}, err
+	}
+	name := logicalTableName(source)
+	var tables []document.Table
+	collectTables(s.current.Tree.Root, &tables)
+	referencedBy := []string{}
+	for _, table := range tables {
+		if table.Path == delete.Path {
+			continue
+		}
+		for _, key := range table.ForeignKeys {
+			if key.Table == name {
+				referencedBy = append(referencedBy, logicalTableName(table)+"."+key.Column)
+			}
+		}
+	}
+	if len(referencedBy) > 0 {
+		err := fmt.Errorf("table %q is referenced by %s", name, strings.Join(referencedBy, ", "))
+		s.log(logging.Warn, "table delete blocked", map[string]any{"path": delete.Path, "error": err.Error()})
+		return TableDeleteResult{}, err
+	}
+	if err := os.RemoveAll(filepath.Dir(delete.Path)); err != nil {
+		return TableDeleteResult{}, fmt.Errorf("delete table source: %w", err)
+	}
+	view, err := s.refreshAfterEdit()
+	if err != nil {
+		return TableDeleteResult{}, err
+	}
+	s.log(logging.Info, "table deleted", map[string]any{"path": delete.Path, "name": name})
+	return TableDeleteResult{Workspace: view}, nil
+}
+
+// CreateSchemaFile creates an empty public Schema package for a namespace.
+func (s *Service) CreateSchemaFile(namespace string) (SchemaFileCreateResult, error) {
+	if s.current == nil {
+		return SchemaFileCreateResult{}, fmt.Errorf("no project is open")
+	}
+	if !validNamespace(namespace) {
+		return SchemaFileCreateResult{}, fmt.Errorf("schema namespace must use lowercase letters, digits, and underscores")
+	}
+	directory := filepath.Join(s.current.Project.Root, s.current.Project.Config.SchemaRoots[0], namespace)
+	path := filepath.Join(directory, namespace+".cue")
+	if _, err := os.Stat(path); err == nil {
+		return SchemaFileCreateResult{}, fmt.Errorf("schema namespace %q already exists", namespace)
+	}
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		return SchemaFileCreateResult{}, fmt.Errorf("create schema directory: %w", err)
+	}
+	source := fmt.Sprintf("package %s\n\n_schema: {\n\tversion: 1\n\tdefinitions: {}\n}\n", namespace)
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		return SchemaFileCreateResult{}, fmt.Errorf("write schema source: %w", err)
+	}
+	schema, err := document.LoadPublicSchema(path)
+	if err != nil {
+		_ = os.Remove(path)
+		return SchemaFileCreateResult{}, fmt.Errorf("validate created schema: %w", err)
+	}
+	view, err := s.refreshAfterEdit()
+	if err != nil {
+		return SchemaFileCreateResult{}, err
+	}
+	s.log(logging.Info, "schema file created", map[string]any{"namespace": namespace})
+	return SchemaFileCreateResult{Schema: schema, Workspace: view}, nil
 }
 
 // UpdateCell applies one CUE expression to an existing table cell, then
@@ -1579,7 +1749,7 @@ func containsTable(node projecttree.Node, path string) bool {
 }
 
 func containsSchemaFile(node projecttree.Node, path string) bool {
-	if node.Kind == projecttree.NodeSchemaFile && node.Path == path {
+	if node.Kind == projecttree.NodeSchemaDefinition && node.Path == path {
 		return true
 	}
 	for _, child := range node.Children {
@@ -1591,7 +1761,7 @@ func containsSchemaFile(node projecttree.Node, path string) bool {
 }
 
 func collectSourcePaths(node projecttree.Node, paths *[]string) {
-	if (node.Kind == projecttree.NodeTable || node.Kind == projecttree.NodeSchemaFile) && node.Path != "" {
+	if (node.Kind == projecttree.NodeTable || node.Kind == projecttree.NodeSchemaDefinition) && node.Path != "" {
 		*paths = append(*paths, node.Path)
 	}
 	for _, child := range node.Children {

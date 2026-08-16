@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type GridCell, type GridColumn, type GridSelection, type Item} from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import './App.css';
-import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, Export, GetPublicSchema, GetTable, MoveColumn, Navigate, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetSchemaDefinition, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetPublicSchema, GetTable, MoveColumn, Navigate, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetSchemaDefinition, Undo, UpdateCell} from "../wailsjs/go/main/App";
 import {schemamodel} from "../wailsjs/go/models";
 import {EventsOn} from "../wailsjs/runtime/runtime";
 
@@ -47,9 +47,10 @@ function LogPanel() {
 }
 
 type TreeNode = {
-    kind: "project" | "group" | "directory" | "table" | "tableData" | "localSchema" | "schemaFile" | "schemaDefinition" | "damaged";
+    kind: "project" | "namespace" | "group" | "table" | "localSchema" | "schemaDefinition" | "damaged";
     name: string;
     path?: string;
+    diagnostics?: {severity: string; message: string; line?: number; column?: number}[];
     children?: TreeNode[];
 };
 
@@ -181,6 +182,7 @@ type SchemaEditorState = {
     logicalTable?: string;
     definitions: SchemaDefinitionDocument[];
     selected: string | null;
+    creating?: boolean;
 };
 
 type SchemaEditResult = {
@@ -221,19 +223,23 @@ function schemaConstraintReferenceOptions(workspace: WorkspaceView | null): {lab
     }));
 }
 
-function Tree({node, depth = 0, onOpenTable, onOpenSchema}: { node: TreeNode; depth?: number; onOpenTable: (path: string) => void; onOpenSchema: (node: TreeNode) => void }) {
-    const isFile = node.kind === "tableData" || node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "damaged";
-    const isSchemaNode = node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "localSchema";
-    const openTable = node.kind === "tableData" && node.path ? () => onOpenTable(node.path!) : undefined;
+function Tree({node, depth = 0, namespace = "", onOpenTable, onOpenSchema, onContextMenu}: { node: TreeNode; depth?: number; namespace?: string; onOpenTable: (path: string) => void; onOpenSchema: (node: TreeNode) => void; onContextMenu: (node: TreeNode, position: {x: number; y: number}, namespace: string) => void }) {
+    const isFile = node.kind === "table" || node.kind === "schemaDefinition" || node.kind === "damaged";
+    const isSchemaNode = node.kind === "schemaDefinition" || node.kind === "localSchema";
+    const openTable = node.kind === "table" && node.path ? () => onOpenTable(node.path!) : undefined;
     const openSchema = isSchemaNode && node.path ? () => onOpenSchema(node) : undefined;
     const openAction = openTable ?? openSchema;
+    const childNamespace = node.kind === "namespace" ? node.name : namespace;
     return (
         <div className="tree-node">
-            <button className={`tree-row ${isFile ? "tree-file" : ""} ${openAction ? "tree-action" : ""}`} style={{paddingLeft: `${12 + depth * 16}px`}} onClick={openAction} disabled={!openAction}>
+            <button className={`tree-row ${isFile ? "tree-file" : ""} ${openAction ? "tree-action" : ""}`} style={{paddingLeft: `${12 + depth * 16}px`}} onClick={openAction} onContextMenu={(event) => {
+                event.preventDefault();
+                onContextMenu(node, {x: event.clientX, y: event.clientY}, namespace);
+            }}>
                 <span className={`node-icon node-${node.kind}`} aria-hidden="true"/>
                 <span>{node.name}</span>
             </button>
-            {node.children?.map((child) => <Tree key={`${child.kind}:${child.path ?? child.name}:${child.name}`} node={child} depth={depth + 1} onOpenTable={onOpenTable} onOpenSchema={onOpenSchema}/>) }
+            {node.children?.map((child) => <Tree key={`${child.kind}:${child.path ?? child.name}:${child.name}`} node={child} depth={depth + 1} namespace={childNamespace} onOpenTable={onOpenTable} onOpenSchema={onOpenSchema} onContextMenu={onContextMenu}/>) }
         </div>
     );
 }
@@ -799,6 +805,12 @@ type StructureDialog = {
 };
 type TableDialog = {namespace: string; name: string};
 
+type TreeDialog =
+    | {mode: "renameTable"; path: string; namespace: string; name: string}
+    | {mode: "deleteTable"; path: string; label: string}
+    | {mode: "renameDefinition"; path: string; name: string; newName: string}
+    | {mode: "deleteDefinition"; path: string; name: string};
+
 function predicateOptions(kind: string): {kind: string; label: string}[] {
     if (kind === "string") {
         return [
@@ -1029,6 +1041,11 @@ function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, onCreate
         setRenaming(false);
         setConfirmingDelete(false);
         setEditorError("");
+        if (state.creating) {
+            setDraft({name: "", kind: "type", type: "string", appliesTo: "", expression: "string", node: {kind: "string"}, custom: false});
+            setCreating(true);
+            return;
+        }
         const definition = state.definitions.find((entry) => entry.name === state.selected) ?? null;
         setDraft(definition ? {
             name: definition.name,
@@ -1178,6 +1195,8 @@ function App() {
     const [appMenu, setAppMenu] = useState<"file" | "edit" | null>(null);
     const [focusTarget, setFocusTarget] = useState<{path: string; rowID: string; column: string; nonce: number} | null>(null);
     const [navMenu, setNavMenu] = useState<{x: number; y: number; targets: NavTarget[]} | null>(null);
+    const [treeMenu, setTreeMenu] = useState<{node: TreeNode; namespace: string; x: number; y: number} | null>(null);
+    const [treeDialog, setTreeDialog] = useState<TreeDialog | null>(null);
 
     async function pasteCells(row: number, column: number, text: string) {
         if (!table) return;
@@ -1226,11 +1245,13 @@ function App() {
         const closeMenu = (event: PointerEvent) => {
             if (!(event.target as Element | null)?.closest(".app-menu")) setAppMenu(null);
             if (!(event.target as Element | null)?.closest(".nav-menu")) setNavMenu(null);
+            if (!(event.target as Element | null)?.closest(".tree-context-menu")) setTreeMenu(null);
         };
         const closeOnEscape = (event: KeyboardEvent) => {
             if (event.key === "Escape") {
                 setAppMenu(null);
                 setNavMenu(null);
+                setTreeMenu(null);
             }
         };
         document.addEventListener("pointerdown", closeMenu);
@@ -1278,16 +1299,16 @@ function App() {
         }
     }
 
-    async function openSchemaByPath(path: string, definition: string | null, local: boolean) {
+    async function openSchemaByPath(path: string, definition: string | null, local: boolean, creating = false) {
         setError("");
         try {
             if (local) {
                 const document = await GetTable(path) as TableDocument;
                 const logical = document.namespace ? `${document.namespace}.${document.name}` : document.name;
-                setSchemaDocument({path, local: true, logicalTable: logical, definitions: document.localSchema, selected: definition ?? document.localSchema[0]?.name ?? null});
+                setSchemaDocument({path, local: true, logicalTable: logical, definitions: document.localSchema, selected: definition ?? document.localSchema[0]?.name ?? null, creating});
             } else {
                 const document = await GetPublicSchema(path) as PublicSchemaDocument;
-                setSchemaDocument({path, local: false, package: document.package, definitions: document.definitions, selected: definition ?? document.definitions[0]?.name ?? null});
+                setSchemaDocument({path, local: false, package: document.package, definitions: document.definitions, selected: definition ?? document.definitions[0]?.name ?? null, creating});
             }
             setTable(null);
             setCellError(null);
@@ -1335,6 +1356,76 @@ function App() {
         const definition = schemaDefinitions(workspace).find((entry) => entry.id === usage.field);
         if (definition) {
             void openSchemaByPath(definition.path, definition.id.split(".#")[1], !!definition.table);
+        }
+    }
+
+    function renameDefinitionAt(path: string, name: string) {
+        setTreeDialog({mode: "renameDefinition", path, name, newName: name});
+    }
+
+    function deleteDefinitionAt(path: string, name: string) {
+        setTreeDialog({mode: "deleteDefinition", path, name});
+    }
+
+    function renameTableAt(path: string, name: string, namespace: string) {
+        setTreeDialog({mode: "renameTable", path, namespace, name});
+    }
+
+    function deleteTableAt(path: string, label: string) {
+        setTreeDialog({mode: "deleteTable", path, label});
+    }
+
+    async function newDefinitionInNamespace(namespace: string) {
+        setError("");
+        try {
+            const definition = schemaDefinitions(workspace).find((entry) => !entry.table && entry.id.startsWith(`${namespace}.#`));
+            if (definition) {
+                await openSchemaByPath(definition.path, null, false, true);
+                return;
+            }
+            const result = await CreateSchemaFile(namespace) as {schema: PublicSchemaDocument; workspace: WorkspaceView};
+            setWorkspace(result.workspace);
+            await openSchemaByPath(result.schema.path, null, false, true);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
+    async function submitTreeDialog() {
+        if (!treeDialog) return;
+        setError("");
+        try {
+            if (treeDialog.mode === "renameTable") {
+                const result = await RenameTable({path: treeDialog.path, namespace: treeDialog.namespace, name: treeDialog.name}) as {table: TableDocument; workspace: WorkspaceView};
+                setWorkspace(result.workspace);
+                if (table?.path === treeDialog.path) {
+                    setTable(await GetTable(result.table.path) as TableDocument);
+                } else {
+                    setTable(null);
+                }
+            } else if (treeDialog.mode === "deleteTable") {
+                const result = await DeleteTable({path: treeDialog.path}) as {workspace: WorkspaceView};
+                setWorkspace(result.workspace);
+                if (table?.path === treeDialog.path) {
+                    setTable(null);
+                }
+            } else if (treeDialog.mode === "renameDefinition") {
+                const result = await RenameSchemaDefinition({path: treeDialog.path, oldName: treeDialog.name, newName: treeDialog.newName}) as SchemaEditResult;
+                setWorkspace(result.workspace);
+                if (schemaDocument && schemaDocument.path === treeDialog.path) {
+                    if (schemaDocument.local) {
+                        setSchemaDocument({...schemaDocument, definitions: result.table.localSchema, selected: treeDialog.newName});
+                    } else {
+                        setSchemaDocument({...schemaDocument, definitions: result.schema.definitions, selected: treeDialog.newName});
+                    }
+                }
+            } else {
+                const result = await DeleteSchemaDefinition({path: treeDialog.path, name: treeDialog.name}) as SchemaEditResult;
+                setWorkspace(result.workspace);
+            }
+            setTreeDialog(null);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
         }
     }
 
@@ -1561,10 +1652,10 @@ function App() {
                 <section className="workbench">
                     <aside className="project-explorer">
                         <div className="panel-title">Project</div>
-                        <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable} onOpenSchema={openSchema}/></div>
+                        <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable} onOpenSchema={openSchema} onContextMenu={(node, position, namespace) => setTreeMenu({node, namespace, x: position.x, y: position.y})}/></div>
                     </aside>
                     <section className={`editor-placeholder ${table || schemaDocument || selectedSchema ? "editor-table" : ""}`}>
-                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`, node: {kind: "string"}, custom: false})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: "", node: table?.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onOpenUsage={openUsage} workspace={workspace} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <section className="schema-detail">
+                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`, node: {kind: "string"}, custom: false})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: "", node: table?.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onOpenUsage={openUsage} workspace={workspace} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name, creating: false})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <section className="schema-detail">
                             <div className="schema-detail-head">
                                 <span className={`schema-kind-dot schema-kind-${selectedSchema.kind}`} aria-hidden="true"/>
                                 <h1>{selectedSchema.id}</h1>
@@ -1639,6 +1730,22 @@ function App() {
                     <span>{target.rowID}{target.column ? `.${target.column}` : ""}</span>
                 </button>)}
             </div>}
+            {treeMenu && <div className="nav-menu tree-context-menu" style={{left: treeMenu.x, top: treeMenu.y}} role="menu" aria-label="Project tree actions">
+                {treeMenu.node.kind === "table" && <>
+                    <button onClick={() => { renameTableAt(treeMenu.node.path!, treeMenu.node.name, treeMenu.namespace); setTreeMenu(null); }}>Rename table</button>
+                    <button className="tree-context-danger" onClick={() => { deleteTableAt(treeMenu.node.path!, treeMenu.namespace ? `${treeMenu.namespace}.${treeMenu.node.name}` : treeMenu.node.name); setTreeMenu(null); }}>Delete table</button>
+                </>}
+                {treeMenu.node.kind === "localSchema" && treeMenu.node.name === "local_schema" && <button onClick={() => { setTreeMenu(null); void openSchemaByPath(treeMenu.node.path!, null, true, true); }}>New definition</button>}
+                {treeMenu.node.kind === "localSchema" && treeMenu.node.name.startsWith("#") && <>
+                    <button onClick={() => { renameDefinitionAt(treeMenu.node.path!, treeMenu.node.name.replace(/^#/, "")); setTreeMenu(null); }}>Rename definition</button>
+                    <button className="tree-context-danger" onClick={() => { deleteDefinitionAt(treeMenu.node.path!, treeMenu.node.name.replace(/^#/, "")); setTreeMenu(null); }}>Delete definition</button>
+                </>}
+                {treeMenu.node.kind === "schemaDefinition" && <>
+                    <button onClick={() => { renameDefinitionAt(treeMenu.node.path!, treeMenu.node.name.replace(/^#/, "")); setTreeMenu(null); }}>Rename definition</button>
+                    <button className="tree-context-danger" onClick={() => { deleteDefinitionAt(treeMenu.node.path!, treeMenu.node.name.replace(/^#/, "")); setTreeMenu(null); }}>Delete definition</button>
+                </>}
+                {treeMenu.node.kind === "namespace" && <button onClick={() => { setTreeMenu(null); void newDefinitionInNamespace(treeMenu.node.name); }}>New schema</button>}
+            </div>}
             {error && <div className="error-toast" role="alert">{error}</div>}
             {notice && <div className="notice-toast" role="status">{notice}</div>}
             {dialog && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setDialog(null)}>
@@ -1668,6 +1775,31 @@ function App() {
                     <label>Namespace<input autoFocus value={tableDialog.namespace} onChange={(event) => setTableDialog({...tableDialog, namespace: event.target.value})}/></label>
                     <label>Table name<input value={tableDialog.name} onChange={(event) => setTableDialog({...tableDialog, name: event.target.value})}/></label>
                     <div className="dialog-actions"><button type="button" onClick={() => setTableDialog(null)}>Cancel</button><button type="submit">Create</button></div>
+                </form>
+            </div>}
+            {treeDialog && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setTreeDialog(null)}>
+                <form className="structure-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); submitTreeDialog(); }}>
+                    {treeDialog.mode === "renameTable" && <>
+                        <h2>Rename table</h2>
+                        <label>Namespace<input autoFocus value={treeDialog.namespace} onChange={(event) => setTreeDialog({...treeDialog, namespace: event.target.value})}/></label>
+                        <label>Table name<input value={treeDialog.name} onChange={(event) => setTreeDialog({...treeDialog, name: event.target.value})}/></label>
+                        <div className="dialog-actions"><button type="button" onClick={() => setTreeDialog(null)}>Cancel</button><button type="submit">Apply</button></div>
+                    </>}
+                    {treeDialog.mode === "deleteTable" && <>
+                        <h2>Delete table</h2>
+                        <p>This removes table <code>{treeDialog.label}</code> and its source files. This cannot be undone.</p>
+                        <div className="dialog-actions"><button type="button" onClick={() => setTreeDialog(null)}>Cancel</button><button className="dialog-danger" type="submit">Delete table</button></div>
+                    </>}
+                    {treeDialog.mode === "renameDefinition" && <>
+                        <h2>Rename definition</h2>
+                        <label>Definition name<input autoFocus value={treeDialog.newName} onChange={(event) => setTreeDialog({...treeDialog, newName: event.target.value})}/></label>
+                        <div className="dialog-actions"><button type="button" onClick={() => setTreeDialog(null)}>Cancel</button><button type="submit">Apply</button></div>
+                    </>}
+                    {treeDialog.mode === "deleteDefinition" && <>
+                        <h2>Delete definition</h2>
+                        <p>This removes definition <code>#{treeDialog.name}</code> and its registration.</p>
+                        <div className="dialog-actions"><button type="button" onClick={() => setTreeDialog(null)}>Cancel</button><button className="dialog-danger" type="submit">Delete definition</button></div>
+                    </>}
                 </form>
             </div>}
         </main>
