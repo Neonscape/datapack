@@ -250,7 +250,7 @@ test("edits the selected column Schema", async ({page}) => {
     await page.mouse.click(box.x + 565, box.y + 15, {button: "right"});
     await page.getByRole("button", {name: "Edit schema"}).click();
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeVisible();
-    await page.getByRole("button", {name: "自定义表达式", exact: true}).click();
+    await page.getByRole("button", {name: "Custom expression", exact: true}).click();
     const schema = page.getByRole("textbox", {name: "CUE Schema"});
     await schema.fill("int & >=20");
     await page.getByRole("button", {name: "Apply"}).click();
@@ -274,10 +274,10 @@ test("edits a column Schema with the structured editor", async ({page}) => {
     await page.mouse.click(box.x + 1075, box.y + 15, {button: "right"});
     await page.getByRole("button", {name: "Edit schema"}).click();
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeVisible();
-    await page.getByRole("combobox", {name: "基础类型"}).selectOption("integer");
-    await page.getByRole("button", {name: "添加条件"}).click();
-    await page.getByRole("combobox", {name: "比较运算符"}).selectOption(">=");
-    await page.getByRole("textbox", {name: "比较值"}).fill("10");
+    await page.getByRole("combobox", {name: "Base type"}).selectOption("integer");
+    await page.getByRole("button", {name: "Add condition"}).click();
+    await page.getByRole("combobox", {name: "Comparison operator"}).selectOption(">=");
+    await page.getByRole("textbox", {name: "Comparison value"}).fill("10");
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeHidden();
     expect(await page.evaluate(() => (window as Window & {schemaCalls: {schemaExpression: string}[]}).schemaCalls)).toEqual([{path: "/project/tables/item.cue", name: "testAttack", schemaExpression: "integer >= 10"}]);
@@ -290,8 +290,8 @@ test("edits enum values in the structured editor", async ({page}) => {
     if (!box) return;
     await page.mouse.click(box.x + 1075, box.y + 15, {button: "right"});
     await page.getByRole("button", {name: "Edit schema"}).click();
-    await page.getByRole("combobox", {name: "基础类型"}).selectOption("enum");
-    await expect(page.getByRole("button", {name: "添加枚举值"})).toBeVisible();
+    await page.getByRole("combobox", {name: "Base type"}).selectOption("enum");
+    await expect(page.getByRole("button", {name: "Add enum value"})).toBeVisible();
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeHidden();
 });
@@ -436,7 +436,7 @@ test("shows backend log entries in the GUI panel", async ({page}) => {
 test("edits a public Schema definition from the project explorer", async ({page}) => {
     await page.getByRole("button", {name: "#GameID"}).first().click();
     await expect(page.getByText("Public Schema")).toBeVisible();
-    await page.getByRole("button", {name: "自定义表达式", exact: true}).click();
+    await page.getByRole("button", {name: "Custom expression", exact: true}).click();
     const expression = page.locator(".schema-editor-form textarea");
     await expect(expression).toHaveValue("string");
     await expression.fill(`string & =~"^[a-z]+$"`);
@@ -450,7 +450,7 @@ test("creates and renames a public Schema definition", async ({page}) => {
     await page.getByRole("button", {name: "New definition"}).click();
     await page.getByLabel("Name", {exact: true}).fill("Rarity");
     await page.getByLabel("Type", {exact: true}).selectOption("enum");
-    await page.getByRole("button", {name: "自定义表达式", exact: true}).click();
+    await page.getByRole("button", {name: "Custom expression", exact: true}).click();
     await page.locator(".schema-editor-form textarea").fill(`"N" | "R"`);
     await page.getByRole("button", {name: "Create"}).click();
     await expect(page.getByRole("button", {name: "#Rarity"})).toBeVisible();

@@ -118,11 +118,7 @@ func parse(expression ast.Expr) (Node, error) {
 	if literal, ok := expression.(*ast.BasicLit); ok {
 		return Node{Kind: KindEnum, EnumValues: []Value{{Expression: literal.Value}}}, nil
 	}
-	text, err := expressionText(expression)
-	if err != nil {
-		return Node{}, err
-	}
-	return Node{Kind: KindUnknown, Requirements: []Requirement{{Expression: text}}}, nil
+	return Node{Kind: KindUnknown, Requirements: []Requirement{classifyRequirement(expression)}}, nil
 }
 
 func parseAnd(expression *ast.BinaryExpr) (Node, error) {

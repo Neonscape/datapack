@@ -1342,6 +1342,7 @@
 
 .schema-mode-toggle {
     display: inline-flex;
+    flex: 0 0 auto;
     gap: 0;
     border: 1px solid #c3d0d5;
     border-radius: 4px;
@@ -1355,6 +1356,7 @@
     background: #ffffff;
     font: inherit;
     font-size: 12px;
+    white-space: nowrap;
     cursor: pointer;
 }
 

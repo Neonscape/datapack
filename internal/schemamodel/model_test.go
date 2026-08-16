@@ -130,6 +130,9 @@ func TestPrintRoundTripsSupportedSchema(t *testing.T) {
 		`string & common.#NonEmpty`,
 		`(int & >= 1) | *1`,
 		`string & != "" & =~"^[a-z]+$" & strings.MinRunes(1) & strings.MaxRunes(8)`,
+		`int & < -50`,
+		`< -50`,
+		`int & >= -1`,
 	}
 	for _, expression := range cases {
 		parsed, err := parser.ParseExpr("schema.cue", expression)
