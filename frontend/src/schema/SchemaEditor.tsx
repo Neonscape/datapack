@@ -38,7 +38,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
             return;
         }
         const definition = state.definitions.find((entry) => entry.name === state.selected) ?? null;
-        setDraft(definition ? {
+            setDraft(definition ? {
             name: definition.name,
             kind: definition.kind,
             type: definition.type ?? "",
@@ -47,7 +47,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
             node: definition.schema,
             custom: false,
         } : null);
-    }, [state.selected, state.definitions]);
+    }, [state.selected, state.definitions, state.creating]);
 
     function startCreate() {
         setDraft({name: "", kind: "type", type: "string", appliesTo: "", expression: "string", node: {kind: "string"}, custom: false});

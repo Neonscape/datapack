@@ -546,3 +546,29 @@ test("collapses and expands a namespace in the project tree", async ({page}) => 
     await rpgRow.locator(".tree-toggle").click();
     await expect(page.getByRole("button", {name: "item", exact: true})).toBeVisible();
 });
+
+test("opens table and schema as tabs and switches between them", async ({page}) => {
+    await page.getByRole("button", {name: "#GameID", exact: true}).click();
+    await expect(page.locator(".tab-bar .tab")).toHaveCount(2);
+    await expect(page.getByText("Public Schema")).toBeVisible();
+    await page.locator(".tab-bar .tab").filter({hasText: "rpg.item"}).click();
+    await expect(page.getByRole("heading", {name: "rpg.item"})).toBeVisible();
+    await page.locator(".tab-bar .tab").filter({hasText: "common"}).click();
+    await expect(page.getByText("Public Schema")).toBeVisible();
+});
+
+test("closes a tab from the tab bar", async ({page}) => {
+    await page.getByRole("button", {name: "#GameID", exact: true}).click();
+    await expect(page.locator(".tab-bar .tab")).toHaveCount(2);
+    await page.locator(".tab-bar .tab").filter({hasText: "common"}).locator(".tab-close").click();
+    await expect(page.locator(".tab-bar .tab")).toHaveCount(1);
+    await expect(page.getByRole("heading", {name: "rpg.item"})).toBeVisible();
+});
+
+test("opens and closes the schema detail peek", async ({page}) => {
+    await page.locator(".schema-row").filter({hasText: "common.#NonNegative"}).click();
+    await expect(page.locator(".schema-detail")).toBeVisible();
+    await expect(page.locator(".schema-detail h1")).toHaveText("common.#NonNegative");
+    await page.locator(".peek-close").click();
+    await expect(page.locator(".schema-detail")).toHaveCount(0);
+});
