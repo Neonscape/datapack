@@ -1562,54 +1562,65 @@ function App() {
                         <div className="panel-title">Project</div>
                         <div className="tree"><Tree node={workspace.tree.root} onOpenTable={openTable} onOpenSchema={openSchema}/></div>
                     </aside>
-                    <section className={`editor-placeholder ${table || schemaDocument ? "editor-table" : ""}`}>
-                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`, node: {kind: "string"}, custom: false})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: "", node: table?.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onOpenUsage={openUsage} workspace={workspace} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <>
-                            <div className="schema-kind">{selectedSchema.kind}</div>
-                            <h1>{selectedSchema.id}</h1>
-                            <p>{selectedSchema.path}</p>
-                            {selectedSchema.appliesTo && <div className="schema-applies">{selectedSchema.appliesTo.join(", ")}</div>}
-                            <div className="usage-list">
-                                {(selectedSchema.usages ?? []).map((usage) => <button className="usage-row usage-row-action" key={`${usage.path}:${usage.field}`} onClick={() => openUsage(usage)}>
+                    <section className={`editor-placeholder ${table || schemaDocument || selectedSchema ? "editor-table" : ""}`}>
+                        {table ? <TableGrid key={table.path} table={table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`, node: {kind: "string"}, custom: false})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: "", node: table?.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/> : schemaDocument ? <SchemaEditor state={schemaDocument} usages={schemaUsages} onOpenUsage={openUsage} workspace={workspace} onSelect={(name) => setSchemaDocument({...schemaDocument, selected: name})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/> : selectedSchema ? <section className="schema-detail">
+                            <div className="schema-detail-head">
+                                <span className={`schema-kind-dot schema-kind-${selectedSchema.kind}`} aria-hidden="true"/>
+                                <h1>{selectedSchema.id}</h1>
+                            </div>
+                            <div className="schema-detail-row"><span>Kind</span><code>{selectedSchema.kind}</code></div>
+                            <div className="schema-detail-row"><span>Filepath</span><code>{selectedSchema.path}</code></div>
+                            {selectedSchema.appliesTo && <div className="schema-detail-row"><span>AppliesTo</span><code>{selectedSchema.appliesTo.join(", ")}</code></div>}
+                            <div className="schema-detail-row"><span>References</span><code>{selectedSchema.usages?.length ?? 0}</code></div>
+                            <div className="schema-detail-references">
+                                {(selectedSchema.usages ?? []).map((usage) => <button className="reference-row" key={`${usage.path}:${usage.field}`} onClick={() => openUsage(usage)}>
                                     <span>{usage.table ?? usage.path}</span>
                                     <code>{usage.field}</code>
                                 </button>)}
+                                {(selectedSchema.usages ?? []).length === 0 && <div className="schema-editor-empty">No references</div>}
                             </div>
-                        </> : <>
+                        </section> : <>
                             <h1>No Schema definitions</h1>
                         </>}
                     </section>
                     <aside className="schema-explorer">
-                        <div className="panel-title">Schemas</div>
-                        <div className="schema-list">
-                            {schemaDefinitions(workspace).map((definition) => <button
-                                className={`schema-row ${selectedSchema?.id === definition.id ? "schema-row-selected" : ""}`}
-                                key={definition.id}
-                                onClick={() => { setSelectedSchema(definition); setTable(null); setCellError(null); }}
-                            >
-                                <span className={`schema-kind-dot schema-kind-${definition.kind}`} aria-hidden="true"/>
-                                <span>{definition.id}</span>
-                                <span className="usage-count">{definition.usages?.length ?? 0}</span>
-                            </button>)}
+                        <div className="diagnostics-panel">
+                            <div className="panel-title">Diagnostics</div>
+                            {(workspace.schemas.diagnostics ?? []).length === 0 && (workspace.foreignKeys.diagnostics ?? []).length === 0 && workspace.compile.diagnostics.length === 0 && <div className="schema-editor-empty">No diagnostics</div>}
+                            {(workspace.schemas.diagnostics ?? []).length > 0 && <div className="schema-diagnostics">
+                                {(workspace.schemas.diagnostics ?? []).map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.path}:${diagnostic.field}:${diagnostic.message}`}>
+                                    <code>{diagnostic.field}</code>
+                                    <span>{diagnostic.message}</span>
+                                </div>)}
+                            </div>}
+                            {(workspace.foreignKeys.diagnostics ?? []).length > 0 && <div className="schema-diagnostics">
+                                {(workspace.foreignKeys.diagnostics ?? []).map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.rowID}:${diagnostic.column}:${diagnostic.message}`}>
+                                    <code>{diagnostic.rowID}.{diagnostic.column}</code>
+                                    <span>{diagnostic.message}</span>
+                                </div>)}
+                            </div>}
+                            {workspace.compile.diagnostics.length > 0 && <div className="schema-diagnostics compile-diagnostics">
+                                <div className="schema-diagnostics-title">Compile diagnostics</div>
+                                {workspace.compile.diagnostics.map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.path}:${diagnostic.rowID ?? ""}:${diagnostic.column ?? ""}:${diagnostic.message}`}>
+                                    <code>{[diagnostic.rowID, diagnostic.column].filter(Boolean).join(".") || diagnostic.field || diagnostic.table || "compile"}</code>
+                                    <span>{diagnostic.message}</span>
+                                </div>)}
+                            </div>}
                         </div>
-                        {(workspace.schemas.diagnostics ?? []).length > 0 && <div className="schema-diagnostics">
-                            {(workspace.schemas.diagnostics ?? []).map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.path}:${diagnostic.field}:${diagnostic.message}`}>
-                                <code>{diagnostic.field}</code>
-                                <span>{diagnostic.message}</span>
-                            </div>)}
-                        </div>}
-                        {(workspace.foreignKeys.diagnostics ?? []).length > 0 && <div className="schema-diagnostics">
-                            {(workspace.foreignKeys.diagnostics ?? []).map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.rowID}:${diagnostic.column}:${diagnostic.message}`}>
-                                <code>{diagnostic.rowID}.{diagnostic.column}</code>
-                                <span>{diagnostic.message}</span>
-                            </div>)}
-                        </div>}
-                        {workspace.compile.diagnostics.length > 0 && <div className="schema-diagnostics compile-diagnostics">
-                            <div className="schema-diagnostics-title">Compile diagnostics</div>
-                            {workspace.compile.diagnostics.map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.path}:${diagnostic.rowID ?? ""}:${diagnostic.column ?? ""}:${diagnostic.message}`}>
-                                <code>{[diagnostic.rowID, diagnostic.column].filter(Boolean).join(".") || diagnostic.field || diagnostic.table || "compile"}</code>
-                                <span>{diagnostic.message}</span>
-                            </div>)}
-                        </div>}
+                        <div className="schema-panel">
+                            <div className="panel-title">Schemas</div>
+                            <div className="schema-list">
+                                {schemaDefinitions(workspace).map((definition) => <button
+                                    className={`schema-row ${selectedSchema?.id === definition.id ? "schema-row-selected" : ""}`}
+                                    key={definition.id}
+                                    onClick={() => { setSelectedSchema(definition); setTable(null); setSchemaDocument(null); setCellError(null); }}
+                                >
+                                    <span className={`schema-kind-dot schema-kind-${definition.kind}`} aria-hidden="true"/>
+                                    <span>{definition.id}</span>
+                                    <span className="usage-count">{definition.usages?.length ?? 0}</span>
+                                </button>)}
+                            </div>
+                        </div>
                     </aside>
                 </section>
             ) : (
