@@ -66,7 +66,7 @@ export type SchemaIndex = {
 };
 
 export type ForeignKeySummary = {
-    diagnostics?: { rowID: string; column: string; message: string }[];
+    diagnostics?: { path: string; table?: string; rowID: string; column: string; message: string }[];
 };
 
 export type SchemaRequirement = {

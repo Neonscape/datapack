@@ -49,8 +49,12 @@ const workspace = {
         {id: "common.#GameID", kind: "type", path: publicSchema.path, usages: [{definition: "common.#GameID", path: table.path, table: "rpg.item", field: "#PrimaryKey"}]},
         {id: "common.#NonNegative", kind: "constraint", path: publicSchema.path, usages: []},
         {id: "rpg.item._local.#Position", kind: "type", path: table.path, table: "rpg.item", usages: []},
+    ], diagnostics: [
+        {path: publicSchema.path, field: "common.#NonNegative", message: "Schema reference is not a valid constraint"},
     ]},
-    foreignKeys: {diagnostics: []},
+    foreignKeys: {diagnostics: [
+        {path: table.path, table: "rpg.item", rowID: "sword", column: "effectID", message: "missing target row"},
+    ]},
     compile: {mode: "manual", pending: false, compiledAt: "2026-08-13T12:00:00Z", diagnostics: []},
 };
 
@@ -571,4 +575,16 @@ test("opens and closes the schema detail peek", async ({page}) => {
     await expect(page.locator(".schema-detail h1")).toHaveText("common.#NonNegative");
     await page.locator(".peek-close").click();
     await expect(page.locator(".schema-detail")).toHaveCount(0);
+});
+
+test("jumps to a table cell from a foreign key diagnostic", async ({page}) => {
+    await page.locator(".schema-diagnostic-action").filter({hasText: "sword.effectID"}).click();
+    await expect(page.getByRole("heading", {name: "rpg.item"})).toBeVisible();
+    await expect(page.locator(".error-toast")).toHaveCount(0);
+});
+
+test("jumps to a schema definition from a schema diagnostic", async ({page}) => {
+    await page.locator(".schema-diagnostic-action").filter({hasText: "common.#NonNegative"}).click();
+    await expect(page.locator(".tab-bar .tab").filter({hasText: "common"})).toBeVisible();
+    await expect(page.getByText("Public Schema")).toBeVisible();
 });

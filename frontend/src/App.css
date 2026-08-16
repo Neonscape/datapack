@@ -1039,6 +1039,24 @@
     line-height: 1.35;
 }
 
+.schema-diagnostic-action {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid #efdada;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.schema-diagnostic-action:hover {
+    background: #fbeaea;
+}
+
+.schema-diagnostic-action:focus-visible {
+    outline: 2px solid #126c7b;
+    outline-offset: -2px;
+}
+
 .welcome-mark {
     display: grid;
     width: 56px;

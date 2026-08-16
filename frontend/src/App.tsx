@@ -274,6 +274,37 @@ function App() {
         }
     }
 
+    function jumpToDiagnostic(diagnostic: {path?: string; table?: string; field?: string; rowID?: string; column?: string}) {
+        const path = diagnostic.path;
+        if (!path) return;
+        if (diagnostic.rowID && diagnostic.column) {
+            focusTableCell(path, diagnostic.rowID, diagnostic.column);
+            return;
+        }
+        if (diagnostic.column) {
+            focusTableCell(path, "", diagnostic.column);
+            return;
+        }
+        if (diagnostic.field) {
+            if (diagnostic.field === "#PrimaryKey") {
+                void openTableTab(path);
+                return;
+            }
+            if (diagnostic.table) {
+                focusTableCell(path, "", diagnostic.field);
+                return;
+            }
+            const definition = schemaDefinitions(workspace).find((entry) => entry.id === diagnostic.field);
+            if (definition) {
+                void openSchemaTab(definition.path, definition.id.split(".#")[1], false);
+                return;
+            }
+            void openTableTab(path);
+            return;
+        }
+        void openTableTab(path);
+    }
+
     function renameDefinitionAt(path: string, name: string) {
         setTreeDialog({mode: "renameDefinition", path, name, newName: name});
     }
@@ -630,23 +661,23 @@ function App() {
                             <div className="panel-title">Diagnostics</div>
                             {(workspace.schemas.diagnostics ?? []).length === 0 && (workspace.foreignKeys.diagnostics ?? []).length === 0 && workspace.compile.diagnostics.length === 0 && <div className="schema-editor-empty">No diagnostics</div>}
                             {(workspace.schemas.diagnostics ?? []).length > 0 && <div className="schema-diagnostics">
-                                {(workspace.schemas.diagnostics ?? []).map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.path}:${diagnostic.field}:${diagnostic.message}`}>
+                                {(workspace.schemas.diagnostics ?? []).map((diagnostic) => <button className="schema-diagnostic schema-diagnostic-action" key={`${diagnostic.path}:${diagnostic.field}:${diagnostic.message}`} onClick={() => jumpToDiagnostic(diagnostic)}>
                                     <code>{diagnostic.field}</code>
                                     <span>{diagnostic.message}</span>
-                                </div>)}
+                                </button>)}
                             </div>}
                             {(workspace.foreignKeys.diagnostics ?? []).length > 0 && <div className="schema-diagnostics">
-                                {(workspace.foreignKeys.diagnostics ?? []).map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.rowID}:${diagnostic.column}:${diagnostic.message}`}>
+                                {(workspace.foreignKeys.diagnostics ?? []).map((diagnostic) => <button className="schema-diagnostic schema-diagnostic-action" key={`${diagnostic.path}:${diagnostic.rowID}:${diagnostic.column}:${diagnostic.message}`} onClick={() => jumpToDiagnostic(diagnostic)}>
                                     <code>{diagnostic.rowID}.{diagnostic.column}</code>
                                     <span>{diagnostic.message}</span>
-                                </div>)}
+                                </button>)}
                             </div>}
                             {workspace.compile.diagnostics.length > 0 && <div className="schema-diagnostics compile-diagnostics">
                                 <div className="schema-diagnostics-title">Compile diagnostics</div>
-                                {workspace.compile.diagnostics.map((diagnostic) => <div className="schema-diagnostic" key={`${diagnostic.path}:${diagnostic.rowID ?? ""}:${diagnostic.column ?? ""}:${diagnostic.message}`}>
+                                {workspace.compile.diagnostics.map((diagnostic) => <button className="schema-diagnostic schema-diagnostic-action" key={`${diagnostic.path}:${diagnostic.rowID ?? ""}:${diagnostic.column ?? ""}:${diagnostic.message}`} onClick={() => jumpToDiagnostic(diagnostic)}>
                                     <code>{[diagnostic.rowID, diagnostic.column].filter(Boolean).join(".") || diagnostic.field || diagnostic.table || "compile"}</code>
                                     <span>{diagnostic.message}</span>
-                                </div>)}
+                                </button>)}
                             </div>}
                         </div>
                         <div className="schema-panel">
