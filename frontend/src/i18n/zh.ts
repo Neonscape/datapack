@@ -96,6 +96,8 @@ export const zh: Record<string, string> = {
     "schemaEditor.newDefinition": "新建定义",
     "schemaEditor.name": "名称",
     "schemaEditor.kind": "类别",
+    "schemaEditor.kindType": "类型",
+    "schemaEditor.kindConstraint": "限制",
     "schemaEditor.appliesTo": "适用于",
     "schemaEditor.appliesToPlaceholder": "integer, number",
     "schemaEditor.schemaExpression": "Schema 表达式",

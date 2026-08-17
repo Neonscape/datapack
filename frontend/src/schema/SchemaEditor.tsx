@@ -116,8 +116,8 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
                     <div className="schema-editor-row">
                         <label>{t("schemaEditor.name")}<input aria-label={t("schemaEditor.name")} value={draft.name} disabled={!creating} onChange={(event) => setDraft({...draft, name: event.target.value})}/></label>
                         <label>{t("schemaEditor.kind")}<select aria-label={t("schemaEditor.kind")} value={draft.kind} onChange={(event) => setDraft({...draft, kind: event.target.value as "type" | "constraint", node: event.target.value === "type" ? schemaNodeWithKind(draft.node, draft.type, typeReferences) : {...draft.node, kind: "unknown"}})}>
-                            <option value="type">type</option>
-                            <option value="constraint">constraint</option>
+                            <option value="type">{t("schemaEditor.kindType")}</option>
+                            <option value="constraint">{t("schemaEditor.kindConstraint")}</option>
                         </select></label>
                     </div>
                     {draft.kind === "type" ? (

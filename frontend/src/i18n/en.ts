@@ -96,6 +96,8 @@ export const en: Record<string, string> = {
     "schemaEditor.newDefinition": "New definition",
     "schemaEditor.name": "Name",
     "schemaEditor.kind": "Kind",
+    "schemaEditor.kindType": "Type",
+    "schemaEditor.kindConstraint": "Constraint",
     "schemaEditor.appliesTo": "Applies to",
     "schemaEditor.appliesToPlaceholder": "integer, number",
     "schemaEditor.schemaExpression": "Schema expression",
