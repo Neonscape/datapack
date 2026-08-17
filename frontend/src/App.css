@@ -848,6 +848,12 @@
     background-color: var(--bg-surface);
 }
 
+[data-theme="dark"] select {
+    color: var(--text-strong);
+    color-scheme: dark;
+    background-color: var(--bg-surface);
+}
+
 .export-files {
     max-height: 180px;
     margin: 0;
