@@ -843,6 +843,11 @@
 .structure-dialog textarea { min-height: 88px; resize: vertical; }
 .structure-dialog select option { color: var(--text-strong); background: var(--bg-surface); }
 
+[data-theme="dark"] .structure-dialog select {
+    color-scheme: dark;
+    background-color: var(--bg-surface);
+}
+
 .export-files {
     max-height: 180px;
     margin: 0;
