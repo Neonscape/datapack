@@ -828,7 +828,8 @@
 }
 
 .structure-dialog input,
-.structure-dialog textarea {
+.structure-dialog textarea,
+.structure-dialog select {
     width: 100%;
     box-sizing: border-box;
     border: 1px solid var(--border-strong);
@@ -840,6 +841,7 @@
 }
 
 .structure-dialog textarea { min-height: 88px; resize: vertical; }
+.structure-dialog select option { color: var(--text-strong); background: var(--bg-surface); }
 
 .export-files {
     max-height: 180px;
