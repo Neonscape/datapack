@@ -149,6 +149,36 @@ type ExportResult struct {
 	Files     []string `json:"files"`
 }
 
+type ProjectSettings struct {
+	Project ProjectInfo   `json:"project"`
+	Export  ExportConfig  `json:"export"`
+	Tables  []ExportTable `json:"tables"`
+}
+
+type ProjectInfo struct {
+	Path        string   `json:"path"`
+	Root        string   `json:"root"`
+	TableRoots  []string `json:"tableRoots"`
+	SchemaRoots []string `json:"schemaRoots"`
+	Exclude     []string `json:"exclude,omitempty"`
+}
+
+type ExportTable struct {
+	ID         string   `json:"id"`
+	Namespace  string   `json:"namespace"`
+	Name       string   `json:"name"`
+	Path       string   `json:"path"`
+	Selected   bool     `json:"selected"`
+	Configured bool     `json:"configured"`
+	Columns    []string `json:"columns,omitempty"`
+}
+
+type ProjectExportSettings struct {
+	Directory string          `json:"directory"`
+	Targets   []string        `json:"targets"`
+	Tables    map[string]bool `json:"tables"`
+}
+
 type CompileResult struct {
 	Workspace View `json:"workspace"`
 }
@@ -681,6 +711,81 @@ func (s *Service) Current() (View, bool) {
 		return View{}, false
 	}
 	return *s.current, true
+}
+
+func (s *Service) GetProjectSettings() (ProjectSettings, error) {
+	if s.current == nil {
+		return ProjectSettings{}, s.userError("workspace.noProject")
+	}
+	return s.projectSettings(), nil
+}
+
+func (s *Service) SetProjectExportSettings(settings ProjectExportSettings) (ProjectSettings, error) {
+	if s.current == nil {
+		return ProjectSettings{}, s.userError("workspace.noProject")
+	}
+	config := s.current.Project.Config
+	if strings.TrimSpace(settings.Directory) == "" {
+		return ProjectSettings{}, fmt.Errorf("project export directory must not be empty")
+	}
+	config.Export.Directory = settings.Directory
+	config.Export.Targets = append([]string(nil), settings.Targets...)
+	config.Export.Tables = copyBoolMap(settings.Tables)
+	project := s.current.Project
+	project.Config = config
+	if err := validateProjectConfig(config); err != nil {
+		return ProjectSettings{}, err
+	}
+	if err := SaveProject(project); err != nil {
+		return ProjectSettings{}, err
+	}
+	s.current.Project = project
+	return s.projectSettings(), nil
+}
+
+func (s *Service) projectSettings() ProjectSettings {
+	project := s.current.Project
+	tables := []ExportTable{}
+	collectExportTables(s.current.Tree.Root, &tables, project.Config.Export.Tables)
+	return ProjectSettings{
+		Project: ProjectInfo{Path: project.Path, Root: project.Root, TableRoots: append([]string(nil), project.Config.TableRoots...), SchemaRoots: append([]string(nil), project.Config.SchemaRoots...), Exclude: append([]string(nil), project.Config.Exclude...)},
+		Export:  project.Config.Export,
+		Tables:  tables,
+	}
+}
+
+func collectExportTables(node projecttree.Node, tables *[]ExportTable, selected map[string]bool) {
+	if node.Kind == projecttree.NodeTable {
+		table, err := document.LoadTable(node.Path)
+		if err == nil {
+			id := logicalTableName(table)
+			chosen := true
+			if selected != nil {
+				chosen = selected[id]
+			}
+			entry := ExportTable{ID: id, Namespace: table.Namespace, Name: table.Name, Path: table.Path, Selected: chosen}
+			if table.CSVExport != nil {
+				entry.Configured = true
+				entry.Columns = append([]string(nil), table.CSVExport.Columns...)
+			}
+			*tables = append(*tables, entry)
+		}
+	}
+	for _, child := range node.Children {
+		collectExportTables(child, tables, selected)
+	}
+	sort.Slice(*tables, func(i, j int) bool { return (*tables)[i].ID < (*tables)[j].ID })
+}
+
+func copyBoolMap(values map[string]bool) map[string]bool {
+	if values == nil {
+		return nil
+	}
+	copy := make(map[string]bool, len(values))
+	for key, value := range values {
+		copy[key] = value
+	}
+	return copy
 }
 
 // GetTable loads a table document that belongs to the current project. The
@@ -1312,6 +1417,9 @@ func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
 	newDirectory := filepath.Join(s.current.Project.Root, s.current.Project.Config.TableRoots[0], rename.Namespace, rename.Name)
 	newPath := filepath.Join(newDirectory, rename.Name+".cue")
 	files := []string{rename.Path, newPath}
+	if s.current.Project.Config.Export.Tables != nil {
+		files = append(files, s.current.Project.Path)
+	}
 	for _, reference := range references {
 		files = append(files, reference.Path)
 	}
@@ -1325,6 +1433,23 @@ func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
 	}
 	if err := os.Rename(oldDirectory, newDirectory); err != nil {
 		return TableRenameResult{}, fmt.Errorf("move renamed table: %w", err)
+	}
+	movedSource := filepath.Join(newDirectory, filepath.Base(rename.Path))
+	if movedSource != newPath {
+		if err := os.Rename(movedSource, newPath); err != nil {
+			_ = os.RemoveAll(newDirectory)
+			_ = s.restoreSnapshot(snapshot)
+			return TableRenameResult{}, fmt.Errorf("rename table source file: %w", err)
+		}
+	}
+	project := s.current.Project
+	if migrateExportTableSelection(&project.Config, oldName, newName) {
+		if err := SaveProject(project); err != nil {
+			_ = os.RemoveAll(newDirectory)
+			_ = s.restoreSnapshot(snapshot)
+			return TableRenameResult{}, err
+		}
+		s.current.Project = project
 	}
 	s.recordEdit(snapshot)
 	view, err := s.refreshAfterEdit()
@@ -1371,9 +1496,21 @@ func (s *Service) DeleteTable(delete TableDelete) (TableDeleteResult, error) {
 		s.log(logging.Warn, "table delete blocked", map[string]any{"path": delete.Path, "error": err.Error()})
 		return TableDeleteResult{}, err
 	}
-	snapshot := s.snapshotFiles(delete.Path)
+	paths := []string{delete.Path}
+	if s.current.Project.Config.Export.Tables != nil {
+		paths = append(paths, s.current.Project.Path)
+	}
+	snapshot := s.snapshotFiles(paths...)
 	if err := os.RemoveAll(filepath.Dir(delete.Path)); err != nil {
 		return TableDeleteResult{}, fmt.Errorf("delete table source: %w", err)
+	}
+	project := s.current.Project
+	if removeExportTableSelection(&project.Config, name) {
+		if err := SaveProject(project); err != nil {
+			_ = s.restoreSnapshot(snapshot)
+			return TableDeleteResult{}, err
+		}
+		s.current.Project = project
 	}
 	s.recordEdit(snapshot)
 	view, err := s.refreshAfterEdit()
@@ -1726,6 +1863,10 @@ func (s *Service) Export() (ExportResult, error) {
 		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
 		return ExportResult{}, err
 	}
+	compiled.Package = filterExportPackage(compiled.Package, s.current.Project.Config.Export.Tables)
+	if !hasExportableTables(compiled.Package) {
+		return ExportResult{}, s.userError("workspace.noSelectedTables")
+	}
 	result, err := csv.Export(destination, compiled.Package)
 	if err != nil {
 		s.log(logging.Error, "export failed", map[string]any{"destination": destination, "error": err.Error()})
@@ -1733,6 +1874,59 @@ func (s *Service) Export() (ExportResult, error) {
 	}
 	s.log(logging.Info, "export completed", map[string]any{"files": len(result.Files), "destination": destination})
 	return ExportResult{Directory: destination, Files: result.Files}, nil
+}
+
+func filterExportPackage(pkg *compiler.Package, selected map[string]bool) *compiler.Package {
+	if pkg == nil || selected == nil {
+		return pkg
+	}
+	filtered := &compiler.Package{Tables: make([]compiler.Table, 0, len(pkg.Tables))}
+	for _, table := range pkg.Tables {
+		id := table.Name
+		if table.Namespace != "" {
+			id = table.Namespace + "." + table.Name
+		}
+		if selected[id] {
+			filtered.Tables = append(filtered.Tables, table)
+		}
+	}
+	return filtered
+}
+
+func hasExportableTables(pkg *compiler.Package) bool {
+	if pkg == nil {
+		return false
+	}
+	for _, table := range pkg.Tables {
+		if table.CSV != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func migrateExportTableSelection(config *ProjectConfig, oldID, newID string) bool {
+	if config.Export.Tables == nil {
+		return false
+	}
+	selected, exists := config.Export.Tables[oldID]
+	if !exists {
+		return false
+	}
+	delete(config.Export.Tables, oldID)
+	config.Export.Tables[newID] = selected
+	return true
+}
+
+func removeExportTableSelection(config *ProjectConfig, id string) bool {
+	if config.Export.Tables == nil {
+		return false
+	}
+	if _, exists := config.Export.Tables[id]; !exists {
+		return false
+	}
+	delete(config.Export.Tables, id)
+	return true
 }
 
 func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
@@ -1869,7 +2063,11 @@ func collectTables(node projecttree.Node, tables *[]document.Table) {
 
 func (s *Service) refreshCurrentView() (View, error) {
 	started := time.Now()
-	project := s.current.Project
+	project, err := LoadProject(s.current.Project.Path)
+	if err != nil {
+		s.log(logging.Error, "workspace refresh failed", map[string]any{"error": err.Error()})
+		return View{}, fmt.Errorf("reload project configuration: %w", err)
+	}
 	tree, err := projecttree.Scan(project.Path, project.Config.TableRoots, project.Config.SchemaRoots, project.Config.Exclude)
 	if err != nil {
 		s.log(logging.Error, "workspace refresh failed", map[string]any{"error": err.Error()})

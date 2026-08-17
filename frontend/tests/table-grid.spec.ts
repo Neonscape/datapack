@@ -65,6 +65,11 @@ test.beforeEach(async ({page}) => {
         const api = {
             SelectProject: () => Promise.resolve(workspace),
             GetSettings: () => Promise.resolve({language: "en", theme: "system"}),
+            GetProjectSettings: () => Promise.resolve({project: {path: "/project/game.dtproj", root: "/project", tableRoots: ["tables"], schemaRoots: ["schema"], exclude: []}, export: {directory: "exports", targets: ["csv"], tables: {}}, tables: [{id: "rpg.item", namespace: "rpg", name: "item", path: "/project/tables/item.cue", selected: true, configured: true, columns: ["id", "name"]}]}),
+            SetProjectExportSettings: (settings) => {
+                (window as Window & {projectExportSettings?: unknown}).projectExportSettings = settings;
+                return Promise.resolve({});
+            },
             SetLanguage: () => Promise.resolve({language: "en", theme: "system"}),
             SetTheme: () => Promise.resolve({language: "en", theme: "system"}),
             GetTable: () => Promise.resolve(table),
@@ -431,7 +436,7 @@ test("groups history commands under Edit", async ({page}) => {
 });
 
 test("switches theme and language from the settings panel", async ({page}) => {
-    await page.getByRole("button", {name: "Settings"}).click();
+    await page.getByRole("button", {name: "Settings", exact: true}).click();
     await expect(page.getByRole("heading", {name: "Settings"})).toBeVisible();
     await page.getByLabel("Theme").selectOption("dark");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -440,6 +445,24 @@ test("switches theme and language from the settings panel", async ({page}) => {
     await page.getByRole("button", {name: "应用"}).click();
     await page.getByRole("button", {name: "编辑"}).click();
     await expect(page.getByRole("button", {name: /撤销/})).toBeEnabled();
+});
+
+test("configures project export table selection", async ({page}) => {
+    await page.getByRole("button", {name: "Project settings"}).click();
+    await expect(page.getByRole("heading", {name: "Project settings"})).toBeVisible();
+    await page.getByRole("button", {name: "Clear all"}).click();
+    await expect(page.getByRole("checkbox")).not.toBeChecked();
+    await page.getByRole("button", {name: "Select all"}).click();
+    await expect(page.getByRole("checkbox")).toBeChecked();
+    await page.getByRole("button", {name: "Apply"}).click();
+    await expect(page.getByRole("heading", {name: "Project settings"})).toBeHidden();
+    await page.getByRole("button", {name: "game.dtproj", exact: true}).click();
+    await expect(page.getByRole("heading", {name: "Project settings"})).toBeVisible();
+    expect(await page.evaluate(() => (window as Window & {projectExportSettings?: {tables: Record<string, boolean>}}).projectExportSettings)).toEqual({
+        directory: "exports",
+        targets: ["csv"],
+        tables: {"rpg.item": true},
+    });
 });
 
 test("undoes and redoes edits from the Edit menu", async ({page}) => {

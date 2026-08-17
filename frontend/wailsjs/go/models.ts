@@ -879,6 +879,7 @@ export namespace workspace {
 	export class ExportConfig {
 	    directory: string;
 	    targets: string[];
+	    tables: Record<string, boolean>;
 	
 	    static createFrom(source: any = {}) {
 	        return new ExportConfig(source);
@@ -888,6 +889,7 @@ export namespace workspace {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.directory = source["directory"];
 	        this.targets = source["targets"];
+	        this.tables = source["tables"];
 	    }
 	}
 	export class ProjectConfig {
@@ -1327,6 +1329,30 @@ export namespace workspace {
 	        this.files = source["files"];
 	    }
 	}
+	export class ExportTable {
+	    id: string;
+	    namespace: string;
+	    name: string;
+	    path: string;
+	    selected: boolean;
+	    configured: boolean;
+	    columns?: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new ExportTable(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.selected = source["selected"];
+	        this.configured = source["configured"];
+	        this.columns = source["columns"];
+	    }
+	}
 	export class FormulaSet {
 	    path: string;
 	    rowID: string;
@@ -1433,6 +1459,76 @@ export namespace workspace {
 	}
 	
 	
+	export class ProjectExportSettings {
+	    directory: string;
+	    targets: string[];
+	    tables: Record<string, boolean>;
+
+	    static createFrom(source: any = {}) {
+	        return new ProjectExportSettings(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.directory = source["directory"];
+	        this.targets = source["targets"];
+	        this.tables = source["tables"];
+	    }
+	}
+	export class ProjectInfo {
+	    path: string;
+	    root: string;
+	    tableRoots: string[];
+	    schemaRoots: string[];
+	    exclude?: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new ProjectInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.root = source["root"];
+	        this.tableRoots = source["tableRoots"];
+	        this.schemaRoots = source["schemaRoots"];
+	        this.exclude = source["exclude"];
+	    }
+	}
+	export class ProjectSettings {
+	    project: ProjectInfo;
+	    export: ExportConfig;
+	    tables: ExportTable[];
+
+	    static createFrom(source: any = {}) {
+	        return new ProjectSettings(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.project = this.convertValues(source["project"], ProjectInfo);
+	        this.export = this.convertValues(source["export"], ExportConfig);
+	        this.tables = this.convertValues(source["tables"], ExportTable);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class RowAdd {
 	    path: string;
 	    rowID: string;

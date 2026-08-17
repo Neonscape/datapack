@@ -12,7 +12,11 @@
   "exclude": ["exports", ".git"],
   "export": {
     "directory": "exports",
-    "targets": ["csv"]
+    "targets": ["csv"],
+    "tables": {
+      "rpg.item": true,
+      "rpg.effect": false
+    }
   }
 }
 ```
@@ -27,6 +31,9 @@
 | `exclude` | 否 | 扫描时忽略的相对路径。 |
 | `export.directory` | 是 | 导出产物目录。该目录不作为源文件维护。 |
 | `export.targets` | 是 | 启用的导出器名称。v1 支持 `csv`。 |
+| `export.tables` | 否 | 按表的逻辑名称控制是否参与导出，例如 `rpg.item`。缺失时默认所有表都可参与导出，但仍须满足表级 CSV 配置。 |
+
+导出前仍会完整编译和校验整个项目；`export.tables` 只过滤最终生成的导出产物，不会绕过未选中表的诊断。
 
 编译模式、自动编译等待时间和其他本机编辑体验选项不属于工程文件，见 `editor-settings-format-v1.md`。这些设置不会进入版本控制。
 

@@ -1,12 +1,13 @@
 import type {TreeNode} from "../types";
 
-export function Tree({node, depth = 0, namespace = "", parentKey = "", collapsed, onToggleCollapse, onOpenTable, onOpenSchema, onContextMenu}: { node: TreeNode; depth?: number; namespace?: string; parentKey?: string; collapsed: Set<string>; onToggleCollapse: (key: string) => void; onOpenTable: (path: string) => void; onOpenSchema: (node: TreeNode) => void; onContextMenu: (node: TreeNode, position: {x: number; y: number}, namespace: string) => void }) {
+export function Tree({node, depth = 0, namespace = "", parentKey = "", collapsed, onToggleCollapse, onOpenTable, onOpenSchema, onOpenProjectSettings, onContextMenu}: { node: TreeNode; depth?: number; namespace?: string; parentKey?: string; collapsed: Set<string>; onToggleCollapse: (key: string) => void; onOpenTable: (path: string) => void; onOpenSchema: (node: TreeNode) => void; onOpenProjectSettings: () => void; onContextMenu: (node: TreeNode, position: {x: number; y: number}, namespace: string) => void }) {
     const key = `${parentKey}::${node.kind}:${node.name}`;
     const isFile = node.kind === "table" || node.kind === "schemaDefinition" || node.kind === "damaged";
     const isSchemaNode = node.kind === "schemaDefinition" || node.kind === "localSchema";
     const openTable = node.kind === "table" && node.path ? () => onOpenTable(node.path!) : undefined;
     const openSchema = isSchemaNode && node.path ? () => onOpenSchema(node) : undefined;
-    const openAction = openTable ?? openSchema;
+    const openProjectSettings = node.kind === "project" ? onOpenProjectSettings : undefined;
+    const openAction = openProjectSettings ?? openTable ?? openSchema;
     const childNamespace = node.kind === "namespace" ? node.name : namespace;
     const hasChildren = (node.children?.length ?? 0) > 0;
     const isCollapsed = hasChildren && collapsed.has(key);
@@ -24,7 +25,7 @@ export function Tree({node, depth = 0, namespace = "", parentKey = "", collapsed
                     <span>{node.name}</span>
                 </button>
             </div>
-            {!isCollapsed && node.children?.map((child) => <Tree key={`${key}::${child.kind}:${child.name}`} node={child} depth={depth + 1} namespace={childNamespace} parentKey={key} collapsed={collapsed} onToggleCollapse={onToggleCollapse} onOpenTable={onOpenTable} onOpenSchema={onOpenSchema} onContextMenu={onContextMenu}/>) }
+            {!isCollapsed && node.children?.map((child) => <Tree key={`${key}::${child.kind}:${child.name}`} node={child} depth={depth + 1} namespace={childNamespace} parentKey={key} collapsed={collapsed} onToggleCollapse={onToggleCollapse} onOpenTable={onOpenTable} onOpenSchema={onOpenSchema} onOpenProjectSettings={onOpenProjectSettings} onContextMenu={onContextMenu}/>) }
         </div>
     );
 }

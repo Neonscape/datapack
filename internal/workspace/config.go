@@ -19,8 +19,9 @@ type ProjectConfig struct {
 }
 
 type ExportConfig struct {
-	Directory string   `json:"directory"`
-	Targets   []string `json:"targets"`
+	Directory string          `json:"directory"`
+	Targets   []string        `json:"targets"`
+	Tables    map[string]bool `json:"tables"`
 }
 
 type Project struct {
@@ -53,6 +54,21 @@ func LoadProject(path string) (Project, error) {
 		return Project{}, err
 	}
 	return Project{Path: absPath, Root: filepath.Dir(absPath), Config: config}, nil
+}
+
+// SaveProject atomically persists the project configuration.
+func SaveProject(project Project) error {
+	if err := validateProjectConfig(project.Config); err != nil {
+		return err
+	}
+	encoded, err := json.MarshalIndent(project.Config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode project file: %w", err)
+	}
+	if err := writeFileAtomic(project.Path, encoded); err != nil {
+		return fmt.Errorf("save project file: %w", err)
+	}
+	return nil
 }
 
 func validateProjectConfig(config ProjectConfig) error {

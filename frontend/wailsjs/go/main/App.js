@@ -58,6 +58,10 @@ export function Export() {
   return window['go']['main']['App']['Export']();
 }
 
+export function GetProjectSettings() {
+  return window['go']['main']['App']['GetProjectSettings']();
+}
+
 export function GetPublicSchema(arg1) {
   return window['go']['main']['App']['GetPublicSchema'](arg1);
 }
@@ -136,6 +140,10 @@ export function SetCompileMode(arg1) {
 
 export function SetLanguage(arg1) {
   return window['go']['main']['App']['SetLanguage'](arg1);
+}
+
+export function SetProjectExportSettings(arg1) {
+  return window['go']['main']['App']['SetProjectExportSettings'](arg1);
 }
 
 export function SetSchemaDefinition(arg1) {

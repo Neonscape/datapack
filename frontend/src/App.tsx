@@ -8,6 +8,7 @@ import {LogPanel} from "./LogPanel";
 import {schemaDefinitions} from "./schema/refs";
 import {SchemaEditor} from "./schema/SchemaEditor";
 import {SchemaForm} from "./schema/SchemaForm";
+import {ProjectSettings} from "./project/ProjectSettings";
 import {TableGrid} from "./table/TableGrid";
 import {Tree} from "./tree/Tree";
 import type {CellError, NavRequest, NavTarget, PublicSchemaDocument, SchemaDefinition, SchemaEditorState, SchemaEditResult, SchemaNode, SchemaUsage, TableDocument, TreeNode, WorkspaceView} from "./types";
@@ -46,6 +47,7 @@ function App() {
     const [dialog, setDialog] = useState<StructureDialog | null>(null);
     const [tableDialog, setTableDialog] = useState<TableDialog | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
     const [exportResult, setExportResult] = useState<{directory: string; files: string[]} | null>(null);
     const [appMenu, setAppMenu] = useState<"file" | "edit" | null>(null);
     const [focusTarget, setFocusTarget] = useState<{path: string; rowID: string; column: string; nonce: number} | null>(null);
@@ -665,6 +667,7 @@ function App() {
                     {workspace && workspace.compile.mode === "manual" && <button className="compile-button" disabled={!workspace.compile.pending} onClick={compileProject}>{t("header.compile")}</button>}
                     {workspace && workspace.compile.diagnostics.length > 0 && <span className="compile-errors" title={t("header.compileDiagnostics")}>{workspace.compile.diagnostics.length}</span>}
                     {workspace && <button className="export-button" onClick={exportProject}>{t("header.exportCsv")}</button>}
+                    {workspace && <button className="export-button" onClick={() => setProjectSettingsOpen(true)}>{t("projectSettings.title")}</button>}
                     <button className="export-button" aria-label={t("settings.title")} onClick={() => setSettingsOpen(true)}>{t("settings.title")}</button>
                 </div>
             </header>
@@ -677,7 +680,7 @@ function App() {
                             const next = new Set(current);
                             if (next.has(key)) next.delete(key); else next.add(key);
                             return next;
-                        })} onOpenTable={openTable} onOpenSchema={openSchema} onContextMenu={(node, position, namespace) => {
+                        })} onOpenTable={openTable} onOpenSchema={openSchema} onOpenProjectSettings={() => setProjectSettingsOpen(true)} onContextMenu={(node, position, namespace) => {
                             if (node.kind === "project" || node.kind === "group" || node.kind === "damaged") return;
                             setTreeMenu({node, namespace, x: position.x, y: position.y});
                         }}/></div>
@@ -870,6 +873,7 @@ function App() {
                     <div className="dialog-actions"><button type="submit">{t("common.apply")}</button></div>
                 </form>
             </div>}
+            {projectSettingsOpen && <ProjectSettings onClose={() => setProjectSettingsOpen(false)}/>}
             {exportResult && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setExportResult(null)}>
                 <form className="structure-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void OpenPath(exportResult.directory); }}>
                     <h2>{t("export.title")}</h2>

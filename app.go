@@ -177,6 +177,14 @@ func (a *App) Export() (workspace.ExportResult, error) {
 	return a.workspace.Export()
 }
 
+func (a *App) GetProjectSettings() (workspace.ProjectSettings, error) {
+	return a.workspace.GetProjectSettings()
+}
+
+func (a *App) SetProjectExportSettings(settings workspace.ProjectExportSettings) (workspace.ProjectSettings, error) {
+	return a.workspace.SetProjectExportSettings(settings)
+}
+
 // OpenPath opens a file or directory using the operating system's default
 // handler (file manager on Linux/macOS, Explorer on Windows).
 func (a *App) OpenPath(path string) error {

@@ -39,6 +39,38 @@ export type WorkspaceView = {
     canRedo: boolean;
 };
 
+export type ProjectExportTable = {
+    id: string;
+    namespace: string;
+    name: string;
+    path: string;
+    selected: boolean;
+    configured: boolean;
+    columns?: string[];
+};
+
+export type ProjectSettings = {
+    project: {
+        path: string;
+        root: string;
+        tableRoots: string[];
+        schemaRoots: string[];
+        exclude?: string[];
+    };
+    export: {
+        directory: string;
+        targets: string[];
+        tables?: Record<string, boolean>;
+    };
+    tables: ProjectExportTable[];
+};
+
+export type ProjectExportSettings = {
+    directory: string;
+    targets: string[];
+    tables: Record<string, boolean>;
+};
+
 export type SchemaUsage = {
     definition: string;
     path: string;

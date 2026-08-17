@@ -78,7 +78,7 @@ _schema: {definitions: {
   GameID: {kind: "type", type: "string"}
   Positive: {kind: "constraint", appliesTo: ["integer", "number"]}
 }}`)
-	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
+	writeFile(t, filepath.Join(projectRoot, "tables", "item", "item.cue"), `package item
 #PrimaryKey: common.#GameID
 #Row: {price: string & common.#Positive}
 rows: {sword: {price: "invalid"}}
@@ -353,7 +353,7 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 func TestDeleteRowRejectsForeignKeyReference(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
-	writeFile(t, filepath.Join(projectRoot, "tables", "effect.cue"), `package effect
+	writeFile(t, filepath.Join(projectRoot, "tables", "effect", "effect.cue"), `package effect
 #PrimaryKey: string
 #Row: {name: string}
 rows: {burn: {name: "Burn"}}
@@ -379,7 +379,7 @@ _tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectIDs: {table
 func TestOpenProjectReturnsForeignKeyDiagnostics(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
-	writeFile(t, filepath.Join(projectRoot, "tables", "item.cue"), `package item
+	writeFile(t, filepath.Join(projectRoot, "tables", "item", "item.cue"), `package item
 #PrimaryKey: string
 #Row: {effectID: string}
 rows: {sword: {effectID: "missing"}}
@@ -428,6 +428,118 @@ _export: {csv: {enabled: true, columns: ["id", "effectID"]}}`)
 	}
 	if _, err := service.Export(); err == nil {
 		t.Fatal("Export() accepted foreign key diagnostics")
+	}
+}
+
+func TestProjectExportSettingsFilterTables(t *testing.T) {
+	projectRoot := t.TempDir()
+	projectPath := filepath.Join(projectRoot, "game.dtproj")
+	writeFile(t, projectPath, `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "item", "item.cue"), `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {}}
+_export: {csv: {enabled: true, columns: ["id", "name"]}}`)
+	writeFile(t, filepath.Join(projectRoot, "tables", "effect", "effect.cue"), `package effect
+#PrimaryKey: string
+#Row: {name: string}
+rows: {burn: {name: "Burn"}}
+_tool: {table: {namespace: "rpg", name: "effect"}, foreignKeys: {}}
+_export: {csv: {enabled: true, columns: ["id", "name"]}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(projectPath); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := service.GetProjectSettings()
+	if err != nil || len(settings.Tables) != 2 {
+		t.Fatalf("GetProjectSettings() = %#v, %v", settings, err)
+	}
+	if _, err := service.SetProjectExportSettings(ProjectExportSettings{Directory: "exports", Targets: []string{"csv"}, Tables: map[string]bool{"rpg.item": true, "rpg.effect": false}}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.Export()
+	if err != nil || len(result.Files) != 1 || filepath.Base(result.Files[0]) != "rpg.item.csv" {
+		t.Fatalf("Export() = %#v, %v", result, err)
+	}
+	project, err := LoadProject(projectPath)
+	if err != nil || !project.Config.Export.Tables["rpg.item"] || project.Config.Export.Tables["rpg.effect"] {
+		t.Fatalf("saved export selection = %#v, %v", project.Config.Export.Tables, err)
+	}
+	if _, err := service.SetProjectExportSettings(ProjectExportSettings{Directory: "exports", Targets: []string{"csv"}, Tables: map[string]bool{}}); err != nil {
+		t.Fatal(err)
+	}
+	project, err = LoadProject(projectPath)
+	if err != nil || project.Config.Export.Tables == nil || len(project.Config.Export.Tables) != 0 {
+		t.Fatalf("cleared export selection = %#v, %v", project.Config.Export.Tables, err)
+	}
+}
+
+func TestRenameTableMigratesProjectExportSelectionAndUndoRestoresIt(t *testing.T) {
+	projectRoot := t.TempDir()
+	projectPath := filepath.Join(projectRoot, "game.dtproj")
+	writeFile(t, projectPath, `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "rpg", "item", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(projectPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetProjectExportSettings(ProjectExportSettings{Directory: "exports", Targets: []string{"csv"}, Tables: map[string]bool{"rpg.item": true}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.RenameTable(TableRename{Path: tablePath, Namespace: "combat", Name: "item"}); err != nil {
+		t.Fatal(err)
+	}
+	project, err := LoadProject(projectPath)
+	if err != nil || !project.Config.Export.Tables["combat.item"] || project.Config.Export.Tables["rpg.item"] {
+		t.Fatalf("renamed selection = %#v, %v", project.Config.Export.Tables, err)
+	}
+	if _, err := service.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	project, err = LoadProject(projectPath)
+	if err != nil || !project.Config.Export.Tables["rpg.item"] || project.Config.Export.Tables["combat.item"] {
+		t.Fatalf("restored selection = %#v, %v", project.Config.Export.Tables, err)
+	}
+}
+
+func TestDeleteTableRemovesProjectExportSelection(t *testing.T) {
+	projectRoot := t.TempDir()
+	projectPath := filepath.Join(projectRoot, "game.dtproj")
+	writeFile(t, projectPath, `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	tablePath := filepath.Join(projectRoot, "tables", "item", "item.cue")
+	writeFile(t, tablePath, `package item
+#PrimaryKey: string
+#Row: {name: string}
+rows: {sword: {name: "Sword"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(projectPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetProjectExportSettings(ProjectExportSettings{Directory: "exports", Targets: []string{"csv"}, Tables: map[string]bool{"rpg.item": true}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.DeleteTable(TableDelete{Path: tablePath}); err != nil {
+		t.Fatal(err)
+	}
+	project, err := LoadProject(projectPath)
+	if err != nil || project.Config.Export.Tables["rpg.item"] {
+		t.Fatalf("deleted selection = %#v, %v", project.Config.Export.Tables, err)
 	}
 }
 
@@ -830,7 +942,7 @@ _tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectIDs: {table
 func TestGetTableIncludesScalarForeignKeyOptions(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
-	writeFile(t, filepath.Join(projectRoot, "tables", "effect.cue"), `package effect
+	writeFile(t, filepath.Join(projectRoot, "tables", "effect", "effect.cue"), `package effect
 #PrimaryKey: string
 #Row: {name: string}
 rows: {burn: {name: "Burn"}, freeze: {name: "Freeze"}}

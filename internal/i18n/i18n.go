@@ -80,6 +80,10 @@ var catalog = map[string]map[string]string{
 		English: "export blocked by %d diagnostics: %s",
 		Chinese: "导出被 %d 条诊断信息阻止：%s",
 	},
+	"workspace.noSelectedTables": {
+		English: "no selected tables are available for export",
+		Chinese: "没有可导出的已选表",
+	},
 	"workspace.unsupportedLanguage": {
 		English: "unsupported language %q",
 		Chinese: "不支持的语言 %q",
