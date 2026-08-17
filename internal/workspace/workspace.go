@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"datapack/internal/export/csv"
 	"datapack/internal/foreignkey"
 	"datapack/internal/formula"
+	"datapack/internal/i18n"
 	"datapack/internal/logging"
 	"datapack/internal/navigation"
 	"datapack/internal/projecttree"
@@ -56,6 +58,8 @@ type Service struct {
 	revision         int
 	compiledRevision int
 	compileState     CompileState
+	settings         EditorSettings
+	settingsLoaded   bool
 }
 
 type CellUpdate struct {
@@ -151,7 +155,7 @@ type CompileResult struct {
 // Compile runs one full compile and publishes the outcome into the workspace.
 func (s *Service) Compile() (CompileResult, error) {
 	if s.current == nil {
-		return CompileResult{}, fmt.Errorf("no project is open")
+		return CompileResult{}, s.userError("workspace.noProject")
 	}
 	s.compile()
 	return CompileResult{Workspace: *s.current}, nil
@@ -161,17 +165,21 @@ func (s *Service) Compile() (CompileResult, error) {
 // user-level editor settings.
 func (s *Service) SetCompileMode(mode string) (View, error) {
 	if s.current == nil {
-		return View{}, fmt.Errorf("no project is open")
+		return View{}, s.userError("workspace.noProject")
 	}
 	if mode != "auto" && mode != "manual" {
-		return View{}, fmt.Errorf("unsupported build mode %q", mode)
+		return View{}, s.userError("workspace.unsupportedBuildMode", mode)
 	}
-	settings := s.current.Settings
+	settings, err := s.loadSettings()
+	if err != nil {
+		return View{}, err
+	}
 	settings.Build.Mode = mode
 	if err := SaveEditorSettings(s.configRoot, settings); err != nil {
 		s.log(logging.Error, "save editor settings failed", map[string]any{"error": err.Error()})
 		return View{}, err
 	}
+	s.settings = settings
 	s.current.Settings = settings
 	tree, err := projecttree.Scan(s.current.Project.Path, s.current.Project.Config.TableRoots, s.current.Project.Config.SchemaRoots, s.current.Project.Config.Exclude)
 	if err != nil {
@@ -187,7 +195,7 @@ func (s *Service) SetCompileMode(mode string) (View, error) {
 // Navigate resolves one semantic jump to a document and location.
 func (s *Service) Navigate(request navigation.Request) (navigation.Target, error) {
 	if s.current == nil {
-		return navigation.Target{}, fmt.Errorf("no project is open")
+		return navigation.Target{}, s.userError("workspace.noProject")
 	}
 	switch request.Kind {
 	case navigation.KindSchemaReference:
@@ -199,7 +207,7 @@ func (s *Service) Navigate(request navigation.Request) (navigation.Target, error
 	case navigation.KindPrimaryKey:
 		return s.navigatePrimaryKey(request)
 	default:
-		return navigation.Target{}, fmt.Errorf("unsupported navigation kind %q", request.Kind)
+		return navigation.Target{}, s.userError("workspace.unsupportedNavigationKind", request.Kind)
 	}
 }
 
@@ -238,7 +246,7 @@ func (s *Service) navigateSchemaReference(request navigation.Request) (navigatio
 			}, nil
 		}
 	}
-	return navigation.Target{}, fmt.Errorf("Schema reference %s not found", reference)
+	return navigation.Target{}, s.userError("schema.referenceNotFound", reference)
 }
 
 func (s *Service) navigateForeignKey(request navigation.Request) (navigation.Target, error) {
@@ -254,7 +262,7 @@ func (s *Service) navigateForeignKey(request navigation.Request) (navigation.Tar
 		}
 	}
 	if targetTable == "" {
-		return navigation.Target{}, fmt.Errorf("column %q is not a foreign key", request.Column)
+		return navigation.Target{}, s.userError("navigation.notForeignKey", request.Column)
 	}
 	var tables []document.Table
 	collectTables(s.current.Tree.Root, &tables)
@@ -263,7 +271,7 @@ func (s *Service) navigateForeignKey(request navigation.Request) (navigation.Tar
 			return navigation.Target{Kind: navigation.KindForeignKey, Path: table.Path, RowID: request.RowID, Column: "id"}, nil
 		}
 	}
-	return navigation.Target{}, fmt.Errorf("foreign key target table %q not found", targetTable)
+	return navigation.Target{}, s.userError("navigation.fkTargetNotFound", targetTable)
 }
 
 func (s *Service) navigateFormula(request navigation.Request) (navigation.Target, error) {
@@ -277,12 +285,12 @@ func (s *Service) navigateFormula(request navigation.Request) (navigation.Target
 		}
 		references := formula.References(table, entry)
 		if len(references) == 0 {
-			return navigation.Target{}, fmt.Errorf("formula has no resolvable references")
+			return navigation.Target{}, s.userError("navigation.formulaNoReferences")
 		}
 		first := references[0]
 		return navigation.Target{Kind: navigation.KindFormula, Path: table.Path, RowID: first.RowID, Column: first.Column}, nil
 	}
-	return navigation.Target{}, fmt.Errorf("no formula at %s.%s", request.RowID, request.Column)
+	return navigation.Target{}, s.userError("navigation.noFormula", request.RowID, request.Column)
 }
 
 func (s *Service) navigatePrimaryKey(request navigation.Request) (navigation.Target, error) {
@@ -295,7 +303,7 @@ func (s *Service) navigatePrimaryKey(request navigation.Request) (navigation.Tar
 	collectTables(s.current.Tree.Root, &tables)
 	usages := foreignkey.Build(tables).Usages[foreignkey.Target{Table: name, RowID: request.RowID}]
 	if len(usages) == 0 {
-		return navigation.Target{}, fmt.Errorf("no references to %s.%s", name, request.RowID)
+		return navigation.Target{}, s.userError("navigation.noReferences", name, request.RowID)
 	}
 	if len(usages) == 1 {
 		usage := usages[0]
@@ -462,6 +470,86 @@ func NewUserService() (*Service, error) {
 	return NewService(configRoot), nil
 }
 
+// loadSettings returns the cached user-level editor settings, loading them from
+// disk on first use.
+func (s *Service) loadSettings() (EditorSettings, error) {
+	if s.settingsLoaded {
+		return s.settings, nil
+	}
+	settings, err := LoadEditorSettings(s.configRoot)
+	if err != nil {
+		return EditorSettings{}, err
+	}
+	s.settings = settings
+	s.settingsLoaded = true
+	return s.settings, nil
+}
+
+// lang returns the current interface language, loading settings on demand.
+func (s *Service) lang() string {
+	if s.settingsLoaded {
+		return s.settings.Language
+	}
+	if settings, err := LoadEditorSettings(s.configRoot); err == nil {
+		return settings.Language
+	}
+	return DefaultLanguage
+}
+
+// userError builds a localized error from a message key.
+func (s *Service) userError(key string, args ...any) error {
+	return errors.New(i18n.Message(s.lang(), key, args))
+}
+
+// GetSettings returns the current user-level editor settings.
+func (s *Service) GetSettings() (EditorSettings, error) {
+	return s.loadSettings()
+}
+
+// SetLanguage persists a new interface language and re-publishes the open view.
+func (s *Service) SetLanguage(language string) (EditorSettings, error) {
+	if !supportedLanguages[language] {
+		return EditorSettings{}, s.userError("workspace.unsupportedLanguage", language)
+	}
+	settings, err := s.loadSettings()
+	if err != nil {
+		return EditorSettings{}, err
+	}
+	settings.Language = language
+	if err := SaveEditorSettings(s.configRoot, settings); err != nil {
+		s.log(logging.Error, "save editor settings failed", map[string]any{"error": err.Error()})
+		return EditorSettings{}, err
+	}
+	s.settings = settings
+	if s.current != nil {
+		s.current.Settings.Language = language
+	}
+	s.log(logging.Info, "language changed", map[string]any{"language": language})
+	return settings, nil
+}
+
+// SetTheme persists a new color theme preference.
+func (s *Service) SetTheme(theme string) (EditorSettings, error) {
+	if !supportedThemes[theme] {
+		return EditorSettings{}, s.userError("workspace.unsupportedTheme", theme)
+	}
+	settings, err := s.loadSettings()
+	if err != nil {
+		return EditorSettings{}, err
+	}
+	settings.Theme = theme
+	if err := SaveEditorSettings(s.configRoot, settings); err != nil {
+		s.log(logging.Error, "save editor settings failed", map[string]any{"error": err.Error()})
+		return EditorSettings{}, err
+	}
+	s.settings = settings
+	if s.current != nil {
+		s.current.Settings.Theme = theme
+	}
+	s.log(logging.Info, "theme changed", map[string]any{"theme": theme})
+	return settings, nil
+}
+
 func (s *Service) OpenProject(path string) (View, error) {
 	started := time.Now()
 	s.log(logging.Info, "open project started", map[string]any{"path": path})
@@ -470,7 +558,7 @@ func (s *Service) OpenProject(path string) (View, error) {
 		s.log(logging.Error, "open project failed", map[string]any{"path": path, "error": err.Error()})
 		return View{}, err
 	}
-	settings, err := LoadEditorSettings(s.configRoot)
+	settings, err := s.loadSettings()
 	if err != nil {
 		s.log(logging.Error, "open project failed", map[string]any{"path": path, "error": err.Error()})
 		return View{}, err
@@ -599,12 +687,12 @@ func (s *Service) Current() (View, bool) {
 // an untrusted frontend request.
 func (s *Service) GetTable(path string) (document.Table, error) {
 	if s.current == nil {
-		err := fmt.Errorf("no project is open")
+		err := s.userError("workspace.noProject")
 		s.log(logging.Error, "get table failed", map[string]any{"path": path, "error": err.Error()})
 		return document.Table{}, err
 	}
 	if !containsTable(s.current.Tree.Root, path) {
-		err := fmt.Errorf("table %q is not part of the open project", path)
+		err := s.userError("workspace.tableNotInProject", path)
 		s.log(logging.Error, "get table failed", map[string]any{"path": path, "error": err.Error()})
 		return document.Table{}, err
 	}
@@ -622,12 +710,12 @@ func (s *Service) GetTable(path string) (document.Table, error) {
 // project.
 func (s *Service) GetPublicSchema(path string) (document.PublicSchema, error) {
 	if s.current == nil {
-		err := fmt.Errorf("no project is open")
+		err := s.userError("workspace.noProject")
 		s.log(logging.Error, "get public schema failed", map[string]any{"path": path, "error": err.Error()})
 		return document.PublicSchema{}, err
 	}
 	if !containsSchemaFile(s.current.Tree.Root, path) {
-		err := fmt.Errorf("schema file %q is not part of the open project", path)
+		err := s.userError("workspace.schemaFileNotInProject", path)
 		s.log(logging.Error, "get public schema failed", map[string]any{"path": path, "error": err.Error()})
 		return document.PublicSchema{}, err
 	}
@@ -680,7 +768,7 @@ func (s *Service) schemaDefinitionID(path, name string) (schemaregistry.ID, erro
 // table's local Schema, then refreshes the workspace snapshot.
 func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaEditResult, error) {
 	if s.current == nil {
-		return SchemaEditResult{}, fmt.Errorf("no project is open")
+		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
 	update := document.SchemaDefinitionUpdate{Kind: create.Kind, Type: create.Type, AppliesTo: create.AppliesTo, SchemaExpression: create.SchemaExpression}
 	scope, err := s.schemaDefinitionScope(create.Path)
@@ -732,7 +820,7 @@ func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaE
 // SetSchemaDefinition replaces one definition expression and metadata.
 func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult, error) {
 	if s.current == nil {
-		return SchemaEditResult{}, fmt.Errorf("no project is open")
+		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
 	update := document.SchemaDefinitionUpdate{Kind: set.Kind, Type: set.Type, AppliesTo: set.AppliesTo, SchemaExpression: set.SchemaExpression}
 	scope, err := s.schemaDefinitionScope(set.Path)
@@ -785,7 +873,7 @@ func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult
 // reference across all project source files.
 func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaEditResult, error) {
 	if s.current == nil {
-		return SchemaEditResult{}, fmt.Errorf("no project is open")
+		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
 	scope, err := s.schemaDefinitionScope(rename.Path)
 	if err != nil {
@@ -826,7 +914,7 @@ func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaE
 // DeleteSchemaDefinition removes a definition unless it is still referenced.
 func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaEditResult, error) {
 	if s.current == nil {
-		return SchemaEditResult{}, fmt.Errorf("no project is open")
+		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
 	scope, err := s.schemaDefinitionScope(delete.Path)
 	if err != nil {
@@ -842,7 +930,7 @@ func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaE
 			continue
 		}
 		usage := definition.Usages[0]
-		err := fmt.Errorf("Schema %s is referenced by %s field %s", id, usage.Path, usage.Field)
+		err := s.userError("schema.referencedBy", id, usage.Path, usage.Field)
 		s.log(logging.Warn, "schema definition delete blocked", map[string]any{"path": delete.Path, "name": delete.Name, "error": err.Error()})
 		return SchemaEditResult{}, err
 	}
@@ -917,9 +1005,9 @@ func (s *Service) normalizeSchemaReferences(path, expression string) (string, er
 			return &ast.SelectorExpr{X: ast.NewIdent(pkg), Sel: ast.NewIdent(name)}, nil
 		}
 		if ambiguous[short] {
-			return nil, fmt.Errorf("Schema reference %s is ambiguous; qualify it with a package name", name)
+			return nil, s.userError("schema.referenceAmbiguous", name)
 		}
-		return nil, fmt.Errorf("Schema reference %s not found; local references use _local.%s and public references use package.%s", name, name, name)
+		return nil, s.userError("schema.referenceNotFoundHint", name, name, name)
 	})
 	if err != nil {
 		return "", err
@@ -1079,11 +1167,11 @@ func (s *Service) schemaImportPath(packageName string) (string, error) {
 		}
 	}
 	if directory == "" {
-		return "", fmt.Errorf("schema package %q is not part of the open project", packageName)
+		return "", s.userError("workspace.schemaPackageNotInProject", packageName)
 	}
 	relative, err := filepath.Rel(s.current.Project.Root, directory)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("schema package %q is outside the project directory", packageName)
+		return "", s.userError("workspace.schemaPackageOutside", packageName)
 	}
 	module, err := s.moduleName()
 	if err != nil {
@@ -1124,16 +1212,16 @@ func (s *Service) moduleName() (string, error) {
 
 func (s *Service) CreateTable(create TableCreate) (TableCreateResult, error) {
 	if s.current == nil {
-		return TableCreateResult{}, fmt.Errorf("no project is open")
+		return TableCreateResult{}, s.userError("workspace.noProject")
 	}
 	if !validTableName(create.Name) || !validNamespace(create.Namespace) {
-		return TableCreateResult{}, fmt.Errorf("table name and namespace must use lowercase letters, digits, and underscores")
+		return TableCreateResult{}, s.userError("workspace.tableNameInvalid")
 	}
 	var tables []document.Table
 	collectTables(s.current.Tree.Root, &tables)
 	for _, table := range tables {
 		if table.Namespace == create.Namespace && table.Name == create.Name {
-			return TableCreateResult{}, fmt.Errorf("table %q already exists", create.Namespace+"."+create.Name)
+			return TableCreateResult{}, s.userError("workspace.tableExists", create.Namespace+"."+create.Name)
 		}
 	}
 	directory := filepath.Join(s.current.Project.Root, s.current.Project.Config.TableRoots[0], create.Namespace, create.Name)
@@ -1142,7 +1230,7 @@ func (s *Service) CreateTable(create TableCreate) (TableCreateResult, error) {
 		return TableCreateResult{}, fmt.Errorf("create table directory: %w", err)
 	}
 	if _, err := os.Stat(path); err == nil {
-		return TableCreateResult{}, fmt.Errorf("table %q already exists", create.Namespace+"."+create.Name)
+		return TableCreateResult{}, s.userError("workspace.tableExists", create.Namespace+"."+create.Name)
 	}
 	source := fmt.Sprintf(`package %s
 
@@ -1185,13 +1273,13 @@ _editor: {columns: {}}
 // and updates every foreign-key reference to it.
 func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
 	if s.current == nil {
-		return TableRenameResult{}, fmt.Errorf("no project is open")
+		return TableRenameResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, rename.Path) {
-		return TableRenameResult{}, fmt.Errorf("table %q is not part of the open project", rename.Path)
+		return TableRenameResult{}, s.userError("workspace.tableNotInProject", rename.Path)
 	}
 	if !validTableName(rename.Name) || !validNamespace(rename.Namespace) {
-		return TableRenameResult{}, fmt.Errorf("table name and namespace must use lowercase letters, digits, and underscores")
+		return TableRenameResult{}, s.userError("workspace.tableNameInvalid")
 	}
 	source, err := document.LoadTable(rename.Path)
 	if err != nil {
@@ -1205,7 +1293,7 @@ func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
 			continue
 		}
 		if table.Namespace == rename.Namespace && table.Name == rename.Name {
-			return TableRenameResult{}, fmt.Errorf("table %q already exists", rename.Namespace+"."+rename.Name)
+			return TableRenameResult{}, s.userError("workspace.tableExists", rename.Namespace+"."+rename.Name)
 		}
 	}
 	newName := rename.Namespace + "." + rename.Name
@@ -1254,10 +1342,10 @@ func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
 // it through a foreign key.
 func (s *Service) DeleteTable(delete TableDelete) (TableDeleteResult, error) {
 	if s.current == nil {
-		return TableDeleteResult{}, fmt.Errorf("no project is open")
+		return TableDeleteResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, delete.Path) {
-		return TableDeleteResult{}, fmt.Errorf("table %q is not part of the open project", delete.Path)
+		return TableDeleteResult{}, s.userError("workspace.tableNotInProject", delete.Path)
 	}
 	source, err := document.LoadTable(delete.Path)
 	if err != nil {
@@ -1278,7 +1366,7 @@ func (s *Service) DeleteTable(delete TableDelete) (TableDeleteResult, error) {
 		}
 	}
 	if len(referencedBy) > 0 {
-		err := fmt.Errorf("table %q is referenced by %s", name, strings.Join(referencedBy, ", "))
+		err := s.userError("workspace.tableReferenced", name, strings.Join(referencedBy, ", "))
 		s.log(logging.Warn, "table delete blocked", map[string]any{"path": delete.Path, "error": err.Error()})
 		return TableDeleteResult{}, err
 	}
@@ -1298,15 +1386,15 @@ func (s *Service) DeleteTable(delete TableDelete) (TableDeleteResult, error) {
 // CreateSchemaFile creates an empty public Schema package for a namespace.
 func (s *Service) CreateSchemaFile(namespace string) (SchemaFileCreateResult, error) {
 	if s.current == nil {
-		return SchemaFileCreateResult{}, fmt.Errorf("no project is open")
+		return SchemaFileCreateResult{}, s.userError("workspace.noProject")
 	}
 	if !validNamespace(namespace) {
-		return SchemaFileCreateResult{}, fmt.Errorf("schema namespace must use lowercase letters, digits, and underscores")
+		return SchemaFileCreateResult{}, s.userError("workspace.schemaNamespaceInvalid")
 	}
 	directory := filepath.Join(s.current.Project.Root, s.current.Project.Config.SchemaRoots[0], namespace)
 	path := filepath.Join(directory, namespace+".cue")
 	if _, err := os.Stat(path); err == nil {
-		return SchemaFileCreateResult{}, fmt.Errorf("schema namespace %q already exists", namespace)
+		return SchemaFileCreateResult{}, s.userError("workspace.schemaNamespaceExists", namespace)
 	}
 	snapshot := s.snapshotFiles(path)
 	if err := os.MkdirAll(directory, 0o755); err != nil {
@@ -1334,10 +1422,10 @@ func (s *Service) CreateSchemaFile(namespace string) (SchemaFileCreateResult, er
 // refreshes the project tree and Schema registry from the saved source.
 func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 	if s.current == nil {
-		return CellUpdateResult{}, fmt.Errorf("no project is open")
+		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, update.Path) {
-		return CellUpdateResult{}, fmt.Errorf("table %q is not part of the open project", update.Path)
+		return CellUpdateResult{}, s.userError("workspace.tableNotInProject", update.Path)
 	}
 	table, view, err := s.edit(update.Path, func() (document.Table, error) {
 		return document.SetCellValue(update.Path, update.RowID, update.Column, update.Expression)
@@ -1350,10 +1438,10 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 
 func (s *Service) Paste(paste Paste) (HistoryResult, error) {
 	if s.current == nil {
-		return HistoryResult{}, fmt.Errorf("no project is open")
+		return HistoryResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, paste.Path) {
-		return HistoryResult{}, fmt.Errorf("table %q is not part of the open project", paste.Path)
+		return HistoryResult{}, s.userError("workspace.tableNotInProject", paste.Path)
 	}
 	table, view, err := s.edit(paste.Path, func() (document.Table, error) {
 		return document.PasteCells(paste.Path, paste.RowIDs, paste.Columns, paste.Values)
@@ -1374,10 +1462,10 @@ func (s *Service) Redo() (HistoryResult, error) {
 
 func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
 	if s.current == nil {
-		return FormulaSetResult{}, fmt.Errorf("no project is open")
+		return FormulaSetResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, set.Path) {
-		return FormulaSetResult{}, fmt.Errorf("table %q is not part of the open project", set.Path)
+		return FormulaSetResult{}, s.userError("workspace.tableNotInProject", set.Path)
 	}
 	table, view, err := s.edit(set.Path, func() (document.Table, error) {
 		return document.SetCellFormula(set.Path, set.RowID, set.Column, set.Expression)
@@ -1412,7 +1500,7 @@ func (s *Service) edit(path string, operation func() (document.Table, error)) (d
 
 func (s *Service) restoreHistory(undo bool) (HistoryResult, error) {
 	if s.current == nil {
-		return HistoryResult{}, fmt.Errorf("no project is open")
+		return HistoryResult{}, s.userError("workspace.noProject")
 	}
 	stack := &s.undoStack
 	opposite := &s.redoStack
@@ -1420,7 +1508,10 @@ func (s *Service) restoreHistory(undo bool) (HistoryResult, error) {
 		stack, opposite = &s.redoStack, &s.undoStack
 	}
 	if len(*stack) == 0 {
-		return HistoryResult{}, fmt.Errorf("nothing to %s", map[bool]string{true: "undo", false: "redo"}[undo])
+		if undo {
+			return HistoryResult{}, s.userError("workspace.nothingToUndo")
+		}
+		return HistoryResult{}, s.userError("workspace.nothingToRedo")
 	}
 	snapshot := (*stack)[len(*stack)-1]
 	*stack = (*stack)[:len(*stack)-1]
@@ -1511,10 +1602,10 @@ func writeFileAtomic(path string, content []byte) error {
 
 func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
 	if s.current == nil {
-		return RowCreateResult{}, fmt.Errorf("no project is open")
+		return RowCreateResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, create.Path) {
-		return RowCreateResult{}, fmt.Errorf("table %q is not part of the open project", create.Path)
+		return RowCreateResult{}, s.userError("workspace.tableNotInProject", create.Path)
 	}
 	table, view, err := s.edit(create.Path, func() (document.Table, error) {
 		return document.CreateRow(create.Path, create.RowID, create.Values, create.Formulas)
@@ -1527,10 +1618,10 @@ func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
 
 func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
 	if s.current == nil {
-		return CellUpdateResult{}, fmt.Errorf("no project is open")
+		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, update.Path) {
-		return CellUpdateResult{}, fmt.Errorf("table %q is not part of the open project", update.Path)
+		return CellUpdateResult{}, s.userError("workspace.tableNotInProject", update.Path)
 	}
 	table, view, err := s.edit(update.Path, func() (document.Table, error) {
 		return document.ClearCell(update.Path, update.RowID, update.Column)
@@ -1543,10 +1634,10 @@ func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
 
 func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
 	if s.current == nil {
-		return RowAddResult{}, fmt.Errorf("no project is open")
+		return RowAddResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, add.Path) {
-		return RowAddResult{}, fmt.Errorf("table %q is not part of the open project", add.Path)
+		return RowAddResult{}, s.userError("workspace.tableNotInProject", add.Path)
 	}
 	table, view, err := s.edit(add.Path, func() (document.Table, error) {
 		return document.AddRow(add.Path, add.RowID, add.Expression)
@@ -1559,17 +1650,17 @@ func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
 
 func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
 	if s.current == nil {
-		return RowDeleteResult{}, fmt.Errorf("no project is open")
+		return RowDeleteResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, delete.Path) {
-		return RowDeleteResult{}, fmt.Errorf("table %q is not part of the open project", delete.Path)
+		return RowDeleteResult{}, s.userError("workspace.tableNotInProject", delete.Path)
 	}
 	table, err := document.LoadTable(delete.Path)
 	if err != nil {
 		return RowDeleteResult{}, fmt.Errorf("load table: %w", err)
 	}
 	if usage := foreignKeyUsage(s.current.Tree, table, delete.RowID); usage != nil {
-		return RowDeleteResult{}, fmt.Errorf("row %q is referenced by %s.%s.%s", delete.RowID, usage.Table, usage.RowID, usage.Column)
+		return RowDeleteResult{}, s.userError("workspace.rowReferenced", delete.RowID, usage.Table, usage.RowID, usage.Column)
 	}
 	table, view, err := s.edit(delete.Path, func() (document.Table, error) {
 		return document.DeleteRow(delete.Path, delete.RowID)
@@ -1582,10 +1673,10 @@ func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
 
 func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 	if s.current == nil {
-		return RowRenameResult{}, fmt.Errorf("no project is open")
+		return RowRenameResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, rename.Path) {
-		return RowRenameResult{}, fmt.Errorf("table %q is not part of the open project", rename.Path)
+		return RowRenameResult{}, s.userError("workspace.tableNotInProject", rename.Path)
 	}
 	target, err := document.LoadTable(rename.Path)
 	if err != nil {
@@ -1619,13 +1710,13 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 // exporter receives the compiled package and never re-validates data.
 func (s *Service) Export() (ExportResult, error) {
 	if s.current == nil {
-		err := fmt.Errorf("no project is open")
+		err := s.userError("workspace.noProject")
 		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
 		return ExportResult{}, err
 	}
 	compiled := s.compile()
 	if len(compiled.Diagnostics) > 0 {
-		err := fmt.Errorf("export blocked by %d diagnostics: %s", len(compiled.Diagnostics), compiled.Diagnostics[0].Message)
+		err := s.userError("workspace.exportBlocked", len(compiled.Diagnostics), compiled.Diagnostics[0].Message)
 		s.log(logging.Warn, "export blocked", map[string]any{"error": err.Error()})
 		return ExportResult{}, err
 	}
@@ -1645,10 +1736,10 @@ func (s *Service) Export() (ExportResult, error) {
 
 func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 	if s.current == nil {
-		return ColumnAddResult{}, fmt.Errorf("no project is open")
+		return ColumnAddResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, add.Path) {
-		return ColumnAddResult{}, fmt.Errorf("table %q is not part of the open project", add.Path)
+		return ColumnAddResult{}, s.userError("workspace.tableNotInProject", add.Path)
 	}
 	position := -1
 	if add.Position != nil {
@@ -1672,10 +1763,10 @@ func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 
 func (s *Service) SetColumnSchema(set ColumnSchemaSet) (ColumnSchemaSetResult, error) {
 	if s.current == nil {
-		return ColumnSchemaSetResult{}, fmt.Errorf("no project is open")
+		return ColumnSchemaSetResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, set.Path) {
-		return ColumnSchemaSetResult{}, fmt.Errorf("table %q is not part of the open project", set.Path)
+		return ColumnSchemaSetResult{}, s.userError("workspace.tableNotInProject", set.Path)
 	}
 	expression, err := s.normalizeSchemaReferences(set.Path, set.SchemaExpression)
 	if err != nil {
@@ -1695,10 +1786,10 @@ func (s *Service) SetColumnSchema(set ColumnSchemaSet) (ColumnSchemaSetResult, e
 
 func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) {
 	if s.current == nil {
-		return ColumnDeleteResult{}, fmt.Errorf("no project is open")
+		return ColumnDeleteResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, delete.Path) {
-		return ColumnDeleteResult{}, fmt.Errorf("table %q is not part of the open project", delete.Path)
+		return ColumnDeleteResult{}, s.userError("workspace.tableNotInProject", delete.Path)
 	}
 	table, view, err := s.edit(delete.Path, func() (document.Table, error) {
 		return document.DeleteColumn(delete.Path, delete.Name)
@@ -1711,10 +1802,10 @@ func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) 
 
 func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) {
 	if s.current == nil {
-		return ColumnRenameResult{}, fmt.Errorf("no project is open")
+		return ColumnRenameResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, rename.Path) {
-		return ColumnRenameResult{}, fmt.Errorf("table %q is not part of the open project", rename.Path)
+		return ColumnRenameResult{}, s.userError("workspace.tableNotInProject", rename.Path)
 	}
 	table, view, err := s.edit(rename.Path, func() (document.Table, error) {
 		return document.RenameColumn(rename.Path, rename.OldName, rename.NewName)
@@ -1727,10 +1818,10 @@ func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) 
 
 func (s *Service) MoveColumn(move ColumnMove) (ColumnMoveResult, error) {
 	if s.current == nil {
-		return ColumnMoveResult{}, fmt.Errorf("no project is open")
+		return ColumnMoveResult{}, s.userError("workspace.noProject")
 	}
 	if !containsTable(s.current.Tree.Root, move.Path) {
-		return ColumnMoveResult{}, fmt.Errorf("table %q is not part of the open project", move.Path)
+		return ColumnMoveResult{}, s.userError("workspace.tableNotInProject", move.Path)
 	}
 	table, view, err := s.edit(move.Path, func() (document.Table, error) {
 		return document.MoveColumn(move.Path, move.Name, move.Position)

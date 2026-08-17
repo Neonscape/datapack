@@ -10,9 +10,33 @@ import (
 
 const defaultAutoCompileDebounceSeconds = 10
 
+const (
+	LanguageEnglish           = "en"
+	LanguageSimplifiedChinese = "zh-CN"
+	DefaultLanguage           = LanguageSimplifiedChinese
+
+	ThemeSystem  = "system"
+	ThemeLight   = "light"
+	ThemeDark    = "dark"
+	DefaultTheme = ThemeSystem
+)
+
+var supportedLanguages = map[string]bool{
+	LanguageEnglish:           true,
+	LanguageSimplifiedChinese: true,
+}
+
+var supportedThemes = map[string]bool{
+	ThemeSystem: true,
+	ThemeLight:  true,
+	ThemeDark:   true,
+}
+
 type EditorSettings struct {
-	Version int           `json:"version"`
-	Build   BuildSettings `json:"build"`
+	Version  int           `json:"version"`
+	Build    BuildSettings `json:"build"`
+	Language string        `json:"language"`
+	Theme    string        `json:"theme"`
 }
 
 type BuildSettings struct {
@@ -27,7 +51,21 @@ func DefaultEditorSettings() EditorSettings {
 			Mode:                       "auto",
 			AutoCompileDebounceSeconds: defaultAutoCompileDebounceSeconds,
 		},
+		Language: DefaultLanguage,
+		Theme:    DefaultTheme,
 	}
+}
+
+// NormalizeEditorSettings fills empty language/theme fields with defaults so
+// settings files written by earlier versions remain valid.
+func NormalizeEditorSettings(settings EditorSettings) EditorSettings {
+	if settings.Language == "" {
+		settings.Language = DefaultLanguage
+	}
+	if settings.Theme == "" {
+		settings.Theme = DefaultTheme
+	}
+	return settings
 }
 
 func SettingsPath(configRoot string) string {
@@ -51,6 +89,7 @@ func LoadEditorSettings(configRoot string) (EditorSettings, error) {
 	if err := decoder.Decode(&settings); err != nil {
 		return EditorSettings{}, fmt.Errorf("decode editor settings: %w", err)
 	}
+	settings = NormalizeEditorSettings(settings)
 	if err := validateEditorSettings(settings); err != nil {
 		return EditorSettings{}, err
 	}
@@ -70,6 +109,12 @@ func validateEditorSettings(settings EditorSettings) error {
 		return nil
 	default:
 		return fmt.Errorf("unsupported build mode %q", settings.Build.Mode)
+	}
+	if !supportedLanguages[settings.Language] {
+		return fmt.Errorf("unsupported language %q", settings.Language)
+	}
+	if !supportedThemes[settings.Theme] {
+		return fmt.Errorf("unsupported theme %q", settings.Theme)
 	}
 	return nil
 }

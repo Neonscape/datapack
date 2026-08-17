@@ -1,8 +1,10 @@
 import {useEffect, useState} from "react";
 import {EventsOn} from "../wailsjs/runtime/runtime";
+import {useTranslation} from "./i18n";
 import type {LogEntry} from "./types";
 
 export function LogPanel() {
+    const {t} = useTranslation();
     const [entries, setEntries] = useState<LogEntry[]>([]);
     const [open, setOpen] = useState(false);
     useEffect(() => {
@@ -18,10 +20,10 @@ export function LogPanel() {
     }, []);
     return <section className={`log-panel ${open ? "log-panel-open" : ""}`}>
         <button className="log-panel-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
-            Logs <span>{entries.length}</span>
+            {t("log.title")} <span>{entries.length}</span>
         </button>
         {open && <div className="log-panel-body">
-            <div className="log-panel-toolbar"><span>Application log</span><button onClick={() => setEntries([])}>Clear</button></div>
+            <div className="log-panel-toolbar"><span>{t("log.applicationLog")}</span><button onClick={() => setEntries([])}>{t("log.clear")}</button></div>
             <div className="log-list">
                 {entries.map((entry, index) => <div className={`log-entry log-${entry.level}`} key={`${entry.time}-${index}`}>
                     <time>{new Date(entry.time).toLocaleTimeString()}</time>
@@ -29,7 +31,7 @@ export function LogPanel() {
                     <span>{entry.message}</span>
                     {entry.fields && <code>{JSON.stringify(entry.fields)}</code>}
                 </div>)}
-                {entries.length === 0 && <div className="log-empty">No log entries yet</div>}
+                {entries.length === 0 && <div className="log-empty">{t("log.empty")}</div>}
             </div>
         </div>}
     </section>;

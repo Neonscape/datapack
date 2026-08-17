@@ -6,6 +6,8 @@ export namespace compiler {
 	    field?: string;
 	    rowID?: string;
 	    column?: string;
+	    key?: string;
+	    args?: string[];
 	    message: string;
 	
 	    static createFrom(source: any = {}) {
@@ -19,6 +21,8 @@ export namespace compiler {
 	        this.field = source["field"];
 	        this.rowID = source["rowID"];
 	        this.column = source["column"];
+	        this.key = source["key"];
+	        this.args = source["args"];
 	        this.message = source["message"];
 	    }
 	}
@@ -333,6 +337,8 @@ export namespace foreignkey {
 	    table: string;
 	    rowID: string;
 	    column: string;
+	    key?: string;
+	    args?: string[];
 	    message: string;
 	
 	    static createFrom(source: any = {}) {
@@ -345,6 +351,8 @@ export namespace foreignkey {
 	        this.table = source["table"];
 	        this.rowID = source["rowID"];
 	        this.column = source["column"];
+	        this.key = source["key"];
+	        this.args = source["args"];
 	        this.message = source["message"];
 	    }
 	}
@@ -650,6 +658,8 @@ export namespace schemaregistry {
 	    path: string;
 	    table?: string;
 	    field: string;
+	    key?: string;
+	    args?: string[];
 	    message: string;
 	
 	    static createFrom(source: any = {}) {
@@ -661,6 +671,8 @@ export namespace schemaregistry {
 	        this.path = source["path"];
 	        this.table = source["table"];
 	        this.field = source["field"];
+	        this.key = source["key"];
+	        this.args = source["args"];
 	        this.message = source["message"];
 	    }
 	}
@@ -831,6 +843,8 @@ export namespace workspace {
 	export class EditorSettings {
 	    version: number;
 	    build: BuildSettings;
+	    language: string;
+	    theme: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new EditorSettings(source);
@@ -840,6 +854,8 @@ export namespace workspace {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.version = source["version"];
 	        this.build = this.convertValues(source["build"], BuildSettings);
+	        this.language = source["language"];
+	        this.theme = source["theme"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

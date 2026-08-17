@@ -1,6 +1,8 @@
 import {useEffect, useRef, useState} from "react";
 import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type GridCell, type GridColumn, type GridSelection, type Item} from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
+import {useTranslation} from "../i18n";
+import {useTheme} from "../theme";
 import type {NavRequest, TableDocument} from "../types";
 
 type DraftRow = { id: string; values: Record<string, string> };
@@ -83,6 +85,8 @@ const enumRenderer: CustomRenderer<EnumCell> = {
 };
 
 export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onNavigate, focusTarget, onFocusDone}: { table: TableDocument; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
+    const {t} = useTranslation();
+    const {grid} = useTheme();
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
     const [draftError, setDraftError] = useState("");
     const [contextRow, setContextRow] = useState<number | null>(null);
@@ -142,7 +146,7 @@ export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEd
         const cell = source.values[table.columns[column - 1].name];
         return cell?.formula ? `=${cell.expression}` : cell?.expression ?? "";
     };
-    const selectedCellLabel = selectedCell ? `${selectedCell.column === 0 ? "id" : table.columns[selectedCell.column - 1].name} · ${rowFor(selectedCell.row).id || "draft"}` : "";
+    const selectedCellLabel = selectedCell ? `${selectedCell.column === 0 ? "id" : table.columns[selectedCell.column - 1].name} · ${rowFor(selectedCell.row).id || t("grid.draft")}` : "";
     useEffect(() => {
         if (formulaEditing || !selectedCell) return;
         setFormulaValue(rawCellValue(selectedCell.column, selectedCell.row));
@@ -213,17 +217,17 @@ export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEd
         const error = isDraft(row) ? draftError : errorFor(source.id, table.columns[column - 1]?.name ?? "");
         const columnDefinition = table.columns[column - 1];
         if (column !== 0 && ["array", "struct"].includes(columnDefinition.schema.kind) && !cell?.formula) {
-            return {kind: GridCellKind.Text, data: cell?.expression ?? "[]", displayData: cell?.display ?? "[]", allowOverlay: false, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined};
+            return {kind: GridCellKind.Text, data: cell?.expression ?? "[]", displayData: cell?.display ?? "[]", allowOverlay: false, themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined};
         }
         if (column !== 0 && columnDefinition.foreignKeyTable && !cell?.formula) {
-            return {kind: GridCellKind.Text, data: cell?.expression ?? "", displayData: cell?.display ?? "", allowOverlay: false, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined};
+            return {kind: GridCellKind.Text, data: cell?.expression ?? "", displayData: cell?.display ?? "", allowOverlay: false, themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined};
         }
         if (column !== 0 && columnDefinition.schema.kind === "enum" && !cell?.formula) {
             const options = columnDefinition.schema.enumValues?.map((entry) => entry.expression.replace(/^"|"$/g, "")) ?? [];
-            return {kind: GridCellKind.Custom, allowOverlay: true, copyData: cell?.display ?? "", data: {kind: "enum", value: cell?.display ?? options[0] ?? "", options}, themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined} as EnumCell;
+            return {kind: GridCellKind.Custom, allowOverlay: true, copyData: cell?.display ?? "", data: {kind: "enum", value: cell?.display ?? options[0] ?? "", options}, themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined} as EnumCell;
         }
         if (column !== 0 && columnDefinition.schema.kind === "boolean" && !cell?.formula) {
-            return {kind: GridCellKind.Boolean, allowOverlay: false, data: cell?.expression === "true", themeOverride: error ? {bgCell: "#fff1f1", textDark: "#8a3030"} : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : undefined};
+            return {kind: GridCellKind.Boolean, allowOverlay: false, data: cell?.expression === "true", themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined};
         }
         return {
             kind: GridCellKind.Text,
@@ -231,11 +235,11 @@ export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEd
             displayData: cell?.display ?? "",
             allowOverlay: false,
             themeOverride: error ? {
-                bgCell: "#fff1f1",
-                textDark: "#8a3030",
-            } : isDraft(row) ? {bgCell: "#f7fafb", textDark: "#51616b"} : cell?.formula ? {
-                bgCell: "#e8f3f5",
-                textDark: "#1c5d73",
+                bgCell: grid.errorCellBg,
+                textDark: grid.errorCellText,
+            } : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : cell?.formula ? {
+                bgCell: grid.formulaBg,
+                textDark: grid.formulaText,
                 baseFontStyle: "700 13px sans-serif",
             } : undefined,
         };
@@ -250,7 +254,7 @@ export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEd
             const duplicate = table.rows.some((existing) => existing.id === next.id);
             if (next.id !== "" && (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(next.id) || duplicate)) {
                 setDraft(next);
-                setDraftError(duplicate ? "ID already exists" : "ID must be a valid CUE identifier");
+                setDraftError(duplicate ? t("grid.idExists") : t("grid.idInvalid"));
                 return;
             }
             const hasValues = Object.values(next.values).some((entry) => entry !== "");
@@ -372,16 +376,16 @@ export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEd
     return <div className="table-document" data-inline-editor={inlineEditor || foreignKeyEditor || arrayEditor || structEditor ? "open" : "closed"}>
         <div className="table-document-header">
             <div>
-                <div className="table-eyebrow">CUE expression editing</div>
+                <div className="table-eyebrow">{t("grid.cueExpressionEditing")}</div>
                 <h1>{table.namespace}.{table.name}</h1>
             </div>
-            <span>{table.rows.length} rows + draft</span>
+            <span>{t("grid.rowsDraft", {count: table.rows.length})}</span>
         </div>
-        {draftError && <div className="table-validation-error"><code>draft</code><span>{draftError}</span></div>}
-        {(table.diagnostics?.length ?? 0) > 0 && <section className="table-diagnostics" aria-label="Table diagnostics">
-            <div className="table-diagnostics-title"><strong>Diagnostics</strong><span>{table.diagnostics!.length}</span></div>
+        {draftError && <div className="table-validation-error"><code>{t("grid.draft")}</code><span>{draftError}</span></div>}
+        {(table.diagnostics?.length ?? 0) > 0 && <section className="table-diagnostics" aria-label={t("grid.tableDiagnostics")}>
+            <div className="table-diagnostics-title"><strong>{t("grid.diagnostics")}</strong><span>{table.diagnostics!.length}</span></div>
             <div className="table-diagnostics-list">{table.diagnostics!.map((diagnostic, index) => {
-                const location = diagnostic.rowID ? diagnostic.column ? `${diagnostic.rowID}.${diagnostic.column}` : diagnostic.rowID : "table";
+                const location = diagnostic.rowID ? diagnostic.column ? `${diagnostic.rowID}.${diagnostic.column}` : diagnostic.rowID : t("grid.table");
                 const navigable = table.rows.some((row) => row.id === diagnostic.rowID) && (!diagnostic.column || table.columns.some((column) => column.name === diagnostic.column));
                 return <button key={`${location}:${diagnostic.message}:${index}`} className="table-diagnostic" disabled={!navigable} onClick={() => focusDiagnostic(diagnostic)}><code>{location}</code><span>{diagnostic.message}</span></button>;
             })}</div>
@@ -391,11 +395,11 @@ export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEd
             <input
                 ref={formulaBarRef}
                 className="formula-bar-input"
-                aria-label="Formula bar"
+                aria-label={t("grid.formulaBar")}
                 value={formulaValue}
                 disabled={!selectedCell}
                 readOnly={!formulaEditing}
-                placeholder="Select a cell to edit its value"
+                placeholder={t("grid.selectCell")}
                 onChange={(event) => setFormulaValue(event.target.value)}
                 onClick={() => {
                     if (!selectedCell || formulaEditing) return;
@@ -488,16 +492,16 @@ export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEd
                     onDeleteRow(table.rows[contextRow].id);
                     setMenu(null);
                     setContextRow(null);
-                }}>Delete row</button>
+                }}>{t("grid.deleteRow")}</button>
             </div>}
             {columnMenu && <div className="column-context-menu" style={{left: columnMenu.x, top: columnMenu.y}}>
-                <button disabled={columnMenu.column === 0} onClick={() => { onAddColumn(columnMenu.column - 1); setColumnMenu(null); }}>Add to left</button>
-                <button onClick={() => { onAddColumn(columnMenu.column); setColumnMenu(null); }}>Add to right</button>
+                <button disabled={columnMenu.column === 0} onClick={() => { onAddColumn(columnMenu.column - 1); setColumnMenu(null); }}>{t("grid.addToLeft")}</button>
+                <button onClick={() => { onAddColumn(columnMenu.column); setColumnMenu(null); }}>{t("grid.addToRight")}</button>
                 <hr/>
-                <button disabled={columnMenu.column === 0} onClick={() => { const column = table.columns[columnMenu.column - 1]; onEditColumnSchema(column.name, column.schemaExpression); setColumnMenu(null); }}>Edit schema</button>
-                <button disabled={columnMenu.column === 0} onClick={() => { onRenameColumn(table.columns[columnMenu.column - 1].name); setColumnMenu(null); }}>Rename column</button>
-                <button disabled={columnMenu.column === 0} onClick={() => { onMoveColumn(table.columns[columnMenu.column - 1].name); setColumnMenu(null); }}>Move column</button>
-                <button className="column-context-danger" disabled={columnMenu.column === 0} onClick={() => { onDeleteColumn(table.columns[columnMenu.column - 1].name); setColumnMenu(null); }}>Delete column</button>
+                <button disabled={columnMenu.column === 0} onClick={() => { const column = table.columns[columnMenu.column - 1]; onEditColumnSchema(column.name, column.schemaExpression); setColumnMenu(null); }}>{t("grid.editSchema")}</button>
+                <button disabled={columnMenu.column === 0} onClick={() => { onRenameColumn(table.columns[columnMenu.column - 1].name); setColumnMenu(null); }}>{t("grid.renameColumn")}</button>
+                <button disabled={columnMenu.column === 0} onClick={() => { onMoveColumn(table.columns[columnMenu.column - 1].name); setColumnMenu(null); }}>{t("grid.moveColumn")}</button>
+                <button className="column-context-danger" disabled={columnMenu.column === 0} onClick={() => { onDeleteColumn(table.columns[columnMenu.column - 1].name); setColumnMenu(null); }}>{t("grid.deleteColumn")}</button>
             </div>}
             {inlineEditor && <textarea
                 ref={editorRef}
@@ -514,34 +518,34 @@ export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEd
                 }}
             />}
             {foreignKeyEditor && <div className="foreign-key-cell-editor" style={{left: foreignKeyEditor.bounds.x, top: foreignKeyEditor.bounds.y, width: foreignKeyEditor.bounds.width, minHeight: foreignKeyEditor.bounds.height}}>
-                <input ref={foreignKeyEditorRef} defaultValue={foreignKeyEditor.value} list={`foreign-key-options-${foreignKeyEditor.column}`} aria-label={`Select ${foreignKeyEditor.target} ID`} onKeyDown={(event) => {
+                <input ref={foreignKeyEditorRef} defaultValue={foreignKeyEditor.value} list={`foreign-key-options-${foreignKeyEditor.column}`} aria-label={t("grid.selectId", {target: foreignKeyEditor.target})} onKeyDown={(event) => {
                     if (event.key === "Enter") finishForeignKeyEdit(event.currentTarget.value);
                     if (event.key === "Escape") setForeignKeyEditor(null);
                 }} onBlur={(event) => finishForeignKeyEdit(event.currentTarget.value)}/>
                 <datalist id={`foreign-key-options-${foreignKeyEditor.column}`}>{foreignKeyEditor.options.map((option) => <option key={option} value={option}/>)}</datalist>
             </div>}
             {arrayEditor && <div className="array-editor-backdrop" role="presentation" onMouseDown={() => setArrayEditor(null)}>
-                <section className="array-editor-dialog" role="dialog" aria-label={`Edit ${table.columns[arrayEditor.column - 1].name}`} onMouseDown={(event) => event.stopPropagation()}>
-                    <header><div><span>Array values</span><h2>{table.columns[arrayEditor.column - 1].name}</h2></div><button type="button" aria-label="Close array editor" onClick={() => setArrayEditor(null)}>x</button></header>
+                <section className="array-editor-dialog" role="dialog" aria-label={t("grid.editColumn", {name: table.columns[arrayEditor.column - 1].name})} onMouseDown={(event) => event.stopPropagation()}>
+                    <header><div><span>{t("grid.arrayValues")}</span><h2>{table.columns[arrayEditor.column - 1].name}</h2></div><button type="button" aria-label={t("grid.closeArrayEditor")} onClick={() => setArrayEditor(null)}>x</button></header>
                     <div className="array-entry-list">
                         {arrayEditor.entries.map((entry, index) => <div className="array-entry" key={`${index}:${entry}`}>
                             <code>{index + 1}</code>
-                            <input aria-label={`Array item ${index + 1}`} value={entry} onChange={(event) => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? event.target.value : value)})}/>
-                            <button type="button" aria-label={`Move item ${index + 1} up`} disabled={index === 0} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? arrayEditor.entries[index - 1] : position === index - 1 ? arrayEditor.entries[index] : value)})}>Up</button>
-                            <button type="button" aria-label={`Move item ${index + 1} down`} disabled={index === arrayEditor.entries.length - 1} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? arrayEditor.entries[index + 1] : position === index + 1 ? arrayEditor.entries[index] : value)})}>Down</button>
-                            <button type="button" aria-label={`Delete item ${index + 1}`} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.filter((_, position) => position !== index)})}>Delete</button>
+                            <input aria-label={t("grid.arrayItem", {index: index + 1})} value={entry} onChange={(event) => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? event.target.value : value)})}/>
+                            <button type="button" aria-label={t("grid.moveItemUp", {index: index + 1})} disabled={index === 0} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? arrayEditor.entries[index - 1] : position === index - 1 ? arrayEditor.entries[index] : value)})}>{t("grid.up")}</button>
+                            <button type="button" aria-label={t("grid.moveItemDown", {index: index + 1})} disabled={index === arrayEditor.entries.length - 1} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? arrayEditor.entries[index + 1] : position === index + 1 ? arrayEditor.entries[index] : value)})}>{t("grid.down")}</button>
+                            <button type="button" aria-label={t("grid.deleteItem", {index: index + 1})} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.filter((_, position) => position !== index)})}>{t("grid.delete")}</button>
                         </div>)}
                     </div>
-                    <button className="array-add" type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, ""]})}>Add item</button>
-                    <label className="array-paste">Paste items<textarea aria-label="Paste array items" value={arrayEditor.pasted} placeholder={'One CUE expression per line'} onChange={(event) => setArrayEditor({...arrayEditor, pasted: event.target.value})}/></label>
-                    <div className="dialog-actions"><button type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, ...arrayEditor.pasted.replace(/\r/g, "").split("\n").map((entry) => entry.trim()).filter(Boolean)], pasted: ""})} disabled={!arrayEditor.pasted.trim()}>Add pasted items</button><button type="button" onClick={() => setArrayEditor(null)}>Cancel</button><button type="button" onClick={saveArray}>Apply</button></div>
+                    <button className="array-add" type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, ""]})}>{t("grid.addItem")}</button>
+                    <label className="array-paste">{t("grid.pasteItems")}<textarea aria-label={t("grid.pasteArrayItems")} value={arrayEditor.pasted} placeholder={t("grid.pastePlaceholder")} onChange={(event) => setArrayEditor({...arrayEditor, pasted: event.target.value})}/></label>
+                    <div className="dialog-actions"><button type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, ...arrayEditor.pasted.replace(/\r/g, "").split("\n").map((entry) => entry.trim()).filter(Boolean)], pasted: ""})} disabled={!arrayEditor.pasted.trim()}>{t("grid.addPastedItems")}</button><button type="button" onClick={() => setArrayEditor(null)}>{t("common.cancel")}</button><button type="button" onClick={saveArray}>{t("common.apply")}</button></div>
                 </section>
             </div>}
             {structEditor && <div className="array-editor-backdrop" role="presentation" onMouseDown={() => setStructEditor(null)}>
-                <section className="struct-editor-dialog" role="dialog" aria-label={`Edit ${table.columns[structEditor.column - 1].name}`} onMouseDown={(event) => event.stopPropagation()}>
-                    <header><div><span>Structure values</span><h2>{table.columns[structEditor.column - 1].name}</h2></div><button type="button" aria-label="Close struct editor" onClick={() => setStructEditor(null)}>x</button></header>
-                    <div className="struct-field-list">{(table.columns[structEditor.column - 1].schema.fields ?? []).map((field) => <label key={field.name}>{field.name}{field.optional && <span>Optional</span>}<input aria-label={`Struct field ${field.name}`} value={structEditor.values[field.name] ?? ""} placeholder="CUE expression" onChange={(event) => setStructEditor({...structEditor, values: {...structEditor.values, [field.name]: event.target.value}})}/></label>)}</div>
-                    <div className="dialog-actions"><button type="button" onClick={() => setStructEditor(null)}>Cancel</button><button type="button" onClick={saveStruct}>Apply</button></div>
+                <section className="struct-editor-dialog" role="dialog" aria-label={t("grid.editColumn", {name: table.columns[structEditor.column - 1].name})} onMouseDown={(event) => event.stopPropagation()}>
+                    <header><div><span>{t("grid.structureValues")}</span><h2>{table.columns[structEditor.column - 1].name}</h2></div><button type="button" aria-label={t("grid.closeStructEditor")} onClick={() => setStructEditor(null)}>x</button></header>
+                    <div className="struct-field-list">{(table.columns[structEditor.column - 1].schema.fields ?? []).map((field) => <label key={field.name}>{field.name}{field.optional && <span>{t("grid.optional")}</span>}<input aria-label={t("grid.structField", {name: field.name})} value={structEditor.values[field.name] ?? ""} placeholder={t("grid.cueExpression")} onChange={(event) => setStructEditor({...structEditor, values: {...structEditor.values, [field.name]: event.target.value}})}/></label>)}</div>
+                    <div className="dialog-actions"><button type="button" onClick={() => setStructEditor(null)}>{t("common.cancel")}</button><button type="button" onClick={saveStruct}>{t("common.apply")}</button></div>
                 </section>
             </div>}
         </div>

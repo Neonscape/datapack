@@ -24,7 +24,9 @@ Linux 的默认路径为：
   "build": {
     "mode": "auto",
     "autoCompileDebounceSeconds": 10
-  }
+  },
+  "language": "zh-CN",
+  "theme": "system"
 }
 ```
 
@@ -35,6 +37,8 @@ Linux 的默认路径为：
 | `version` | 是 | 编辑器设置格式版本。v1 固定为 `1`。 |
 | `build.mode` | 是 | `auto` 或 `manual`。 |
 | `build.autoCompileDebounceSeconds` | `auto` 时是 | 自动编译等待秒数；默认 `10`。 |
+| `language` | 否 | 界面语言：`en` 或 `zh-CN`；默认 `zh-CN`。 |
+| `theme` | 否 | 颜色主题：`system`、`light` 或 `dark`；默认 `system`（跟随系统）。 |
 
 ## 编译模式
 

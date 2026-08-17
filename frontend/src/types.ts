@@ -33,7 +33,7 @@ export type WorkspaceView = {
         mode: "auto" | "manual";
         pending: boolean;
         compiledAt?: string;
-        diagnostics: {path: string; table?: string; field?: string; rowID?: string; column?: string; message: string}[];
+        diagnostics: {path: string; table?: string; field?: string; rowID?: string; column?: string; key?: string; args?: string[]; message: string}[];
     };
     canUndo: boolean;
     canRedo: boolean;
@@ -59,6 +59,8 @@ export type SchemaDiagnostic = {
     path: string;
     table?: string;
     field: string;
+    key?: string;
+    args?: string[];
     message: string;
 };
 
@@ -68,7 +70,7 @@ export type SchemaIndex = {
 };
 
 export type ForeignKeySummary = {
-    diagnostics?: { path: string; table?: string; rowID: string; column: string; message: string }[];
+    diagnostics?: { path: string; table?: string; rowID: string; column: string; key?: string; args?: string[]; message: string }[];
 };
 
 export type SchemaRequirement = {

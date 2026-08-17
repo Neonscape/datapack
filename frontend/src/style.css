@@ -1,11 +1,85 @@
+:root {
+    --bg: #f6f7f8;
+    --bg-surface: #ffffff;
+    --bg-panel: #fbfcfc;
+    --bg-subtle: #f0f3f5;
+    --bg-hover: #eef4f5;
+    --bg-selected: #e4f0f2;
+    --text: #20272f;
+    --text-strong: #26333d;
+    --text-muted: #687580;
+    --text-faint: #789096;
+    --text-disabled: #9aa6ad;
+    --text-on-accent: #ffffff;
+    --border: #d9dee3;
+    --border-strong: #cbd5da;
+    --accent: #126c7b;
+    --accent-hover: #0c5865;
+    --accent-strong: #2e7b87;
+    --accent-text: #285460;
+    --accent-bg: #e9f4f5;
+    --danger: #a54343;
+    --danger-text: #a33d3d;
+    --danger-bg: #fff4f4;
+    --danger-border: #e5c8c8;
+    --success-text: #11633c;
+    --success-bg: #e2f4e9;
+    --success-border: #b9d8c4;
+    --warning-text: #805a0a;
+    --warning-bg: #fff3d6;
+    --info: #267083;
+    --shadow: rgba(34, 50, 61, 0.18);
+    --shadow-strong: rgba(34, 50, 61, 0.24);
+    --backdrop: rgba(31, 44, 52, 0.32);
+    --focus-ring: rgba(18, 108, 123, 0.15);
+    --brand: #183a4a;
+}
+
+[data-theme="dark"] {
+    --bg: #12181d;
+    --bg-surface: #1b242b;
+    --bg-panel: #161d23;
+    --bg-subtle: #202a32;
+    --bg-hover: #23313b;
+    --bg-selected: #223540;
+    --text: #d5dde3;
+    --text-strong: #eef3f6;
+    --text-muted: #8fa0ab;
+    --text-faint: #6b7b85;
+    --text-disabled: #5d6b74;
+    --text-on-accent: #ffffff;
+    --border: #2a3640;
+    --border-strong: #384650;
+    --accent: #2f9db0;
+    --accent-hover: #3fb3c7;
+    --accent-strong: #2f9db0;
+    --accent-text: #7fd0dc;
+    --accent-bg: #16303a;
+    --danger: #c45050;
+    --danger-text: #e08a8a;
+    --danger-bg: #2a1c1f;
+    --danger-border: #4a2c30;
+    --success-text: #6fcf92;
+    --success-bg: #172a1e;
+    --success-border: #2c4a36;
+    --warning-text: #e0b45c;
+    --warning-bg: #2c2514;
+    --info: #6bb8cc;
+    --shadow: rgba(0, 0, 0, 0.4);
+    --shadow-strong: rgba(0, 0, 0, 0.55);
+    --backdrop: rgba(0, 0, 0, 0.5);
+    --focus-ring: rgba(47, 157, 176, 0.25);
+    --brand: #7fd0dc;
+}
+
 html {
-    background-color: #f6f7f8;
-    color: #20272f;
+    background-color: var(--bg);
+    color: var(--text);
 }
 
 body {
     margin: 0;
-    color: #20272f;
+    color: var(--text);
     font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
     "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;

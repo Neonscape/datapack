@@ -186,6 +186,21 @@ func (a *App) SetCompileMode(mode string) (workspace.View, error) {
 	return a.workspace.SetCompileMode(mode)
 }
 
+// GetSettings returns the user-level editor settings (language, theme, build).
+func (a *App) GetSettings() (workspace.EditorSettings, error) {
+	return a.workspace.GetSettings()
+}
+
+// SetLanguage persists the interface language.
+func (a *App) SetLanguage(language string) (workspace.EditorSettings, error) {
+	return a.workspace.SetLanguage(language)
+}
+
+// SetTheme persists the color theme preference.
+func (a *App) SetTheme(theme string) (workspace.EditorSettings, error) {
+	return a.workspace.SetTheme(theme)
+}
+
 // Navigate resolves one semantic jump to a document and location.
 func (a *App) Navigate(request navigation.Request) (navigation.Target, error) {
 	return a.workspace.Navigate(request)

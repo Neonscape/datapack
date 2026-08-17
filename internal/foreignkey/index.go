@@ -27,11 +27,13 @@ type Usage struct {
 }
 
 type Diagnostic struct {
-	Path    string `json:"path"`
-	Table   string `json:"table"`
-	RowID   string `json:"rowID"`
-	Column  string `json:"column"`
-	Message string `json:"message"`
+	Path    string   `json:"path"`
+	Table   string   `json:"table"`
+	RowID   string   `json:"rowID"`
+	Column  string   `json:"column"`
+	Key     string   `json:"key,omitempty"`
+	Args    []string `json:"args,omitempty"`
+	Message string   `json:"message"`
 }
 
 type Index struct {
@@ -77,7 +79,7 @@ func Build(tables []document.Table) Index {
 					target := Target{Table: key.Table, RowID: value}
 					index.Usages[target] = append(index.Usages[target], usage)
 					if rows, exists := known[key.Table]; !exists || !rows[value] {
-						index.Diagnostics = append(index.Diagnostics, Diagnostic{Path: table.Path, Table: name, RowID: row.ID, Column: key.Column, Message: "foreign key references missing row " + key.Table + "." + value})
+						index.Diagnostics = append(index.Diagnostics, Diagnostic{Path: table.Path, Table: name, RowID: row.ID, Column: key.Column, Key: "foreignkey.missingRow", Args: []string{key.Table + "." + value}, Message: "foreign key references missing row " + key.Table + "." + value})
 					}
 				}
 			}

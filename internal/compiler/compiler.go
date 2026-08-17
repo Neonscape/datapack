@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
@@ -19,12 +20,14 @@ import (
 
 // Diagnostic describes one compile problem with a source location.
 type Diagnostic struct {
-	Path    string `json:"path"`
-	Table   string `json:"table,omitempty"`
-	Field   string `json:"field,omitempty"`
-	RowID   string `json:"rowID,omitempty"`
-	Column  string `json:"column,omitempty"`
-	Message string `json:"message"`
+	Path    string   `json:"path"`
+	Table   string   `json:"table,omitempty"`
+	Field   string   `json:"field,omitempty"`
+	RowID   string   `json:"rowID,omitempty"`
+	Column  string   `json:"column,omitempty"`
+	Key     string   `json:"key,omitempty"`
+	Args    []string `json:"args,omitempty"`
+	Message string   `json:"message"`
 }
 
 // Result is the outcome of one full compile.
@@ -61,11 +64,11 @@ func CompileAll(publicSchemas []document.PublicSchema, tables []document.Table) 
 	result := Result{}
 	registry := schemaregistry.Build(publicSchemas, tables)
 	for _, diagnostic := range registry.Diagnostics {
-		result.Diagnostics = append(result.Diagnostics, Diagnostic{Path: diagnostic.Path, Table: diagnostic.Table, Field: diagnostic.Field, Message: diagnostic.Message})
+		result.Diagnostics = append(result.Diagnostics, Diagnostic{Path: diagnostic.Path, Table: diagnostic.Table, Field: diagnostic.Field, Key: diagnostic.Key, Args: diagnostic.Args, Message: diagnostic.Message})
 	}
 	fk := foreignkey.Build(tables)
 	for _, diagnostic := range fk.Diagnostics {
-		result.Diagnostics = append(result.Diagnostics, Diagnostic{Path: diagnostic.Path, Table: diagnostic.Table, RowID: diagnostic.RowID, Column: diagnostic.Column, Message: diagnostic.Message})
+		result.Diagnostics = append(result.Diagnostics, Diagnostic{Path: diagnostic.Path, Table: diagnostic.Table, RowID: diagnostic.RowID, Column: diagnostic.Column, Key: diagnostic.Key, Args: diagnostic.Args, Message: diagnostic.Message})
 	}
 	compiled := make([]Table, 0, len(tables))
 	for _, table := range tables {
@@ -112,7 +115,8 @@ func validateRows(table document.Table, evaluated map[string]map[string]any) (ma
 	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path)})
 	diagnostics := []Diagnostic{}
 	if len(instances) != 1 {
-		return nil, append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Message: fmt.Sprintf("load table package: expected one package, found %d", len(instances))})
+		count := strconv.Itoa(len(instances))
+		return nil, append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Key: "compile.expectedOnePackage", Args: []string{count}, Message: fmt.Sprintf("load table package: expected one package, found %s", count)})
 	}
 	context := cuecontext.New()
 	packageValue := context.BuildInstance(instances[0])
@@ -125,7 +129,7 @@ func validateRows(table document.Table, evaluated map[string]map[string]any) (ma
 	for _, row := range table.Rows {
 		base := len(diagnostics)
 		if err := primaryKey.Unify(context.Encode(row.ID)).Validate(cue.Concrete(true)); err != nil {
-			diagnostics = append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), RowID: row.ID, Message: "invalid ID: " + err.Error()})
+			diagnostics = append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), RowID: row.ID, Key: "compile.invalidID", Args: []string{err.Error()}, Message: "invalid ID: " + err.Error()})
 		}
 		for column, value := range evaluated[row.ID] {
 			fieldSchema := rowSchema.LookupPath(cue.MakePath(cue.Str(column)))

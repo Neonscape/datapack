@@ -109,6 +109,45 @@ func TestLoadEditorSettingsUsesDefaultsWhenFileIsMissing(t *testing.T) {
 	}
 }
 
+func TestLoadEditorSettingsDefaultsMissingLanguageAndTheme(t *testing.T) {
+	configRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(configRoot, "datapack"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, SettingsPath(configRoot), `{"version": 1, "build": {"mode": "auto", "autoCompileDebounceSeconds": 10}}`)
+	settings, err := LoadEditorSettings(configRoot)
+	if err != nil {
+		t.Fatalf("LoadEditorSettings() error = %v", err)
+	}
+	if settings.Language != DefaultLanguage || settings.Theme != DefaultTheme {
+		t.Fatalf("settings = %#v, want language %q theme %q", settings, DefaultLanguage, DefaultTheme)
+	}
+}
+
+func TestSetLanguageAndThemePersistAndValidate(t *testing.T) {
+	configRoot := t.TempDir()
+	service := NewService(configRoot)
+	if _, err := service.SetLanguage(LanguageEnglish); err != nil {
+		t.Fatalf("SetLanguage() error = %v", err)
+	}
+	if _, err := service.SetTheme(ThemeDark); err != nil {
+		t.Fatalf("SetTheme() error = %v", err)
+	}
+	settings, err := LoadEditorSettings(configRoot)
+	if err != nil {
+		t.Fatalf("LoadEditorSettings() error = %v", err)
+	}
+	if settings.Language != LanguageEnglish || settings.Theme != ThemeDark {
+		t.Fatalf("settings = %#v, want language %q theme %q", settings, LanguageEnglish, ThemeDark)
+	}
+	if _, err := service.SetLanguage("fr"); err == nil {
+		t.Fatal("SetLanguage(fr) = nil error, want unsupported language error")
+	}
+	if _, err := service.SetTheme("neon"); err == nil {
+		t.Fatal("SetTheme(neon) = nil error, want unsupported theme error")
+	}
+}
+
 func TestLoadProjectRejectsInvalidConfig(t *testing.T) {
 	projectRoot := t.TempDir()
 	path := filepath.Join(projectRoot, "invalid.dtproj")
@@ -1066,6 +1105,9 @@ rows: {sword: {name: "Sword"}}
 _tool: {table: {namespace: "rpg", name: "item"}}`)
 
 	service := NewService(t.TempDir())
+	if _, err := service.SetLanguage(LanguageEnglish); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
 		t.Fatal(err)
 	}
@@ -1192,6 +1234,9 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 
 	service := NewService(t.TempDir())
+	if _, err := service.SetLanguage(LanguageEnglish); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
 		t.Fatal(err)
 	}

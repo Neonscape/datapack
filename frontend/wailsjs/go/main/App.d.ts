@@ -35,6 +35,8 @@ export function Export():Promise<workspace.ExportResult>;
 
 export function GetPublicSchema(arg1:string):Promise<document.PublicSchema>;
 
+export function GetSettings():Promise<workspace.EditorSettings>;
+
 export function GetTable(arg1:string):Promise<document.Table>;
 
 export function LogPath():Promise<string>;
@@ -67,7 +69,11 @@ export function SetColumnSchema(arg1:workspace.ColumnSchemaSet):Promise<workspac
 
 export function SetCompileMode(arg1:string):Promise<workspace.View>;
 
+export function SetLanguage(arg1:string):Promise<workspace.EditorSettings>;
+
 export function SetSchemaDefinition(arg1:workspace.SchemaDefinitionSet):Promise<workspace.SchemaEditResult>;
+
+export function SetTheme(arg1:string):Promise<workspace.EditorSettings>;
 
 export function Undo():Promise<workspace.HistoryResult>;
 

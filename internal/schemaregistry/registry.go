@@ -34,10 +34,12 @@ type Usage struct {
 }
 
 type Diagnostic struct {
-	Path    string `json:"path"`
-	Table   string `json:"table,omitempty"`
-	Field   string `json:"field"`
-	Message string `json:"message"`
+	Path    string   `json:"path"`
+	Table   string   `json:"table,omitempty"`
+	Field   string   `json:"field"`
+	Key     string   `json:"key,omitempty"`
+	Args    []string `json:"args,omitempty"`
+	Message string   `json:"message"`
 }
 
 type Registry struct {
@@ -150,11 +152,11 @@ func (r Registry) Index() Index {
 
 func (r *Registry) addDefinition(definition Definition) {
 	if definition.Kind != KindType && definition.Kind != KindConstraint {
-		r.Diagnostics = append(r.Diagnostics, Diagnostic{Path: definition.Path, Table: definition.Table, Field: string(definition.ID), Message: "Schema kind must be type or constraint"})
+		r.errorKeyed(definition.Path, definition.Table, string(definition.ID), "schema.kindInvalid", "Schema kind must be type or constraint")
 		return
 	}
 	if _, exists := r.Definitions[definition.ID]; exists {
-		r.Diagnostics = append(r.Diagnostics, Diagnostic{Path: definition.Path, Table: definition.Table, Field: string(definition.ID), Message: "duplicate Schema definition"})
+		r.errorKeyed(definition.Path, definition.Table, string(definition.ID), "schema.duplicateDefinition", "duplicate Schema definition")
 		return
 	}
 	r.Definitions[definition.ID] = definition
@@ -193,19 +195,19 @@ func (r *Registry) validateReference(reference, path, table, field, currentTable
 	}
 	definition, exists := r.Definitions[id]
 	if !exists {
-		r.error(path, table, field, "Schema reference "+reference+" does not exist")
+		r.errorKeyed(path, table, field, "schema.referenceDoesNotExist", "Schema reference "+reference+" does not exist", reference)
 		return
 	}
 	if constraintContext && definition.Kind != KindConstraint {
-		r.error(path, table, field, "Schema reference "+reference+" must be a constraint Schema")
+		r.errorKeyed(path, table, field, "schema.referenceMustBeConstraint", "Schema reference "+reference+" must be a constraint Schema", reference)
 		return
 	}
 	if constraintContext && len(sourceKind) > 0 && !appliesTo(definition.AppliesTo, sourceKind[0]) {
-		r.error(path, table, field, "constraint Schema "+reference+" does not apply to "+string(sourceKind[0]))
+		r.errorKeyed(path, table, field, "schema.constraintDoesNotApply", "constraint Schema "+reference+" does not apply to "+string(sourceKind[0]), reference, string(sourceKind[0]))
 		return
 	}
 	if !constraintContext && definition.Kind != KindType {
-		r.error(path, table, field, "Schema reference "+reference+" must be a type Schema")
+		r.errorKeyed(path, table, field, "schema.referenceMustBeType", "Schema reference "+reference+" must be a type Schema", reference)
 		return
 	}
 	r.Usages[id] = append(r.Usages[id], Usage{Definition: id, Path: path, Table: table, Field: field})
@@ -242,7 +244,7 @@ func (r *Registry) visit(id ID, graph map[ID][]ID, state map[ID]int, stack *[]ID
 	if state[id] == 1 {
 		cycle := append(append([]ID{}, *stack...), id)
 		definition := r.Definitions[id]
-		r.error(definition.Path, definition.Table, string(id), "Schema cycle: "+joinIDs(cycle))
+		r.errorKeyed(definition.Path, definition.Table, string(id), "schema.cycle", "Schema cycle: "+joinIDs(cycle), joinIDs(cycle))
 		return
 	}
 	state[id] = 1
@@ -286,6 +288,10 @@ func referencesForNode(node schemamodel.Node, table, packageName string) []ID {
 
 func (r *Registry) error(path, table, field, message string) {
 	r.Diagnostics = append(r.Diagnostics, Diagnostic{Path: path, Table: table, Field: field, Message: message})
+}
+
+func (r *Registry) errorKeyed(path, table, field, key, message string, args ...string) {
+	r.Diagnostics = append(r.Diagnostics, Diagnostic{Path: path, Table: table, Field: field, Key: key, Args: args, Message: message})
 }
 
 func publicID(packageName, name string) ID {

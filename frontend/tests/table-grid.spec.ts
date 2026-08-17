@@ -64,6 +64,9 @@ test.beforeEach(async ({page}) => {
     await page.addInitScript(({table, workspace, publicSchema}) => {
         const api = {
             SelectProject: () => Promise.resolve(workspace),
+            GetSettings: () => Promise.resolve({language: "en", theme: "system"}),
+            SetLanguage: () => Promise.resolve({language: "en", theme: "system"}),
+            SetTheme: () => Promise.resolve({language: "en", theme: "system"}),
             GetTable: () => Promise.resolve(table),
             GetPublicSchema: () => Promise.resolve(publicSchema),
             UpdateCell: () => Promise.resolve({table, workspace}),
@@ -424,6 +427,18 @@ test("groups history commands under Edit", async ({page}) => {
     await expect(page.getByRole("button", {name: /Redo/})).toBeEnabled();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", {name: /Undo/})).toBeHidden();
+});
+
+test("switches theme and language from the settings panel", async ({page}) => {
+    await page.getByRole("button", {name: "Settings"}).click();
+    await expect(page.getByRole("heading", {name: "Settings"})).toBeVisible();
+    await page.getByLabel("Theme").selectOption("dark");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.getByLabel("Language").selectOption("zh-CN");
+    await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+    await page.getByRole("button", {name: "应用"}).click();
+    await page.getByRole("button", {name: "编辑"}).click();
+    await expect(page.getByRole("button", {name: /撤销/})).toBeEnabled();
 });
 
 test("undoes and redoes edits from the Edit menu", async ({page}) => {

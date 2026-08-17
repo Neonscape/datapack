@@ -62,6 +62,10 @@ export function GetPublicSchema(arg1) {
   return window['go']['main']['App']['GetPublicSchema'](arg1);
 }
 
+export function GetSettings() {
+  return window['go']['main']['App']['GetSettings']();
+}
+
 export function GetTable(arg1) {
   return window['go']['main']['App']['GetTable'](arg1);
 }
@@ -126,8 +130,16 @@ export function SetCompileMode(arg1) {
   return window['go']['main']['App']['SetCompileMode'](arg1);
 }
 
+export function SetLanguage(arg1) {
+  return window['go']['main']['App']['SetLanguage'](arg1);
+}
+
 export function SetSchemaDefinition(arg1) {
   return window['go']['main']['App']['SetSchemaDefinition'](arg1);
+}
+
+export function SetTheme(arg1) {
+  return window['go']['main']['App']['SetTheme'](arg1);
 }
 
 export function Undo() {
