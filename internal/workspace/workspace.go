@@ -145,7 +145,8 @@ type RowRenameResult struct {
 }
 
 type ExportResult struct {
-	Files []string `json:"files"`
+	Directory string   `json:"directory"`
+	Files     []string `json:"files"`
 }
 
 type CompileResult struct {
@@ -1731,7 +1732,7 @@ func (s *Service) Export() (ExportResult, error) {
 		return ExportResult{}, err
 	}
 	s.log(logging.Info, "export completed", map[string]any{"files": len(result.Files), "destination": destination})
-	return ExportResult{Files: result.Files}, nil
+	return ExportResult{Directory: destination, Files: result.Files}, nil
 }
 
 func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {

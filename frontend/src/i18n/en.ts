@@ -7,6 +7,7 @@ export const en: Record<string, string> = {
     "common.type": "Type",
     "common.delete": "Delete",
     "common.local": "(local)",
+    "common.close": "Close",
 
     "menu.file": "File",
     "menu.edit": "Edit",
@@ -85,6 +86,9 @@ export const en: Record<string, string> = {
     "error.columnPosition": "Column position must be an integer",
 
     "export.done": "Exported {count} CSV file{s}",
+    "export.title": "Export complete",
+    "export.directory": "Directory",
+    "export.openDirectory": "Open directory",
 
     "schemaEditor.local": "Local Schema",
     "schemaEditor.public": "Public Schema",

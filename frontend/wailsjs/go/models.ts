@@ -1314,6 +1314,7 @@ export namespace workspace {
 	
 	
 	export class ExportResult {
+	    directory: string;
 	    files: string[];
 	
 	    static createFrom(source: any = {}) {
@@ -1322,6 +1323,7 @@ export namespace workspace {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.directory = source["directory"];
 	        this.files = source["files"];
 	    }
 	}

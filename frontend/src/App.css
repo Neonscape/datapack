@@ -841,6 +841,29 @@
 
 .structure-dialog textarea { min-height: 88px; resize: vertical; }
 
+.export-files {
+    max-height: 180px;
+    margin: 0;
+    padding: 0;
+    overflow: auto;
+    list-style: none;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-muted);
+    background: var(--bg-panel);
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.export-files li {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.export-files li:last-child { border-bottom: 0; }
+
 .dialog-actions {
     display: flex;
     justify-content: flex-end;

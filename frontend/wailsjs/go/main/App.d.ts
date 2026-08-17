@@ -45,6 +45,8 @@ export function MoveColumn(arg1:workspace.ColumnMove):Promise<workspace.ColumnMo
 
 export function Navigate(arg1:navigation.Request):Promise<navigation.Target>;
 
+export function OpenPath(arg1:string):Promise<void>;
+
 export function OpenProject(arg1:string):Promise<workspace.View>;
 
 export function Paste(arg1:workspace.Paste):Promise<workspace.HistoryResult>;

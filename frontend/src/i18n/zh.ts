@@ -7,6 +7,7 @@ export const zh: Record<string, string> = {
     "common.type": "类型",
     "common.delete": "删除",
     "common.local": "（本地）",
+    "common.close": "关闭",
 
     "menu.file": "文件",
     "menu.edit": "编辑",
@@ -85,6 +86,9 @@ export const zh: Record<string, string> = {
     "error.columnPosition": "列位置必须为整数",
 
     "export.done": "已导出 {count} 个 CSV 文件",
+    "export.title": "导出完成",
+    "export.directory": "导出目录",
+    "export.openDirectory": "打开目录",
 
     "schemaEditor.local": "本地 Schema",
     "schemaEditor.public": "公共 Schema",

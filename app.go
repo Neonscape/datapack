@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	goruntime "runtime"
 
 	"datapack/internal/document"
 	"datapack/internal/logging"
@@ -173,6 +175,24 @@ func (a *App) RenameRow(rename workspace.RowRename) (workspace.RowRenameResult, 
 // Export writes the current project's configured CSV output.
 func (a *App) Export() (workspace.ExportResult, error) {
 	return a.workspace.Export()
+}
+
+// OpenPath opens a file or directory using the operating system's default
+// handler (file manager on Linux/macOS, Explorer on Windows).
+func (a *App) OpenPath(path string) error {
+	var command *exec.Cmd
+	switch goruntime.GOOS {
+	case "darwin":
+		command = exec.Command("open", path)
+	case "windows":
+		command = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
+	default:
+		command = exec.Command("xdg-open", path)
+	}
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("open path: %w", err)
+	}
+	return nil
 }
 
 // Compile runs one full compile and returns the refreshed workspace view.

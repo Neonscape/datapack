@@ -84,7 +84,8 @@ test.beforeEach(async ({page}) => {
             Paste: () => Promise.resolve({table, workspace, canUndo: true, canRedo: false}),
             Undo: () => Promise.resolve({table, workspace, canUndo: false, canRedo: true}),
             Redo: () => Promise.resolve({table, workspace, canUndo: true, canRedo: false}),
-            Export: () => Promise.resolve({files: []}),
+            Export: () => Promise.resolve({directory: "/project/exports", files: ["/project/exports/rpg.item.csv"]}),
+            OpenPath: () => Promise.resolve(),
             CreateSchemaDefinition: (argument) => {
                 publicSchema.definitions.push({name: argument.name, kind: argument.kind, type: argument.type, appliesTo: argument.appliesTo, schema: {kind: "string"}, schemaExpression: argument.schemaExpression});
                 return Promise.resolve({schema: publicSchema, table, workspace});

@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import './App.css';
-import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
 import {schemamodel} from "../wailsjs/go/models";
 import {useTranslation, type Language} from "./i18n";
 import {useTheme, type ThemePreference} from "./theme";
@@ -46,6 +46,7 @@ function App() {
     const [dialog, setDialog] = useState<StructureDialog | null>(null);
     const [tableDialog, setTableDialog] = useState<TableDialog | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [exportResult, setExportResult] = useState<{directory: string; files: string[]} | null>(null);
     const [appMenu, setAppMenu] = useState<"file" | "edit" | null>(null);
     const [focusTarget, setFocusTarget] = useState<{path: string; rowID: string; column: string; nonce: number} | null>(null);
     const [navMenu, setNavMenu] = useState<{x: number; y: number; targets: NavTarget[]} | null>(null);
@@ -603,8 +604,9 @@ function App() {
         setError("");
         setNotice("");
         try {
-            const result = await Export();
-            setNotice(t("export.done", {count: result.files.length, s: result.files.length === 1 ? "" : "s"}));
+            const result = await Export() as {directory: string; files: string[]};
+            setExportResult(result);
+            void OpenPath(result.directory).catch(() => undefined);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         }
@@ -866,6 +868,14 @@ function App() {
                         </select>
                     </label>
                     <div className="dialog-actions"><button type="submit">{t("common.apply")}</button></div>
+                </form>
+            </div>}
+            {exportResult && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setExportResult(null)}>
+                <form className="structure-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void OpenPath(exportResult.directory); }}>
+                    <h2>{t("export.title")}</h2>
+                    <label>{t("export.directory")}<input value={exportResult.directory} readOnly onFocus={(event) => event.currentTarget.select()}/></label>
+                    <ul className="export-files">{exportResult.files.map((file) => <li key={file}>{file}</li>)}</ul>
+                    <div className="dialog-actions"><button type="button" onClick={() => setExportResult(null)}>{t("common.close")}</button><button type="submit">{t("export.openDirectory")}</button></div>
                 </form>
             </div>}
         </main>

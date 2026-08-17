@@ -86,7 +86,7 @@ const enumRenderer: CustomRenderer<EnumCell> = {
 
 export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onNavigate, focusTarget, onFocusDone}: { table: TableDocument; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
     const {t} = useTranslation();
-    const {grid} = useTheme();
+    const {grid, dataGridTheme} = useTheme();
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
     const [draftError, setDraftError] = useState("");
     const [contextRow, setContextRow] = useState<number | null>(null);
@@ -437,6 +437,7 @@ export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEd
                 rowMarkers="clickable-number"
                 rowHeight={30}
                 headerHeight={34}
+                theme={dataGridTheme}
                 smoothScrollX
                 smoothScrollY
                 onCellEdited={editCell}

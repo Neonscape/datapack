@@ -82,6 +82,10 @@ export function Navigate(arg1) {
   return window['go']['main']['App']['Navigate'](arg1);
 }
 
+export function OpenPath(arg1) {
+  return window['go']['main']['App']['OpenPath'](arg1);
+}
+
 export function OpenProject(arg1) {
   return window['go']['main']['App']['OpenProject'](arg1);
 }
