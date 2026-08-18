@@ -809,8 +809,11 @@ function App() {
                 <section className="welcome">
                     <div className="welcome-mark">DP</div>
                     <h1>{t("welcome.title")}</h1>
-                    <p>{t("welcome.body", {file: ".dtproj"})}</p>
-                    <button className="open-button open-button-large" onClick={selectProject}>{t("menu.openProject")}</button>
+                    <p>{t("welcome.body")}</p>
+                    <div className="welcome-actions">
+                        <button className="open-button" onClick={selectProject}>{t("menu.openProject")}</button>
+                        <button className="export-button" onClick={createProject}>{t("menu.newProject")}</button>
+                    </div>
                 </section>
             )}
             <LogPanel/>

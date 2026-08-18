@@ -36,8 +36,8 @@ export const en: Record<string, string> = {
     "panel.compileDiagnostics": "Compile diagnostics",
     "panel.compile": "compile",
 
-    "welcome.title": "Open a data project",
-    "welcome.body": "Choose a {file} file to inspect its tables and public Schema files.",
+    "welcome.title": "Data project",
+    "welcome.body": "Open an existing project or create a new one to get started.",
 
     "empty.noOpenDocuments": "No open documents",
     "empty.noReferences": "No references",

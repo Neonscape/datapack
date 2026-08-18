@@ -12,7 +12,7 @@ export const zh: Record<string, string> = {
     "menu.file": "文件",
     "menu.edit": "编辑",
     "menu.openProject": "打开项目",
-    "menu.newProject": "新建工程",
+    "menu.newProject": "新建项目",
     "menu.newTable": "新建表",
     "menu.saveAs": "另存为",
     "menu.undo": "撤销",
@@ -36,8 +36,8 @@ export const zh: Record<string, string> = {
     "panel.compileDiagnostics": "编译诊断",
     "panel.compile": "compile",
 
-    "welcome.title": "打开数据项目",
-    "welcome.body": "选择一个 {file} 文件以查看其中的表和公共 Schema 文件。",
+    "welcome.title": "数据项目",
+    "welcome.body": "打开已有项目，或新建一个项目开始工作。",
 
     "empty.noOpenDocuments": "没有打开的文档",
     "empty.noReferences": "无引用",
