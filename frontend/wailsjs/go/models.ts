@@ -138,6 +138,20 @@ export namespace document {
 	        this.message = source["message"];
 	    }
 	}
+	export class ExportSettings {
+	    enabled: boolean;
+	    columns?: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new ExportSettings(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.columns = source["columns"];
+	    }
+	}
 	export class ForeignKey {
 	    column: string;
 	    table: string;
@@ -287,6 +301,7 @@ export namespace document {
 	    formulas?: Formula[];
 	    diagnostics?: Diagnostic[];
 	    csvExport?: CSVExport;
+	    exports?: Record<string, ExportSettings>;
 	    localSchema: SchemaDefinition[];
 	
 	    static createFrom(source: any = {}) {
@@ -306,6 +321,7 @@ export namespace document {
 	        this.formulas = this.convertValues(source["formulas"], Formula);
 	        this.diagnostics = this.convertValues(source["diagnostics"], Diagnostic);
 	        this.csvExport = this.convertValues(source["csvExport"], CSVExport);
+	        this.exports = this.convertValues(source["exports"], ExportSettings, true);
 	        this.localSchema = this.convertValues(source["localSchema"], SchemaDefinition);
 	    }
 	
@@ -1315,6 +1331,24 @@ export namespace workspace {
 	
 	
 	
+	export class ExportFormat {
+	    id: string;
+	    labels: Record<string, string>;
+	    supportsColumns: boolean;
+	    extensions?: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new ExportFormat(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.labels = source["labels"];
+	        this.supportsColumns = source["supportsColumns"];
+	        this.extensions = source["extensions"];
+	    }
+	}
 	export class ExportResult {
 	    directory: string;
 	    files: string[];
@@ -1498,7 +1532,9 @@ export namespace workspace {
 	export class ProjectSettings {
 	    project: ProjectInfo;
 	    export: ExportConfig;
+	    formats: ExportFormat[];
 	    tables: ExportTable[];
+	    workspace: View;
 
 	    static createFrom(source: any = {}) {
 	        return new ProjectSettings(source);
@@ -1508,7 +1544,9 @@ export namespace workspace {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.project = this.convertValues(source["project"], ProjectInfo);
 	        this.export = this.convertValues(source["export"], ExportConfig);
+	        this.formats = this.convertValues(source["formats"], ExportFormat);
 	        this.tables = this.convertValues(source["tables"], ExportTable);
+	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1931,6 +1969,70 @@ export namespace workspace {
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TableExportSettings {
+	    path: string;
+	    formats: Record<string, document.ExportSettings>;
+
+	    static createFrom(source: any = {}) {
+	        return new TableExportSettings(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.formats = this.convertValues(source["formats"], document.ExportSettings, true);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TableExportSettingsResult {
+	    table: document.Table;
+	    workspace: View;
+
+	    static createFrom(source: any = {}) {
+	        return new TableExportSettingsResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = this.convertValues(source["table"], document.Table);
+	        this.workspace = this.convertValues(source["workspace"], View);
+	    }
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;

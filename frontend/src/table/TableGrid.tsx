@@ -3,7 +3,8 @@ import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCel
 import "@glideapps/glide-data-grid/dist/index.css";
 import {useTranslation} from "../i18n";
 import {useTheme} from "../theme";
-import type {NavRequest, TableDocument} from "../types";
+import {TableExportSettings as TableExportSettingsPanel} from "./TableExportSettings";
+import type {ExportFormat, NavRequest, TableDocument, TableExportSettings as TableExportSettingsModel} from "../types";
 
 type DraftRow = { id: string; values: Record<string, string> };
 type EnumCell = CustomCell<{kind: "enum"; value: string; options: string[]}>;
@@ -84,7 +85,7 @@ const enumRenderer: CustomRenderer<EnumCell> = {
     </select>, disablePadding: true}),
 };
 
-export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onNavigate, focusTarget, onFocusDone}: { table: TableDocument; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
+export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveExportSettings, onNavigate, focusTarget, onFocusDone}: { table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
     const {t} = useTranslation();
     const {grid, dataGridTheme} = useTheme();
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
@@ -550,5 +551,6 @@ export function TableGrid({table, onAddColumn, onDeleteColumn, onDeleteRow, onEd
                 </section>
             </div>}
         </div>
+        <TableExportSettingsPanel table={table} formats={formats} onSave={onSaveExportSettings}/>
     </div>;
 }

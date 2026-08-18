@@ -62,13 +62,27 @@ export type ProjectSettings = {
         targets: string[];
         tables?: Record<string, boolean>;
     };
+    formats: ExportFormat[];
     tables: ProjectExportTable[];
+    workspace: WorkspaceView;
 };
 
 export type ProjectExportSettings = {
     directory: string;
     targets: string[];
     tables: Record<string, boolean>;
+};
+
+export type ExportFormat = {
+    id: string;
+    labels: Record<string, string>;
+    supportsColumns: boolean;
+    extensions?: string[];
+};
+
+export type TableExportSettings = {
+    path: string;
+    formats: Record<string, {enabled: boolean; columns?: string[]}>;
 };
 
 export type SchemaUsage = {
@@ -135,6 +149,7 @@ export type TableDocument = {
     rows: { id: string; values: Record<string, { expression: string; display: string; formula?: boolean }> }[];
     diagnostics?: { rowID: string; column?: string; message: string }[];
     localSchema: SchemaDefinitionDocument[];
+    exports?: Record<string, {enabled: boolean; columns?: string[]}>;
 };
 
 export type NavRequest = {

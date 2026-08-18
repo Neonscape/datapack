@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import './App.css';
-import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
-import {schemamodel} from "../wailsjs/go/models";
+import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {schemamodel, workspace as workspaceModel} from "../wailsjs/go/models";
 import {useTranslation, type Language} from "./i18n";
 import {useTheme, type ThemePreference} from "./theme";
 import {LogPanel} from "./LogPanel";
@@ -11,7 +11,7 @@ import {SchemaForm} from "./schema/SchemaForm";
 import {ProjectSettings} from "./project/ProjectSettings";
 import {TableGrid} from "./table/TableGrid";
 import {Tree} from "./tree/Tree";
-import type {CellError, NavRequest, NavTarget, PublicSchemaDocument, SchemaDefinition, SchemaEditorState, SchemaEditResult, SchemaNode, SchemaUsage, TableDocument, TreeNode, WorkspaceView} from "./types";
+import type {CellError, ExportFormat, NavRequest, NavTarget, PublicSchemaDocument, SchemaDefinition, SchemaEditorState, SchemaEditResult, SchemaNode, SchemaUsage, TableDocument, TableExportSettings as TableExportSettingsModel, TreeNode, WorkspaceView} from "./types";
 
 type StructureDialog = {
     mode: "add" | "schema" | "rename" | "move" | "delete";
@@ -48,6 +48,7 @@ function App() {
     const [tableDialog, setTableDialog] = useState<TableDialog | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
+    const [exportFormats, setExportFormats] = useState<ExportFormat[]>([]);
     const [exportResult, setExportResult] = useState<{directory: string; files: string[]} | null>(null);
     const [appMenu, setAppMenu] = useState<"file" | "edit" | null>(null);
     const [focusTarget, setFocusTarget] = useState<{path: string; rowID: string; column: string; nonce: number} | null>(null);
@@ -63,7 +64,8 @@ function App() {
     useEffect(() => {
         void (async () => {
             try {
-                const settings = await GetSettings() as {language?: string; theme?: string};
+                const [settings, formats] = await Promise.all([GetSettings() as Promise<{language?: string; theme?: string}>, GetExportFormats() as Promise<ExportFormat[]>]);
+                setExportFormats(formats);
                 if (settings.language === "en" || settings.language === "zh-CN") setLanguage(settings.language);
                 if (settings.theme === "system" || settings.theme === "light" || settings.theme === "dark") setPreference(settings.theme);
             } catch {
@@ -530,6 +532,19 @@ function App() {
         }
     }
 
+    async function saveTableExportSettings(settings: TableExportSettingsModel) {
+        setError("");
+        try {
+            const result = await SetTableExportSettings(new workspaceModel.TableExportSettings(settings)) as {table: TableDocument; workspace: WorkspaceView};
+            updateActiveTable(result.table);
+            setWorkspace(result.workspace);
+        } catch (reason) {
+            const message = reason instanceof Error ? reason.message : String(reason);
+            setError(message);
+            throw reason;
+        }
+    }
+
     async function submitStructureDialog() {
         if (!table || !dialog) return;
         setError("");
@@ -651,6 +666,8 @@ function App() {
                         {appMenu === "file" && <div className="app-menu-popover">
                             <button onClick={() => { setAppMenu(null); selectProject(); }}>{t("menu.openProject")}</button>
                             <button disabled={!workspace} onClick={() => { setAppMenu(null); setTableDialog({namespace: "game", name: ""}); }}>{t("menu.newTable")}</button>
+                            <button disabled={!workspace} onClick={() => { setAppMenu(null); setProjectSettingsOpen(true); }}>{t("projectSettings.title")}</button>
+                            <button disabled={!workspace} onClick={() => { setAppMenu(null); void exportProject(); }}>{t("menu.export")}</button>
                         </div>}
                     </div>
                     <div className="app-menu">
@@ -666,8 +683,6 @@ function App() {
                     {workspace && <button className={`build-mode build-mode-${workspace.compile.mode} build-mode-toggle`} aria-label={t("header.toggleCompileMode")} title={t("header.compileModeHint")} onClick={toggleCompileMode}>{workspace.compile.mode === "auto" ? t("header.autoCompile") : t("header.manualCompile")}{workspace.compile.pending ? t("header.pending") : ""}</button>}
                     {workspace && workspace.compile.mode === "manual" && <button className="compile-button" disabled={!workspace.compile.pending} onClick={compileProject}>{t("header.compile")}</button>}
                     {workspace && workspace.compile.diagnostics.length > 0 && <span className="compile-errors" title={t("header.compileDiagnostics")}>{workspace.compile.diagnostics.length}</span>}
-                    {workspace && <button className="export-button" onClick={exportProject}>{t("header.exportCsv")}</button>}
-                    {workspace && <button className="export-button" onClick={() => setProjectSettingsOpen(true)}>{t("projectSettings.title")}</button>}
                     <button className="export-button" aria-label={t("settings.title")} onClick={() => setSettingsOpen(true)}>{t("settings.title")}</button>
                 </div>
             </header>
@@ -703,7 +718,7 @@ function App() {
                         {tabs.map((tab) => (
                             <div key={tab.id} className="tab-panel" style={{display: tab.id === activeTabId && !selectedSchema ? "flex" : "none"}}>
                                 {tab.kind === "table"
-                                    ? <TableGrid key={tab.id} table={tab.table} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`, node: {kind: "string"}, custom: false})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: "", node: tab.table.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/>
+                                    ? <TableGrid key={tab.id} table={tab.table} formats={exportFormats} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`, node: {kind: "string"}, custom: false})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: "", node: tab.table.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onSaveExportSettings={saveTableExportSettings} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/>
                                     : <SchemaEditor key={tab.id} state={tab.state} usages={schemaUsages} onOpenUsage={openUsage} workspace={workspace} onSelect={(name) => updateSchemaTabById(tab.id, {...tab.state, selected: name, creating: false})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/>}
                             </div>
                         ))}
@@ -873,7 +888,7 @@ function App() {
                     <div className="dialog-actions"><button type="submit">{t("common.apply")}</button></div>
                 </form>
             </div>}
-            {projectSettingsOpen && <ProjectSettings onClose={() => setProjectSettingsOpen(false)}/>}
+            {projectSettingsOpen && <ProjectSettings onClose={() => setProjectSettingsOpen(false)} onSaved={(view) => setWorkspace(view)}/>}
             {exportResult && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setExportResult(null)}>
                 <form className="structure-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void OpenPath(exportResult.directory); }}>
                     <h2>{t("export.title")}</h2>

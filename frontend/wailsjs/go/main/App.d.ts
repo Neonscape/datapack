@@ -33,6 +33,8 @@ export function DeleteTable(arg1:workspace.TableDelete):Promise<workspace.TableD
 
 export function Export():Promise<workspace.ExportResult>;
 
+export function GetExportFormats():Promise<Array<workspace.ExportFormat>>;
+
 export function GetProjectSettings():Promise<workspace.ProjectSettings>;
 
 export function GetPublicSchema(arg1:string):Promise<document.PublicSchema>;
@@ -67,6 +69,8 @@ export function RenameTable(arg1:workspace.TableRename):Promise<workspace.TableR
 
 export function SelectProject():Promise<workspace.View>;
 
+export function SelectProjectExportDirectory():Promise<string>;
+
 export function SetCellFormula(arg1:workspace.FormulaSet):Promise<workspace.FormulaSetResult>;
 
 export function SetColumnSchema(arg1:workspace.ColumnSchemaSet):Promise<workspace.ColumnSchemaSetResult>;
@@ -78,6 +82,8 @@ export function SetLanguage(arg1:string):Promise<workspace.EditorSettings>;
 export function SetProjectExportSettings(arg1:workspace.ProjectExportSettings):Promise<workspace.ProjectSettings>;
 
 export function SetSchemaDefinition(arg1:workspace.SchemaDefinitionSet):Promise<workspace.SchemaEditResult>;
+
+export function SetTableExportSettings(arg1:workspace.TableExportSettings):Promise<workspace.TableExportSettingsResult>;
 
 export function SetTheme(arg1:string):Promise<workspace.EditorSettings>;
 

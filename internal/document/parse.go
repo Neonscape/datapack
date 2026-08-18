@@ -33,6 +33,7 @@ func LoadTable(path string) (Table, error) {
 		ForeignKeys: []ForeignKey{},
 		Formulas:    []Formula{},
 		LocalSchema: []SchemaDefinition{},
+		Exports:     map[string]ExportSettings{},
 	}
 	if packageDecl := packageOfFile(file); packageDecl != nil && packageDecl.Name != nil {
 		document.Package = packageDecl.Name.Name
@@ -64,12 +65,16 @@ func LoadTable(path string) (Table, error) {
 		}
 	}
 	if export := fields["_export"]; export != nil {
-		exportFields := fieldsOfStruct(export.Value)
-		if csv := exportFields["csv"]; csv != nil {
-			csvFields := fieldsOfStruct(csv.Value)
-			enabled := csvFields["enabled"]
-			if enabled != nil && boolOf(enabled.Value) {
-				columns := stringListOf(csvFields["columns"])
+		for _, format := range orderedStructFields(export.Value) {
+			formatFields := fieldsOfStruct(format.Value)
+			enabled := formatFields["enabled"]
+			if enabled == nil {
+				continue
+			}
+			columns := stringListOf(formatFields["columns"])
+			settings := ExportSettings{Enabled: boolOf(enabled.Value), Columns: columns}
+			document.Exports[labelOf(format)] = settings
+			if labelOf(format) == "csv" && settings.Enabled {
 				if len(columns) == 0 {
 					return Table{}, fmt.Errorf("parse CSV export: columns must not be empty")
 				}

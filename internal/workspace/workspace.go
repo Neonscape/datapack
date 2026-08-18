@@ -19,7 +19,7 @@ import (
 	"cuelang.org/go/cue/token"
 	"datapack/internal/compiler"
 	"datapack/internal/document"
-	"datapack/internal/export/csv"
+	"datapack/internal/exporters"
 	"datapack/internal/foreignkey"
 	"datapack/internal/formula"
 	"datapack/internal/i18n"
@@ -60,6 +60,7 @@ type Service struct {
 	compileState     CompileState
 	settings         EditorSettings
 	settingsLoaded   bool
+	exporters        exporters.Registry
 }
 
 type CellUpdate struct {
@@ -149,10 +150,29 @@ type ExportResult struct {
 	Files     []string `json:"files"`
 }
 
+type ExportFormat struct {
+	ID              string            `json:"id"`
+	Labels          map[string]string `json:"labels"`
+	SupportsColumns bool              `json:"supportsColumns"`
+	Extensions      []string          `json:"extensions,omitempty"`
+}
+
+type TableExportSettings struct {
+	Path    string                             `json:"path"`
+	Formats map[string]document.ExportSettings `json:"formats"`
+}
+
+type TableExportSettingsResult struct {
+	Table     document.Table `json:"table"`
+	Workspace View           `json:"workspace"`
+}
+
 type ProjectSettings struct {
-	Project ProjectInfo   `json:"project"`
-	Export  ExportConfig  `json:"export"`
-	Tables  []ExportTable `json:"tables"`
+	Project   ProjectInfo    `json:"project"`
+	Export    ExportConfig   `json:"export"`
+	Formats   []ExportFormat `json:"formats"`
+	Tables    []ExportTable  `json:"tables"`
+	Workspace View           `json:"workspace"`
 }
 
 type ProjectInfo struct {
@@ -480,7 +500,11 @@ type SchemaEditResult struct {
 }
 
 func NewService(configRoot string) *Service {
-	return &Service{configRoot: configRoot}
+	registry, err := exporters.Discover()
+	if err != nil {
+		panic(fmt.Sprintf("discover built-in exporters: %v", err))
+	}
+	return &Service{configRoot: configRoot, exporters: registry}
 }
 
 func (s *Service) SetLogger(logger *logging.Logger) {
@@ -720,6 +744,53 @@ func (s *Service) GetProjectSettings() (ProjectSettings, error) {
 	return s.projectSettings(), nil
 }
 
+func (s *Service) GetExportFormats() []ExportFormat {
+	formats := s.exporters.Formats()
+	result := make([]ExportFormat, 0, len(formats))
+	for _, format := range formats {
+		result = append(result, ExportFormat{ID: format.ID, Labels: format.Labels, SupportsColumns: format.SupportsColumns, Extensions: format.Extensions})
+	}
+	return result
+}
+
+func (s *Service) NormalizeProjectExportDirectory(path string) (string, error) {
+	if s.current == nil {
+		return "", s.userError("workspace.noProject")
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve export directory: %w", err)
+	}
+	relative, err := filepath.Rel(s.current.Project.Root, absPath)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("selected export directory is outside the project")
+	}
+	return filepath.ToSlash(relative), nil
+}
+
+func (s *Service) SetTableExportSettings(settings TableExportSettings) (TableExportSettingsResult, error) {
+	if s.current == nil {
+		return TableExportSettingsResult{}, s.userError("workspace.noProject")
+	}
+	if !containsTable(s.current.Tree.Root, settings.Path) {
+		return TableExportSettingsResult{}, s.userError("workspace.tableNotInProject", settings.Path)
+	}
+	table, err := document.LoadTable(settings.Path)
+	if err != nil {
+		return TableExportSettingsResult{}, err
+	}
+	if err := s.validateTableExportSettings(table, settings.Formats); err != nil {
+		return TableExportSettingsResult{}, err
+	}
+	updated, view, err := s.edit(settings.Path, func() (document.Table, error) {
+		return document.SetTableExports(settings.Path, settings.Formats)
+	})
+	if err != nil {
+		return TableExportSettingsResult{}, err
+	}
+	return TableExportSettingsResult{Table: withTableMetadata(updated, view), Workspace: view}, nil
+}
+
 func (s *Service) SetProjectExportSettings(settings ProjectExportSettings) (ProjectSettings, error) {
 	if s.current == nil {
 		return ProjectSettings{}, s.userError("workspace.noProject")
@@ -730,16 +801,28 @@ func (s *Service) SetProjectExportSettings(settings ProjectExportSettings) (Proj
 	}
 	config.Export.Directory = settings.Directory
 	config.Export.Targets = append([]string(nil), settings.Targets...)
+	for _, target := range config.Export.Targets {
+		if !s.exporters.Has(target) {
+			return ProjectSettings{}, fmt.Errorf("unknown exporter format %q", target)
+		}
+	}
 	config.Export.Tables = copyBoolMap(settings.Tables)
 	project := s.current.Project
 	project.Config = config
 	if err := validateProjectConfig(config); err != nil {
 		return ProjectSettings{}, err
 	}
+	before, err := os.ReadFile(project.Path)
+	if err != nil {
+		return ProjectSettings{}, fmt.Errorf("record project settings source: %w", err)
+	}
 	if err := SaveProject(project); err != nil {
 		return ProjectSettings{}, err
 	}
 	s.current.Project = project
+	s.recordEdit(map[string][]byte{project.Path: before})
+	s.current.CanUndo = true
+	s.current.CanRedo = false
 	return s.projectSettings(), nil
 }
 
@@ -748,10 +831,39 @@ func (s *Service) projectSettings() ProjectSettings {
 	tables := []ExportTable{}
 	collectExportTables(s.current.Tree.Root, &tables, project.Config.Export.Tables)
 	return ProjectSettings{
-		Project: ProjectInfo{Path: project.Path, Root: project.Root, TableRoots: append([]string(nil), project.Config.TableRoots...), SchemaRoots: append([]string(nil), project.Config.SchemaRoots...), Exclude: append([]string(nil), project.Config.Exclude...)},
-		Export:  project.Config.Export,
-		Tables:  tables,
+		Project:   ProjectInfo{Path: project.Path, Root: project.Root, TableRoots: append([]string(nil), project.Config.TableRoots...), SchemaRoots: append([]string(nil), project.Config.SchemaRoots...), Exclude: append([]string(nil), project.Config.Exclude...)},
+		Export:    project.Config.Export,
+		Formats:   s.GetExportFormats(),
+		Tables:    tables,
+		Workspace: *s.current,
 	}
+}
+
+func (s *Service) validateTableExportSettings(table document.Table, settings map[string]document.ExportSettings) error {
+	knownColumns := map[string]bool{"id": true}
+	for _, column := range table.Columns {
+		knownColumns[column.Name] = true
+	}
+	for id, format := range settings {
+		definition, exists := s.exporters.Format(id)
+		if !exists {
+			return fmt.Errorf("unknown exporter format %q", id)
+		}
+		if format.Enabled && definition.SupportsColumns && len(format.Columns) == 0 {
+			return fmt.Errorf("export format %q requires at least one column", id)
+		}
+		seen := map[string]bool{}
+		for _, column := range format.Columns {
+			if !knownColumns[column] {
+				return fmt.Errorf("export format %q references unknown column %q", id, column)
+			}
+			if seen[column] {
+				return fmt.Errorf("export format %q contains duplicate column %q", id, column)
+			}
+			seen[column] = true
+		}
+	}
+	return nil
 }
 
 func collectExportTables(node projecttree.Node, tables *[]ExportTable, selected map[string]bool) {
@@ -764,7 +876,15 @@ func collectExportTables(node projecttree.Node, tables *[]ExportTable, selected 
 				chosen = selected[id]
 			}
 			entry := ExportTable{ID: id, Namespace: table.Namespace, Name: table.Name, Path: table.Path, Selected: chosen}
-			if table.CSVExport != nil {
+			for formatID, export := range table.Exports {
+				if export.Enabled {
+					entry.Configured = true
+					if formatID == "csv" {
+						entry.Columns = append([]string(nil), export.Columns...)
+					}
+				}
+			}
+			if table.CSVExport != nil && !entry.Configured {
 				entry.Configured = true
 				entry.Columns = append([]string(nil), table.CSVExport.Columns...)
 			}
@@ -1867,7 +1987,10 @@ func (s *Service) Export() (ExportResult, error) {
 	if !hasExportableTables(compiled.Package) {
 		return ExportResult{}, s.userError("workspace.noSelectedTables")
 	}
-	result, err := csv.Export(destination, compiled.Package)
+	if !containsString(s.current.Project.Config.Export.Targets, "csv") {
+		return ExportResult{}, s.userError("workspace.noExportTargets")
+	}
+	result, err := s.exporters.Export("csv", destination, compiled.Package)
 	if err != nil {
 		s.log(logging.Error, "export failed", map[string]any{"destination": destination, "error": err.Error()})
 		return ExportResult{}, err
@@ -1899,6 +2022,15 @@ func hasExportableTables(pkg *compiler.Package) bool {
 	}
 	for _, table := range pkg.Tables {
 		if table.CSV != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
 			return true
 		}
 	}

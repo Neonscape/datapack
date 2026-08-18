@@ -476,6 +476,13 @@ _export: {csv: {enabled: true, columns: ["id", "name"]}}`)
 	if err != nil || project.Config.Export.Tables == nil || len(project.Config.Export.Tables) != 0 {
 		t.Fatalf("cleared export selection = %#v, %v", project.Config.Export.Tables, err)
 	}
+	if _, err := service.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	project, err = LoadProject(projectPath)
+	if err != nil || !project.Config.Export.Tables["rpg.item"] || project.Config.Export.Tables["rpg.effect"] {
+		t.Fatalf("undo export selection = %#v, %v", project.Config.Export.Tables, err)
+	}
 }
 
 func TestRenameTableMigratesProjectExportSelectionAndUndoRestoresIt(t *testing.T) {

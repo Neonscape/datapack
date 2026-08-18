@@ -65,10 +65,12 @@ test.beforeEach(async ({page}) => {
         const api = {
             SelectProject: () => Promise.resolve(workspace),
             GetSettings: () => Promise.resolve({language: "en", theme: "system"}),
-            GetProjectSettings: () => Promise.resolve({project: {path: "/project/game.dtproj", root: "/project", tableRoots: ["tables"], schemaRoots: ["schema"], exclude: []}, export: {directory: "exports", targets: ["csv"], tables: {}}, tables: [{id: "rpg.item", namespace: "rpg", name: "item", path: "/project/tables/item.cue", selected: true, configured: true, columns: ["id", "name"]}]}),
+            GetExportFormats: () => Promise.resolve([{id: "csv", labels: {en: "CSV", "zh-CN": "CSV"}, supportsColumns: true, extensions: ["csv"]}]),
+            SetTableExportSettings: () => Promise.resolve({table, workspace}),
+            GetProjectSettings: () => Promise.resolve({project: {path: "/project/game.dtproj", root: "/project", tableRoots: ["tables"], schemaRoots: ["schema"], exclude: []}, export: {directory: "exports", targets: ["csv"], tables: {}}, formats: [{id: "csv", labels: {en: "CSV", "zh-CN": "CSV"}, supportsColumns: true, extensions: ["csv"]}], tables: [{id: "rpg.item", namespace: "rpg", name: "item", path: "/project/tables/item.cue", selected: true, configured: true, columns: ["id", "name"]}], workspace}),
             SetProjectExportSettings: (settings) => {
                 (window as Window & {projectExportSettings?: unknown}).projectExportSettings = settings;
-                return Promise.resolve({});
+                return Promise.resolve({workspace});
             },
             SetLanguage: () => Promise.resolve({language: "en", theme: "system"}),
             SetTheme: () => Promise.resolve({language: "en", theme: "system"}),
@@ -448,12 +450,13 @@ test("switches theme and language from the settings panel", async ({page}) => {
 });
 
 test("configures project export table selection", async ({page}) => {
+    await page.getByRole("button", {name: "File"}).click();
     await page.getByRole("button", {name: "Project settings"}).click();
     await expect(page.getByRole("heading", {name: "Project settings"})).toBeVisible();
     await page.getByRole("button", {name: "Clear all"}).click();
-    await expect(page.getByRole("checkbox")).not.toBeChecked();
+    await expect(page.locator(".project-settings-table-list input[type=checkbox]")).not.toBeChecked();
     await page.getByRole("button", {name: "Select all"}).click();
-    await expect(page.getByRole("checkbox")).toBeChecked();
+    await expect(page.locator(".project-settings-table-list input[type=checkbox]")).toBeChecked();
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.getByRole("heading", {name: "Project settings"})).toBeHidden();
     await page.getByRole("button", {name: "game.dtproj", exact: true}).click();
@@ -463,6 +466,15 @@ test("configures project export table selection", async ({page}) => {
         targets: ["csv"],
         tables: {"rpg.item": true},
     });
+});
+
+test("configures table export formats and fields", async ({page}) => {
+    await page.getByRole("button", {name: "Table export settings"}).click();
+    await page.getByRole("checkbox", {name: "CSV"}).check();
+    await expect(page.getByText("Export columns")).toBeVisible();
+    await page.getByRole("button", {name: "Clear fields"}).click();
+    await page.getByRole("button", {name: "Select all fields"}).click();
+    await page.getByRole("button", {name: "Apply", exact: true}).click();
 });
 
 test("undoes and redoes edits from the Edit menu", async ({page}) => {

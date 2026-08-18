@@ -619,10 +619,8 @@ func removeColumn(file *ast.File, name string) error {
 		}
 	}
 	if export := fields["_export"]; export != nil {
-		exportFields := fieldsOfStruct(export.Value)
-		if csv := exportFields["csv"]; csv != nil {
-			csvFields := fieldsOfStruct(csv.Value)
-			if columns := csvFields["columns"]; columns != nil {
+		for _, format := range orderedStructFields(export.Value) {
+			if columns := fieldsOfStruct(format.Value)["columns"]; columns != nil {
 				removeStringListValue(columns.Value, name)
 			}
 		}
@@ -654,10 +652,8 @@ func renameColumn(file *ast.File, oldName, newName string) error {
 		}
 	}
 	if export := fields["_export"]; export != nil {
-		exportFields := fieldsOfStruct(export.Value)
-		if csv := exportFields["csv"]; csv != nil {
-			csvFields := fieldsOfStruct(csv.Value)
-			if columns := csvFields["columns"]; columns != nil {
+		for _, format := range orderedStructFields(export.Value) {
+			if columns := fieldsOfStruct(format.Value)["columns"]; columns != nil {
 				renameStringListValue(columns.Value, oldName, newName)
 			}
 		}
@@ -681,10 +677,8 @@ func moveColumn(file *ast.File, name string, position int) error {
 	}
 	moveElement(rowSchemaValue.Elts, index, position)
 	if export := fields["_export"]; export != nil {
-		exportFields := fieldsOfStruct(export.Value)
-		if csv := exportFields["csv"]; csv != nil {
-			csvFields := fieldsOfStruct(csv.Value)
-			if columns := csvFields["columns"]; columns != nil {
+		for _, format := range orderedStructFields(export.Value) {
+			if columns := fieldsOfStruct(format.Value)["columns"]; columns != nil {
 				moveStringListValue(columns.Value, name, position)
 			}
 		}

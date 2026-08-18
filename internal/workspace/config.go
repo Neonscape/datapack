@@ -91,7 +91,7 @@ func validateProjectConfig(config ProjectConfig) error {
 		return fmt.Errorf("project must declare an export directory")
 	}
 	cleanExport := filepath.Clean(config.Export.Directory)
-	if filepath.IsAbs(config.Export.Directory) || cleanExport == ".." || strings.HasPrefix(cleanExport, ".."+string(filepath.Separator)) {
+	if filepath.IsAbs(config.Export.Directory) || cleanExport == "." || cleanExport == ".." || strings.HasPrefix(cleanExport, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("export directory %q escapes the project directory", config.Export.Directory)
 	}
 	if len(config.Export.Targets) == 0 {

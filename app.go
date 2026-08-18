@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	goruntime "runtime"
 
 	"datapack/internal/document"
@@ -183,6 +184,33 @@ func (a *App) GetProjectSettings() (workspace.ProjectSettings, error) {
 
 func (a *App) SetProjectExportSettings(settings workspace.ProjectExportSettings) (workspace.ProjectSettings, error) {
 	return a.workspace.SetProjectExportSettings(settings)
+}
+
+func (a *App) GetExportFormats() []workspace.ExportFormat {
+	return a.workspace.GetExportFormats()
+}
+
+func (a *App) SetTableExportSettings(settings workspace.TableExportSettings) (workspace.TableExportSettingsResult, error) {
+	return a.workspace.SetTableExportSettings(settings)
+}
+
+func (a *App) SelectProjectExportDirectory() (string, error) {
+	view, ok := a.workspace.Current()
+	if !ok {
+		return "", fmt.Errorf("no project is open")
+	}
+	defaultDirectory := filepath.Join(view.Project.Root, view.Project.Config.Export.Directory)
+	if _, err := os.Stat(defaultDirectory); err != nil {
+		defaultDirectory = view.Project.Root
+	}
+	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:            "Select Export Directory",
+		DefaultDirectory: defaultDirectory,
+	})
+	if err != nil || path == "" {
+		return path, err
+	}
+	return a.workspace.NormalizeProjectExportDirectory(path)
 }
 
 // OpenPath opens a file or directory using the operating system's default

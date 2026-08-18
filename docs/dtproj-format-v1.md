@@ -35,6 +35,24 @@
 
 导出前仍会完整编译和校验整个项目；`export.tables` 只过滤最终生成的导出产物，不会绕过未选中表的诊断。
 
+## 内置导出器
+
+应用启动时会扫描内置导出器 manifest。当前 manifest 位于源码目录：
+
+```text
+internal/exporters/formats/*/manifest.json
+```
+
+manifest 描述导出器 ID、名称、扩展名和是否支持字段配置。导出器的后端实现与 manifest 位于同一格式目录，例如：
+
+```text
+internal/exporters/formats/csv/
+  manifest.json
+  export.go
+```
+
+v1 内置 `csv`；前端项目设置和表导出设置都从同一注册表读取格式，后端导出也通过注册表分派。
+
 编译模式、自动编译等待时间和其他本机编辑体验选项不属于工程文件，见 `editor-settings-format-v1.md`。这些设置不会进入版本控制。
 
 ## 扫描规则

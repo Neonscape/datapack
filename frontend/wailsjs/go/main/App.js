@@ -58,6 +58,10 @@ export function Export() {
   return window['go']['main']['App']['Export']();
 }
 
+export function GetExportFormats() {
+  return window['go']['main']['App']['GetExportFormats']();
+}
+
 export function GetProjectSettings() {
   return window['go']['main']['App']['GetProjectSettings']();
 }
@@ -126,6 +130,10 @@ export function SelectProject() {
   return window['go']['main']['App']['SelectProject']();
 }
 
+export function SelectProjectExportDirectory() {
+  return window['go']['main']['App']['SelectProjectExportDirectory']();
+}
+
 export function SetCellFormula(arg1) {
   return window['go']['main']['App']['SetCellFormula'](arg1);
 }
@@ -148,6 +156,10 @@ export function SetProjectExportSettings(arg1) {
 
 export function SetSchemaDefinition(arg1) {
   return window['go']['main']['App']['SetSchemaDefinition'](arg1);
+}
+
+export function SetTableExportSettings(arg1) {
+  return window['go']['main']['App']['SetTableExportSettings'](arg1);
 }
 
 export function SetTheme(arg1) {

@@ -84,6 +84,10 @@ var catalog = map[string]map[string]string{
 		English: "no selected tables are available for export",
 		Chinese: "没有可导出的已选表",
 	},
+	"workspace.noExportTargets": {
+		English: "no configured export formats are available",
+		Chinese: "没有可用的已配置导出格式",
+	},
 	"workspace.unsupportedLanguage": {
 		English: "unsupported language %q",
 		Chinese: "不支持的语言 %q",

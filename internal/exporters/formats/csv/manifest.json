@@ -1,0 +1,9 @@
+{
+  "id": "csv",
+  "labels": {
+    "en": "CSV",
+    "zh-CN": "CSV"
+  },
+  "supportsColumns": true,
+  "extensions": ["csv"]
+}

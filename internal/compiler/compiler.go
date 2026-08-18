@@ -42,11 +42,12 @@ type Package struct {
 }
 
 type Table struct {
-	Path      string `json:"path"`
-	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
-	CSV       *CSV   `json:"csv,omitempty"`
-	Rows      []Row  `json:"rows"`
+	Path      string                             `json:"path"`
+	Namespace string                             `json:"namespace"`
+	Name      string                             `json:"name"`
+	CSV       *CSV                               `json:"csv,omitempty"`
+	Exports   map[string]document.ExportSettings `json:"exports,omitempty"`
+	Rows      []Row                              `json:"rows"`
 }
 
 type CSV struct {
@@ -92,7 +93,7 @@ func compiledTableName(table Table) string {
 }
 
 func compileTable(table document.Table) (Table, []Diagnostic) {
-	compiled := Table{Path: table.Path, Namespace: table.Namespace, Name: table.Name}
+	compiled := Table{Path: table.Path, Namespace: table.Namespace, Name: table.Name, Exports: table.Exports}
 	if table.CSVExport != nil {
 		compiled.CSV = &CSV{Columns: table.CSVExport.Columns}
 	}

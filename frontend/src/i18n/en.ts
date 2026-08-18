@@ -15,6 +15,7 @@ export const en: Record<string, string> = {
     "menu.newTable": "New table",
     "menu.undo": "Undo",
     "menu.redo": "Redo",
+    "menu.export": "Export",
     "menu.appMenu": "Application menu",
 
     "header.noProjectOpen": "No project open",
@@ -25,7 +26,6 @@ export const en: Record<string, string> = {
     "header.pending": " · pending",
     "header.compile": "Compile",
     "header.compileDiagnostics": "Compile diagnostics",
-    "header.exportCsv": "Export CSV",
 
     "panel.project": "Project",
     "panel.diagnostics": "Diagnostics",
@@ -222,6 +222,8 @@ export const en: Record<string, string> = {
     "projectSettings.exportTab": "Export",
     "projectSettings.infoTab": "Project info",
     "projectSettings.exportDirectory": "Export directory",
+    "projectSettings.chooseDirectory": "Choose directory",
+    "projectSettings.formats": "Project export formats",
     "projectSettings.tables": "Tables",
     "projectSettings.selectAll": "Select all",
     "projectSettings.clearAll": "Clear all",
@@ -235,4 +237,10 @@ export const en: Record<string, string> = {
     "projectSettings.tableRoots": "Table roots",
     "projectSettings.schemaRoots": "Schema roots",
     "projectSettings.exclude": "Excluded paths",
+    "tableExport.title": "Table export settings",
+    "tableExport.configuration": "configuration",
+    "tableExport.columns": "Export columns",
+    "tableExport.selectAllColumns": "Select all fields",
+    "tableExport.clearColumns": "Clear fields",
+    "tableExport.noFormats": "No export formats are registered",
 };

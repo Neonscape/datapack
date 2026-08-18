@@ -11,3 +11,4 @@ exports/
 *.swp
 .DS_Store
 dev_session.json
+.codemap/

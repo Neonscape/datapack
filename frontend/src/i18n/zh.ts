@@ -15,6 +15,7 @@ export const zh: Record<string, string> = {
     "menu.newTable": "新建表",
     "menu.undo": "撤销",
     "menu.redo": "重做",
+    "menu.export": "导出",
     "menu.appMenu": "应用菜单",
 
     "header.noProjectOpen": "未打开项目",
@@ -25,7 +26,6 @@ export const zh: Record<string, string> = {
     "header.pending": " · 待编译",
     "header.compile": "编译",
     "header.compileDiagnostics": "编译诊断",
-    "header.exportCsv": "导出 CSV",
 
     "panel.project": "项目",
     "panel.diagnostics": "诊断",
@@ -222,6 +222,8 @@ export const zh: Record<string, string> = {
     "projectSettings.exportTab": "导出设置",
     "projectSettings.infoTab": "项目信息",
     "projectSettings.exportDirectory": "导出目录",
+    "projectSettings.chooseDirectory": "选择目录",
+    "projectSettings.formats": "项目导出格式",
     "projectSettings.tables": "表",
     "projectSettings.selectAll": "全选",
     "projectSettings.clearAll": "清空",
@@ -235,4 +237,10 @@ export const zh: Record<string, string> = {
     "projectSettings.tableRoots": "表目录",
     "projectSettings.schemaRoots": "Schema 目录",
     "projectSettings.exclude": "排除路径",
+    "tableExport.title": "表导出设置",
+    "tableExport.configuration": "配置",
+    "tableExport.columns": "导出字段",
+    "tableExport.selectAllColumns": "全选字段",
+    "tableExport.clearColumns": "清空字段",
+    "tableExport.noFormats": "没有已注册的导出格式",
 };

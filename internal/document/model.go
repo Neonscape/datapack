@@ -4,18 +4,19 @@ package document
 import "datapack/internal/schemamodel"
 
 type Table struct {
-	Path        string             `json:"path"`
-	Package     string             `json:"package"`
-	Namespace   string             `json:"namespace"`
-	Name        string             `json:"name"`
-	PrimaryKey  schemamodel.Node   `json:"primaryKey"`
-	Columns     []Column           `json:"columns"`
-	Rows        []Row              `json:"rows"`
-	ForeignKeys []ForeignKey       `json:"foreignKeys,omitempty"`
-	Formulas    []Formula          `json:"formulas,omitempty"`
-	Diagnostics []Diagnostic       `json:"diagnostics,omitempty"`
-	CSVExport   *CSVExport         `json:"csvExport,omitempty"`
-	LocalSchema []SchemaDefinition `json:"localSchema"`
+	Path        string                    `json:"path"`
+	Package     string                    `json:"package"`
+	Namespace   string                    `json:"namespace"`
+	Name        string                    `json:"name"`
+	PrimaryKey  schemamodel.Node          `json:"primaryKey"`
+	Columns     []Column                  `json:"columns"`
+	Rows        []Row                     `json:"rows"`
+	ForeignKeys []ForeignKey              `json:"foreignKeys,omitempty"`
+	Formulas    []Formula                 `json:"formulas,omitempty"`
+	Diagnostics []Diagnostic              `json:"diagnostics,omitempty"`
+	CSVExport   *CSVExport                `json:"csvExport,omitempty"`
+	Exports     map[string]ExportSettings `json:"exports,omitempty"`
+	LocalSchema []SchemaDefinition        `json:"localSchema"`
 }
 
 type Column struct {
@@ -61,6 +62,11 @@ type Diagnostic struct {
 
 type CSVExport struct {
 	Columns []string `json:"columns"`
+}
+
+type ExportSettings struct {
+	Enabled bool     `json:"enabled"`
+	Columns []string `json:"columns,omitempty"`
 }
 
 type SchemaDefinition struct {

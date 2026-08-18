@@ -1,12 +1,13 @@
 import {useEffect, useState} from "react";
-import {GetProjectSettings, SetProjectExportSettings} from "../../wailsjs/go/main/App";
+import {GetProjectSettings, SelectProjectExportDirectory, SetProjectExportSettings} from "../../wailsjs/go/main/App";
+import {workspace as workspaceModel} from "../../wailsjs/go/models";
 import {useTranslation} from "../i18n";
 import type {ProjectExportSettings, ProjectExportTable, ProjectSettings as ProjectSettingsModel} from "../types";
 
 type Tab = "export" | "info";
 
-export function ProjectSettings({onClose}: {onClose: () => void}) {
-    const {t} = useTranslation();
+export function ProjectSettings({onClose, onSaved}: {onClose: () => void; onSaved: (workspace: ProjectSettingsModel["workspace"]) => void}) {
+    const {language, t} = useTranslation();
     const [tab, setTab] = useState<Tab>("export");
     const [settings, setSettings] = useState<ProjectSettingsModel | null>(null);
     const [tables, setTables] = useState<ProjectExportTable[]>([]);
@@ -49,6 +50,16 @@ export function ProjectSettings({onClose}: {onClose: () => void}) {
         updateSelection((current) => current.map((table) => ({...table, selected: table.configured})));
     }
 
+    async function selectDirectory() {
+        setError("");
+        try {
+            const selected = await SelectProjectExportDirectory();
+            if (selected) setDirectory(selected);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
     async function save() {
         setBusy(true);
         setError("");
@@ -58,7 +69,8 @@ export function ProjectSettings({onClose}: {onClose: () => void}) {
             tables: Object.fromEntries(tables.map((table) => [table.id, table.selected])),
         };
         try {
-            await SetProjectExportSettings(payload);
+            const result = await SetProjectExportSettings(new workspaceModel.ProjectExportSettings(payload)) as ProjectSettingsModel;
+            onSaved(result.workspace);
             onClose();
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
@@ -81,7 +93,14 @@ export function ProjectSettings({onClose}: {onClose: () => void}) {
                 <button type="button" className={tab === "info" ? "project-settings-tab-active" : ""} onClick={() => setTab("info")}>{t("projectSettings.infoTab")}</button>
             </nav>
             {tab === "export" ? <section className="project-settings-content">
-                <label>{t("projectSettings.exportDirectory")}<input value={directory} onChange={(event) => setDirectory(event.target.value)}/></label>
+                <label>{t("projectSettings.exportDirectory")}
+                    <span className="project-settings-directory-input"><input value={directory} onChange={(event) => setDirectory(event.target.value)}/><button type="button" onClick={() => void selectDirectory()}>{t("projectSettings.chooseDirectory")}</button></span>
+                </label>
+                <div className="project-settings-section-title">{t("projectSettings.formats")}</div>
+                <div className="project-settings-format-list">{(settings?.formats ?? []).map((format) => <label key={format.id}>
+                    <input type="checkbox" checked={targets.includes(format.id)} onChange={() => setTargets((current) => current.includes(format.id) ? current.filter((target) => target !== format.id) : [...current, format.id])}/>
+                    {format.labels[language] ?? format.labels.en ?? format.id}
+                </label>)}</div>
                 <div className="project-settings-section-title">{t("projectSettings.tables")}</div>
                 <div className="project-settings-actions">
                     <button type="button" onClick={selectAll}>{t("projectSettings.selectAll")}</button>
