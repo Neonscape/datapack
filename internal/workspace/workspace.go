@@ -625,6 +625,8 @@ func (s *Service) OpenProject(path string) (View, error) {
 	}
 	s.revision = 0
 	s.compiledRevision = 0
+	s.undoStack = nil
+	s.redoStack = nil
 	view := buildView(project, settings, tree)
 	s.current = &view
 	s.compile()

@@ -49,6 +49,8 @@ export function MoveColumn(arg1:workspace.ColumnMove):Promise<workspace.ColumnMo
 
 export function Navigate(arg1:navigation.Request):Promise<navigation.Target>;
 
+export function NewProject():Promise<workspace.View>;
+
 export function OpenPath(arg1:string):Promise<void>;
 
 export function OpenProject(arg1:string):Promise<workspace.View>;
@@ -66,6 +68,8 @@ export function RenameRow(arg1:workspace.RowRename):Promise<workspace.RowRenameR
 export function RenameSchemaDefinition(arg1:workspace.SchemaDefinitionRename):Promise<workspace.SchemaEditResult>;
 
 export function RenameTable(arg1:workspace.TableRename):Promise<workspace.TableRenameResult>;
+
+export function SaveProjectAs():Promise<workspace.View>;
 
 export function SelectProject():Promise<workspace.View>;
 

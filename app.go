@@ -71,6 +71,37 @@ func (a *App) SelectProject() (workspace.View, error) {
 	return a.workspace.OpenProject(path)
 }
 
+func (a *App) NewProject() (workspace.View, error) {
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:                "Create Datapack Project",
+		DefaultFilename:      "project.dtproj",
+		Filters:              []runtime.FileFilter{{DisplayName: "Datapack Project (*.dtproj)", Pattern: "*.dtproj"}},
+		CanCreateDirectories: true,
+	})
+	if err != nil || path == "" {
+		return workspace.View{}, err
+	}
+	return a.workspace.CreateProject(path)
+}
+
+func (a *App) SaveProjectAs() (workspace.View, error) {
+	view, ok := a.workspace.Current()
+	if !ok {
+		return workspace.View{}, fmt.Errorf("no project is open")
+	}
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:                "Save Datapack Project As",
+		DefaultDirectory:     view.Project.Root,
+		DefaultFilename:      filepath.Base(view.Project.Path),
+		Filters:              []runtime.FileFilter{{DisplayName: "Datapack Project (*.dtproj)", Pattern: "*.dtproj"}},
+		CanCreateDirectories: true,
+	})
+	if err != nil || path == "" {
+		return workspace.View{}, err
+	}
+	return a.workspace.SaveProjectAs(path)
+}
+
 // OpenProject opens a project by path. It is also used by tests and future
 // recent-project entries that already know the path.
 func (a *App) OpenProject(path string) (workspace.View, error) {

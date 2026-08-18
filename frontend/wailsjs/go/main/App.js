@@ -90,6 +90,10 @@ export function Navigate(arg1) {
   return window['go']['main']['App']['Navigate'](arg1);
 }
 
+export function NewProject() {
+  return window['go']['main']['App']['NewProject']();
+}
+
 export function OpenPath(arg1) {
   return window['go']['main']['App']['OpenPath'](arg1);
 }
@@ -124,6 +128,10 @@ export function RenameSchemaDefinition(arg1) {
 
 export function RenameTable(arg1) {
   return window['go']['main']['App']['RenameTable'](arg1);
+}
+
+export function SaveProjectAs() {
+  return window['go']['main']['App']['SaveProjectAs']();
 }
 
 export function SelectProject() {

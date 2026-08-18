@@ -64,6 +64,8 @@ test.beforeEach(async ({page}) => {
     await page.addInitScript(({table, workspace, publicSchema}) => {
         const api = {
             SelectProject: () => Promise.resolve(workspace),
+            NewProject: () => Promise.resolve(workspace),
+            SaveProjectAs: () => Promise.resolve(workspace),
             GetSettings: () => Promise.resolve({language: "en", theme: "system"}),
             GetExportFormats: () => Promise.resolve([{id: "csv", labels: {en: "CSV", "zh-CN": "CSV"}, supportsColumns: true, extensions: ["csv"]}]),
             SetTableExportSettings: () => Promise.resolve({table, workspace}),
@@ -435,6 +437,13 @@ test("groups history commands under Edit", async ({page}) => {
     await expect(page.getByRole("button", {name: /Redo/})).toBeEnabled();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", {name: /Undo/})).toBeHidden();
+});
+
+test("exposes project file lifecycle actions under File", async ({page}) => {
+    await page.getByRole("button", {name: "File"}).click();
+    await expect(page.getByRole("button", {name: "New project"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "Save project as"})).toBeEnabled();
+    await expect(page.getByRole("button", {name: "Export", exact: true})).toBeVisible();
 });
 
 test("switches theme and language from the settings panel", async ({page}) => {

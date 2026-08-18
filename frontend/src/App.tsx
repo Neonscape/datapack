@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import './App.css';
-import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellFormula, SetColumnSchema, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
 import {schemamodel, workspace as workspaceModel} from "../wailsjs/go/models";
 import {useTranslation, type Language} from "./i18n";
 import {useTheme, type ThemePreference} from "./theme";
@@ -274,13 +274,34 @@ function App() {
         setError("");
         try {
             const view = await SelectProject() as WorkspaceView;
-            if (view?.project?.path) {
-                setWorkspace(view);
-                setSelectedSchema(schemaDefinitions(view)[0] ?? null);
-                setTabs([]);
-                setActiveTabId(null);
-                setCellError(null);
-            }
+            applyProjectView(view);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
+    function applyProjectView(view: WorkspaceView) {
+        if (!view?.project?.path) return;
+        setWorkspace(view);
+        setSelectedSchema(schemaDefinitions(view)[0] ?? null);
+        setTabs([]);
+        setActiveTabId(null);
+        setCellError(null);
+    }
+
+    async function createProject() {
+        setError("");
+        try {
+            applyProjectView(await NewProject() as WorkspaceView);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }
+
+    async function saveProjectAs() {
+        setError("");
+        try {
+            applyProjectView(await SaveProjectAs() as WorkspaceView);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         }
@@ -664,7 +685,9 @@ function App() {
                     <div className="app-menu">
                         <button aria-expanded={appMenu === "file"} onClick={() => setAppMenu(appMenu === "file" ? null : "file")}>{t("menu.file")}</button>
                         {appMenu === "file" && <div className="app-menu-popover">
+                            <button onClick={() => { setAppMenu(null); void createProject(); }}>{t("menu.newProject")}</button>
                             <button onClick={() => { setAppMenu(null); selectProject(); }}>{t("menu.openProject")}</button>
+                            <button disabled={!workspace} onClick={() => { setAppMenu(null); void saveProjectAs(); }}>{t("menu.saveAs")}</button>
                             <button disabled={!workspace} onClick={() => { setAppMenu(null); setTableDialog({namespace: "game", name: ""}); }}>{t("menu.newTable")}</button>
                             <button disabled={!workspace} onClick={() => { setAppMenu(null); setProjectSettingsOpen(true); }}>{t("projectSettings.title")}</button>
                             <button disabled={!workspace} onClick={() => { setAppMenu(null); void exportProject(); }}>{t("menu.export")}</button>
