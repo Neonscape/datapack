@@ -25,6 +25,9 @@ func TestCreateProjectBuildsInitialLayout(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "demo", "cue.mod", "module.cue")); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := os.Stat(filepath.Join(root, "demo", "schema", "common", "common.cue")); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestSaveProjectAsCopiesSourcesAndSwitchesWorkspace(t *testing.T) {

@@ -120,6 +120,30 @@ func createProjectFiles(project Project) error {
 			return fmt.Errorf("create project source directory: %w", err)
 		}
 	}
+	commonDirectory := filepath.Join(project.Root, project.Config.SchemaRoots[0], "common")
+	if err := os.MkdirAll(commonDirectory, 0o755); err != nil {
+		return fmt.Errorf("create common Schema directory: %w", err)
+	}
+	commonSchema := `package common
+
+#ID: string & =~"^[A-Za-z_][A-Za-z0-9_]*$"
+#NonEmptyString: string & != ""
+#NonNegative: >=0
+#Probability: >=0 & <=1
+
+_schema: {
+	version: 1
+	definitions: {
+		ID: {kind: "type", type: "string"}
+		NonEmptyString: {kind: "constraint", appliesTo: ["string"]}
+		NonNegative: {kind: "constraint", appliesTo: ["integer", "number"]}
+		Probability: {kind: "constraint", appliesTo: ["integer", "number"]}
+	}
+}
+`
+	if err := writeFileAtomic(filepath.Join(commonDirectory, "common.cue"), []byte(commonSchema)); err != nil {
+		return fmt.Errorf("write common Schema: %w", err)
+	}
 	moduleDirectory := filepath.Join(project.Root, "cue.mod")
 	if err := os.MkdirAll(moduleDirectory, 0o755); err != nil {
 		return fmt.Errorf("create CUE module directory: %w", err)

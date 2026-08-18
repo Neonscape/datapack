@@ -28,7 +28,8 @@ type TreeDialog =
     | {mode: "renameTable"; path: string; namespace: string; name: string}
     | {mode: "deleteTable"; path: string; label: string}
     | {mode: "renameDefinition"; path: string; name: string; newName: string}
-    | {mode: "deleteDefinition"; path: string; name: string};
+    | {mode: "deleteDefinition"; path: string; name: string}
+    | {mode: "newSchema"; namespace: string};
 
 type OpenTab =
     | {id: string; kind: "table"; path: string; table: TableDocument}
@@ -433,7 +434,9 @@ function App() {
         if (!treeDialog) return;
         setError("");
         try {
-            if (treeDialog.mode === "renameTable") {
+            if (treeDialog.mode === "newSchema") {
+                await newDefinitionInNamespace(treeDialog.namespace);
+            } else if (treeDialog.mode === "renameTable") {
                 const result = await RenameTable({path: treeDialog.path, namespace: treeDialog.namespace, name: treeDialog.name}) as {table: TableDocument; workspace: WorkspaceView};
                 setWorkspace(result.workspace);
                 const oldId = `table:${treeDialog.path}`;
@@ -688,7 +691,9 @@ function App() {
                             <button onClick={() => { setAppMenu(null); void createProject(); }}>{t("menu.newProject")}</button>
                             <button onClick={() => { setAppMenu(null); selectProject(); }}>{t("menu.openProject")}</button>
                             <button disabled={!workspace} onClick={() => { setAppMenu(null); void saveProjectAs(); }}>{t("menu.saveAs")}</button>
+                            <hr/>
                             <button disabled={!workspace} onClick={() => { setAppMenu(null); setTableDialog({namespace: "game", name: ""}); }}>{t("menu.newTable")}</button>
+                            <hr/>
                             <button disabled={!workspace} onClick={() => { setAppMenu(null); setProjectSettingsOpen(true); }}>{t("projectSettings.title")}</button>
                             <button disabled={!workspace} onClick={() => { setAppMenu(null); void exportProject(); }}>{t("menu.export")}</button>
                         </div>}
@@ -719,7 +724,11 @@ function App() {
                             if (next.has(key)) next.delete(key); else next.add(key);
                             return next;
                         })} onOpenTable={openTable} onOpenSchema={openSchema} onOpenProjectSettings={() => setProjectSettingsOpen(true)} onContextMenu={(node, position, namespace) => {
-                            if (node.kind === "project" || node.kind === "group" || node.kind === "damaged") return;
+                            if (node.kind === "project") {
+                                setTreeMenu({node, namespace, x: position.x, y: position.y});
+                                return;
+                            }
+                            if (node.kind === "group" || node.kind === "damaged") return;
                             setTreeMenu({node, namespace, x: position.x, y: position.y});
                         }}/></div>
                     </aside>
@@ -824,6 +833,10 @@ function App() {
                 </button>)}
             </div>}
             {treeMenu && <div className="nav-menu tree-context-menu" style={{left: treeMenu.x, top: treeMenu.y}} role="menu" aria-label={t("tree.actions")}>
+                {treeMenu.node.kind === "project" && <>
+                    <button onClick={() => { setTableDialog({namespace: "game", name: ""}); setTreeMenu(null); }}>{t("menu.newTable")}</button>
+                    <button onClick={() => { setTreeDialog({mode: "newSchema", namespace: ""}); setTreeMenu(null); }}>{t("tree.newSchema")}</button>
+                </>}
                 {treeMenu.node.kind === "table" && <>
                     <button onClick={() => { renameTableAt(treeMenu.node.path!, treeMenu.node.name, treeMenu.namespace); setTreeMenu(null); }}>{t("tree.renameTable")}</button>
                     <button className="tree-context-danger" onClick={() => { deleteTableAt(treeMenu.node.path!, treeMenu.namespace ? `${treeMenu.namespace}.${treeMenu.node.name}` : treeMenu.node.name); setTreeMenu(null); }}>{t("tree.deleteTable")}</button>
@@ -892,6 +905,11 @@ function App() {
                         <h2>{t("definition.delete")}</h2>
                         <p>{t("definition.deleteBody", {name: `#${treeDialog.name}`})}</p>
                         <div className="dialog-actions"><button type="button" onClick={() => setTreeDialog(null)}>{t("common.cancel")}</button><button className="dialog-danger" type="submit">{t("definition.delete")}</button></div>
+                    </>}
+                    {treeDialog.mode === "newSchema" && <>
+                        <h2>{t("tree.newSchema")}</h2>
+                        <label>{t("table.namespace")}<input autoFocus value={treeDialog.namespace} onChange={(event) => setTreeDialog({...treeDialog, namespace: event.target.value})}/></label>
+                        <div className="dialog-actions"><button type="button" onClick={() => setTreeDialog(null)}>{t("common.cancel")}</button><button type="submit">{t("common.create")}</button></div>
                     </>}
                 </form>
             </div>}

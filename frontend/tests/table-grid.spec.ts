@@ -603,6 +603,11 @@ test("renders a workspace with null Schema collections", async ({page}) => {
 });
 
 test("shows project tree context menu actions", async ({page}) => {
+    await page.getByRole("button", {name: "game.dtproj", exact: true}).click({button: "right"});
+    await expect(page.getByRole("button", {name: "New table"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "New schema"})).toBeVisible();
+    await page.keyboard.press("Escape");
+
     await page.getByRole("button", {name: "item", exact: true}).click({button: "right"});
     await expect(page.getByRole("button", {name: "Rename table"})).toBeVisible();
     await expect(page.getByRole("button", {name: "Delete table"})).toBeVisible();
