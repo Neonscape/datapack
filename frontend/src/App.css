@@ -642,7 +642,7 @@
 }
 
 .row-context-menu {
-    position: absolute;
+    position: fixed;
     z-index: 5;
     min-width: 132px;
     padding: 4px;
@@ -666,7 +666,7 @@
 }
 
 .column-context-menu {
-    position: absolute;
+    position: fixed;
     z-index: 7;
     min-width: 154px;
     padding: 4px;
