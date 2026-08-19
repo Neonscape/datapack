@@ -149,6 +149,7 @@ func Evaluate(table document.Table) Result {
 		progress := false
 		for _, key := range sortedFormulaKeys(pending) {
 			formula := pending[key]
+			kind := columns[formula.Column]
 			if err := validateReferences(table, formula, foreignKeys); err != nil {
 				result.add(formula, err.Error())
 				delete(pending, key)
@@ -171,6 +172,7 @@ func Evaluate(table document.Table) Result {
 			if err != nil {
 				continue // A formula dependency may be evaluated in a later pass.
 			}
+			value = normalizeFormulaValue(value, kind)
 			result.Rows[formula.RowID][formula.Column] = value
 			delete(pending, key)
 			progress = true
@@ -184,6 +186,17 @@ func Evaluate(table document.Table) Result {
 		break
 	}
 	return result
+}
+
+func normalizeFormulaValue(value any, kind schemamodel.Kind) any {
+	if kind != schemamodel.KindInteger {
+		return value
+	}
+	number, ok := value.(float64)
+	if !ok || math.IsNaN(number) || math.IsInf(number, 0) || math.Trunc(number) != number {
+		return value
+	}
+	return int64(number)
 }
 
 func deterministicFunctions() []expr.Option {
