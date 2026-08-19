@@ -103,7 +103,7 @@ func newProjectAt(path string) (Project, error) {
 		TableRoots:  []string{"tables"},
 		SchemaRoots: []string{"schema"},
 		Exclude:     []string{"exports", ".git"},
-		Export:      ExportConfig{Directory: "exports", Targets: []string{"csv"}, Tables: map[string]bool{}},
+		Export:      ExportConfig{Directory: "exports", Targets: []string{"csv"}},
 	}}
 	if err := validateProjectSlots(project.Root, project.Path); err != nil {
 		return Project{}, err

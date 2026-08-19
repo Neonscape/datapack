@@ -3,6 +3,7 @@ package schemamodel
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,15 @@ import (
 	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/token"
 )
+
+var negativeComparisonPattern = regexp.MustCompile(`(<|<=)[\t ]+(-[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)`)
+
+// NormalizeNegativeComparisons protects valid comparisons such as `< -50`
+// from CUE's formatter, which otherwise emits the distinct `<-` token.
+// Bare `<-50` remains invalid because this only matches existing whitespace.
+func NormalizeNegativeComparisons(expression string) string {
+	return negativeComparisonPattern.ReplaceAllString(expression, `$1 ($2)`)
+}
 
 type Kind string
 
@@ -477,7 +487,11 @@ func baseExpression(node Node) (string, error) {
 func requirementExpression(requirement Requirement) string {
 	switch requirement.Kind {
 	case RequirementCompare:
-		return requirement.Op + " " + requirement.Value
+		value := strings.TrimSpace(requirement.Value)
+		if strings.HasPrefix(value, "-") {
+			value = "(" + value + ")"
+		}
+		return requirement.Op + " " + value
 	case RequirementRegex:
 		return requirement.Op + " " + strconv.Quote(requirement.Pattern)
 	case RequirementNonEmpty:

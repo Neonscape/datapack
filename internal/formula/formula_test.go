@@ -1,12 +1,61 @@
 package formula
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
 	"datapack/internal/document"
 	"datapack/internal/schemamodel"
 )
+
+func TestEvaluateAllowsDeterministicFunctions(t *testing.T) {
+	cases := []struct {
+		expression string
+		want       string
+	}{
+		{"abs(baseAttack)", "10"},
+		{"min(1, 2)", "1"},
+		{"max(3, 4)", "4"},
+		{"round(1.4)", "1"},
+		{"floor(1.8)", "1"},
+		{"ceil(1.2)", "2"},
+		{"clamp(9, 0, 3)", "3"},
+		{"pow(2, 3)", "8"},
+		{`len("abc")`, "3"},
+	}
+	for _, test := range cases {
+		t.Run(test.expression, func(t *testing.T) {
+			table := document.Table{
+				Columns: []document.Column{
+					{Name: "baseAttack", Schema: schemamodel.Node{Kind: schemamodel.KindInteger}},
+					{Name: "attack", Schema: schemamodel.Node{Kind: schemamodel.KindNumber}},
+				},
+				Rows:     []document.Row{{ID: "row", Values: map[string]document.Cell{"baseAttack": {Expression: "-10"}}}},
+				Formulas: []document.Formula{{RowID: "row", Column: "attack", Expression: test.expression}},
+			}
+			result := Evaluate(table)
+			if len(result.Diagnostics) != 0 {
+				t.Fatalf("diagnostics = %#v", result.Diagnostics)
+			}
+			if got := fmt.Sprint(result.Rows["row"]["attack"]); got != test.want {
+				t.Fatalf("value = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateReportsUnknownFunctionDirectly(t *testing.T) {
+	table := document.Table{
+		Columns:  []document.Column{{Name: "attack", Schema: schemamodel.Node{Kind: schemamodel.KindNumber}}},
+		Rows:     []document.Row{{ID: "row", Values: map[string]document.Cell{}}},
+		Formulas: []document.Formula{{RowID: "row", Column: "attack", Expression: "mystery(1)"}},
+	}
+	result := Evaluate(table)
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].Message != `unknown formula function "mystery"` {
+		t.Fatalf("diagnostics = %#v", result.Diagnostics)
+	}
+}
 
 func TestReferencesReturnsSameAndCrossRowCells(t *testing.T) {
 	table := document.Table{

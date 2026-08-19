@@ -3,7 +3,9 @@ package formula
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
+	"regexp"
 	"sort"
 
 	"cuelang.org/go/cue"
@@ -152,7 +154,14 @@ func Evaluate(table document.Table) Result {
 				delete(pending, key)
 				continue
 			}
-			program, err := expr.Compile(formula.Expression, expr.Env(environment(table, result.Rows, formula.RowID)), expr.AllowUndefinedVariables(), expr.DisableAllBuiltins())
+			if name := unknownFunction(formula.Expression); name != "" {
+				result.add(formula, fmt.Sprintf("unknown formula function %q", name))
+				delete(pending, key)
+				continue
+			}
+			options := []expr.Option{expr.Env(environment(table, result.Rows, formula.RowID)), expr.AllowUndefinedVariables()}
+			options = append(options, deterministicFunctions()...)
+			program, err := expr.Compile(formula.Expression, options...)
 			if err != nil {
 				result.add(formula, err.Error())
 				delete(pending, key)
@@ -175,6 +184,105 @@ func Evaluate(table document.Table) Result {
 		break
 	}
 	return result
+}
+
+func deterministicFunctions() []expr.Option {
+	return []expr.Option{
+		expr.DisableAllBuiltins(),
+		expr.Function("abs", func(params ...any) (any, error) {
+			switch value := params[0].(type) {
+			case int:
+				if value < 0 {
+					return -value, nil
+				}
+				return value, nil
+			case int64:
+				if value < 0 {
+					return -value, nil
+				}
+				return value, nil
+			case float64:
+				return math.Abs(value), nil
+			default:
+				return nil, fmt.Errorf("abs expects a number")
+			}
+		}, func(value int) int { return value }, func(value int64) int64 { return value }, func(value float64) float64 { return value }),
+		expr.Function("min", func(params ...any) (any, error) { return numericMinMax(params, false) }, func(left, right int) int { return left }, func(left, right int64) int64 { return left }, func(left, right float64) float64 { return left }),
+		expr.Function("max", func(params ...any) (any, error) { return numericMinMax(params, true) }, func(left, right int) int { return left }, func(left, right int64) int64 { return left }, func(left, right float64) float64 { return left }),
+		expr.Function("round", func(params ...any) (any, error) { return math.Round(toFloat(params[0])), nil }, func(value float64) float64 { return value }, func(value int) float64 { return float64(value) }),
+		expr.Function("floor", func(params ...any) (any, error) { return math.Floor(toFloat(params[0])), nil }, func(value float64) float64 { return value }, func(value int) float64 { return float64(value) }),
+		expr.Function("ceil", func(params ...any) (any, error) { return math.Ceil(toFloat(params[0])), nil }, func(value float64) float64 { return value }, func(value int) float64 { return float64(value) }),
+		expr.Function("clamp", func(params ...any) (any, error) {
+			value, low, high := toFloat(params[0]), toFloat(params[1]), toFloat(params[2])
+			return math.Min(math.Max(value, low), high), nil
+		}, func(value, low, high float64) float64 { return value }, func(value, low, high int) float64 { return float64(value) }),
+		expr.Function("pow", func(params ...any) (any, error) { return math.Pow(toFloat(params[0]), toFloat(params[1])), nil }, func(left, right float64) float64 { return left }, func(left, right int) float64 { return float64(left) }),
+		expr.Function("len", func(params ...any) (any, error) {
+			switch value := params[0].(type) {
+			case string:
+				return len([]rune(value)), nil
+			case []any:
+				return len(value), nil
+			default:
+				return nil, fmt.Errorf("len expects a string or array")
+			}
+		}, func(value string) int { return len(value) }, func(value []any) int { return len(value) }),
+	}
+}
+
+func toFloat(value any) float64 {
+	switch number := value.(type) {
+	case int:
+		return float64(number)
+	case int64:
+		return float64(number)
+	case float64:
+		return number
+	default:
+		return math.NaN()
+	}
+}
+
+func numericMinMax(params []any, maximum bool) (any, error) {
+	if len(params) == 2 {
+		switch left := params[0].(type) {
+		case int:
+			if right, ok := params[1].(int); ok {
+				if maximum && left > right || !maximum && left < right {
+					return left, nil
+				}
+				return right, nil
+			}
+		case int64:
+			if right, ok := params[1].(int64); ok {
+				if maximum && left > right || !maximum && left < right {
+					return left, nil
+				}
+				return right, nil
+			}
+		}
+	}
+	left, right := toFloat(params[0]), toFloat(params[1])
+	if maximum {
+		return math.Max(left, right), nil
+	}
+	return math.Min(left, right), nil
+}
+
+var functionCallPattern = regexp.MustCompile(`\b([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
+
+var knownFunctionNames = map[string]bool{
+	"abs": true, "min": true, "max": true, "round": true, "floor": true,
+	"ceil": true, "clamp": true, "pow": true, "len": true,
+}
+
+func unknownFunction(expression string) string {
+	for _, match := range functionCallPattern.FindAllStringSubmatch(expression, -1) {
+		if !knownFunctionNames[match[1]] {
+			return match[1]
+		}
+	}
+	return ""
 }
 
 func applyDefaults(table document.Table, rows map[string]map[string]any) {

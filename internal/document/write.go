@@ -14,6 +14,7 @@ import (
 	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/load"
 	"cuelang.org/go/cue/parser"
+	"datapack/internal/schemamodel"
 	exprparser "github.com/expr-lang/expr/parser"
 )
 
@@ -331,6 +332,7 @@ func AddColumn(path, name, schemaExpression, initialExpression string, position 
 // SetColumnSchema replaces one #Row field Schema. Existing row values may no
 // longer satisfy it; those business errors remain editable diagnostics.
 func SetColumnSchema(path, name, schemaExpression string) (Table, error) {
+	schemaExpression = schemamodel.NormalizeNegativeComparisons(schemaExpression)
 	source, err := os.ReadFile(path)
 	if err != nil {
 		return Table{}, fmt.Errorf("read table source: %w", err)

@@ -26,6 +26,7 @@ import (
 	"datapack/internal/logging"
 	"datapack/internal/navigation"
 	"datapack/internal/projecttree"
+	"datapack/internal/schemamodel"
 	"datapack/internal/schemaregistry"
 )
 
@@ -942,7 +943,7 @@ func (s *Service) GetPublicSchema(path string) (document.PublicSchema, error) {
 		s.log(logging.Error, "get public schema failed", map[string]any{"path": path, "error": err.Error()})
 		return document.PublicSchema{}, err
 	}
-	if !containsSchemaFile(s.current.Tree.Root, path) {
+	if !s.containsSchemaFile(path) {
 		err := s.userError("workspace.schemaFileNotInProject", path)
 		s.log(logging.Error, "get public schema failed", map[string]any{"path": path, "error": err.Error()})
 		return document.PublicSchema{}, err
@@ -957,7 +958,7 @@ func (s *Service) GetPublicSchema(path string) (document.PublicSchema, error) {
 }
 
 func (s *Service) schemaDefinitionScope(path string) (string, error) {
-	if containsSchemaFile(s.current.Tree.Root, path) {
+	if s.containsSchemaFile(path) {
 		return "public", nil
 	}
 	if containsTable(s.current.Tree.Root, path) {
@@ -974,7 +975,7 @@ func (s *Service) currentSchemaPackage(path string) string {
 }
 
 func (s *Service) schemaDefinitionID(path, name string) (schemaregistry.ID, error) {
-	if containsSchemaFile(s.current.Tree.Root, path) {
+	if s.containsSchemaFile(path) {
 		schema, err := document.LoadPublicSchema(path)
 		if err != nil {
 			return "", err
@@ -1195,6 +1196,7 @@ func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaE
 // expression into _local.#Name or package.#Name forms that CUE can resolve
 // from the table file scope. Local definitions win over public definitions.
 func (s *Service) normalizeSchemaReferences(path, expression string) (string, error) {
+	expression = schemamodel.NormalizeNegativeComparisons(expression)
 	localNames := map[string]bool{}
 	if table, err := document.LoadTable(path); err == nil {
 		for _, definition := range table.LocalSchema {
@@ -2248,6 +2250,26 @@ func containsSchemaFile(node projecttree.Node, path string) bool {
 		if containsSchemaFile(child, path) {
 			return true
 		}
+	}
+	return false
+}
+
+func (s *Service) containsSchemaFile(path string) bool {
+	if containsSchemaFile(s.current.Tree.Root, path) {
+		return true
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	for _, root := range s.current.Project.Config.SchemaRoots {
+		schemaRoot := filepath.Join(s.current.Project.Root, root)
+		relative, err := filepath.Rel(schemaRoot, absPath)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			continue
+		}
+		_, err = document.LoadPublicSchema(absPath)
+		return err == nil
 	}
 	return false
 }
