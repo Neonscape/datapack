@@ -168,6 +168,7 @@ test("supports pointer editing, row menus, and selected-column actions", async (
     await page.mouse.click(box.x + 225, box.y + 15, {button: "right"});
     await expect(page.getByRole("button", {name: "Add to left"})).toBeVisible();
     await expect(page.getByRole("button", {name: "Edit schema"})).toBeVisible();
+    await page.mouse.click(box.x + 1000, box.y + 200);
 
     await page.mouse.dblclick(box.x + 565, box.y + 50);
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "open");

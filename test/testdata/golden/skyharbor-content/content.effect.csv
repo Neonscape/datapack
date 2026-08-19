@@ -1,0 +1,4 @@
+id,name,kind,power,chance,duration,description,tags
+burn,Burn,damage,18,0.75,3,Deals damage over time.,"[""fire"",""damage""]"
+mend,Mend,heal,25,1,1,,"[""support""]"
+snare,Snare,control,0,0.6,2,Slows the target.,"[""control""]"

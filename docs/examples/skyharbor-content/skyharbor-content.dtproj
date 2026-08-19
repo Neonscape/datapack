@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "tableRoots": ["tables"],
+  "schemaRoots": ["schema"],
+  "exclude": ["exports"],
+  "export": {
+    "directory": "exports",
+    "targets": ["csv"],
+    "tables": {
+      "content.effect": true,
+      "content.item": true,
+      "content.character": true,
+      "balance.growth": true
+    }
+  }
+}

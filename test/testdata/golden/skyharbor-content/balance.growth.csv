@@ -1,0 +1,4 @@
+id,level,baseValue,multiplier,value,nextValue
+level_01,1,10,2,10,20
+level_02,2,14,2,20,10
+level_03,3,19,2,40,20

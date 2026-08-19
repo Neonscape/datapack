@@ -1,0 +1,3 @@
+id,name,level,baseAttack,growthRate,attack,startingItem,description
+captain_lyra,Captain Lyra,4,32,2,64,ember_blade,A patient leader of the sky patrol.
+scout_ren,Scout Ren,2,18,1,18,field_kit,
