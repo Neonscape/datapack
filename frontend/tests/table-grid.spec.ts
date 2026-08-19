@@ -562,6 +562,13 @@ test("creates and renames a public Schema definition", async ({page}) => {
     await expect(page.getByRole("button", {name: "#RarityTier"})).toBeVisible();
 });
 
+test("hides value options for constraint Schemas", async ({page}) => {
+    await page.getByRole("button", {name: "#NonNegative"}).first().click();
+    await expect(page.getByText("Conditions (all must hold)")).toBeVisible();
+    await expect(page.getByText("Allow null")).toBeHidden();
+    await expect(page.getByText("Default value")).toBeHidden();
+});
+
 test("does not save an unchanged empty cell on blur", async ({page}) => {
     const pageErrors: Error[] = [];
     page.on("pageerror", (error) => pageErrors.push(error));

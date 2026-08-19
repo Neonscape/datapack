@@ -130,7 +130,8 @@ export function SchemaForm({value, onChange, workspace, fixedKind, predicateKind
     const kind = fixedKind ?? value.kind ?? "unknown";
     const typeReferences = schemaTypeReferenceOptions(workspace);
     const constraintReferences = schemaConstraintReferenceOptions(workspace);
-    const options = predicateKinds ? predicateKinds.map((entry) => ({kind: entry, label: predicateLabel(entry, t)})) : predicateOptions(kind, t);
+    const options = (predicateKinds ? predicateKinds.map((entry) => ({kind: entry, label: predicateLabel(entry, t)})) : predicateOptions(kind, t))
+        .filter((option) => fixedKind !== "unknown" || option.kind !== "nonEmpty");
 
     const setKind = (next: string) => {
         onChange(schemaNodeWithKind(value, next, typeReferences.map((entry) => entry.value)));
@@ -206,9 +207,9 @@ export function SchemaForm({value, onChange, workspace, fixedKind, predicateKind
             })}
             <button type="button" className="schema-form-add" onClick={addRequirement}>{t("schemaForm.addCondition")}</button>
         </div>}
-        <div className="schema-form-row schema-form-flags">
+        {fixedKind !== "unknown" && <div className="schema-form-row schema-form-flags">
             <label><input type="checkbox" checked={!!value.nullable} onChange={(event) => onChange({...value, nullable: event.target.checked})}/>{t("schemaForm.allowNull")}</label>
             <label className="schema-default">{t("schemaForm.defaultValue")} <input value={value.default?.expression ?? ""} placeholder={t("schemaForm.optionalPlaceholder")} onChange={(event) => onChange({...value, default: event.target.value ? {expression: event.target.value} : undefined})}/></label>
-        </div>
+        </div>}
     </div>;
 }
