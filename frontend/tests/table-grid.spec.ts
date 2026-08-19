@@ -621,6 +621,7 @@ test("shows project tree context menu actions", async ({page}) => {
     await page.keyboard.press("Escape");
 
     await page.getByRole("button", {name: "common", exact: true}).click({button: "right"});
+    await expect(page.getByRole("button", {name: "New table"})).toBeVisible();
     await expect(page.getByRole("button", {name: "New schema"})).toBeVisible();
     await page.keyboard.press("Escape");
 

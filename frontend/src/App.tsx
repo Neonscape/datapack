@@ -850,7 +850,10 @@ function App() {
                     <button onClick={() => { renameDefinitionAt(treeMenu.node.path!, treeMenu.node.name.replace(/^#/, "")); setTreeMenu(null); }}>{t("tree.renameDefinition")}</button>
                     <button className="tree-context-danger" onClick={() => { deleteDefinitionAt(treeMenu.node.path!, treeMenu.node.name.replace(/^#/, "")); setTreeMenu(null); }}>{t("tree.deleteDefinition")}</button>
                 </>}
-                {treeMenu.node.kind === "namespace" && <button onClick={() => { setTreeMenu(null); void newDefinitionInNamespace(treeMenu.node.name); }}>{t("tree.newSchema")}</button>}
+                {treeMenu.node.kind === "namespace" && <>
+                    <button onClick={() => { setTreeMenu(null); setTableDialog({namespace: treeMenu.node.name, name: ""}); }}>{t("menu.newTable")}</button>
+                    <button onClick={() => { setTreeMenu(null); void newDefinitionInNamespace(treeMenu.node.name); }}>{t("tree.newSchema")}</button>
+                </>}
             </div>}
             {error && <div className="error-toast" role="alert">{error}</div>}
             {notice && <div className="notice-toast" role="status">{notice}</div>}
