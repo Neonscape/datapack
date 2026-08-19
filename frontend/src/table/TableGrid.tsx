@@ -239,9 +239,8 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
             setCommentTooltip(null);
             return;
         }
-        const gridBounds = gridRef.current?.getBoundingClientRect();
-        const left = (gridBounds?.left ?? 0) + args.bounds.x + args.localEventX;
-        const top = (gridBounds?.top ?? 0) + args.bounds.y + args.localEventY + 12;
+        const left = args.bounds.x + args.localEventX;
+        const top = args.bounds.y + args.localEventY + 12;
         setCommentTooltip({text: comment, left: Math.max(4, Math.min(left, window.innerWidth - 340)), top: Math.max(4, Math.min(top, window.innerHeight - 160))});
     };
     const focusDiagnostic = (diagnostic: NonNullable<TableDocument["diagnostics"]>[number]) => {
@@ -520,7 +519,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                 onHeaderContextMenu={(column, event) => {
                     event.preventDefault();
                     setSelectedColumn(column === 0 ? null : column);
-                    setColumnMenu({column, x: event.localEventX, y: event.localEventY});
+                    setColumnMenu({column, x: event.bounds.x + event.localEventX, y: event.bounds.y + event.localEventY});
                     setMenu(null);
                     setContextRow(null);
                 }}
@@ -529,10 +528,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                     event.preventDefault();
                     setContextRow(column === -1 ? row : null);
                     setContextCell(column >= 0 ? {column, row} : null);
-                    const gridBounds = gridRef.current?.getBoundingClientRect();
-                    setMenu(column >= 0 && gridBounds
-                        ? {x: gridBounds.left + event.bounds.x + event.localEventX, y: gridBounds.top + event.bounds.y + event.localEventY, fixed: true}
-                        : {x: event.localEventX, y: event.localEventY});
+                    setMenu({x: event.bounds.x + event.localEventX, y: event.bounds.y + event.localEventY, fixed: true});
                 }}
             />
             {menu !== null && (contextRow !== null || contextCell !== null) && <div className={`row-context-menu ${menu.fixed ? "cell-comment-menu" : ""}`} style={{left: menu.x, top: menu.y}}>
