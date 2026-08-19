@@ -150,6 +150,10 @@ export function SetCellFormula(arg1) {
   return window['go']['main']['App']['SetCellFormula'](arg1);
 }
 
+export function SetCellText(arg1) {
+  return window['go']['main']['App']['SetCellText'](arg1);
+}
+
 export function SetColumnSchema(arg1) {
   return window['go']['main']['App']['SetColumnSchema'](arg1);
 }

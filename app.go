@@ -164,6 +164,10 @@ func (a *App) UpdateCell(update workspace.CellUpdate) (workspace.CellUpdateResul
 	return a.workspace.UpdateCell(update)
 }
 
+func (a *App) SetCellText(update workspace.CellUpdate) (workspace.CellUpdateResult, error) {
+	return a.workspace.SetCellText(update)
+}
+
 func (a *App) SetCellComment(update workspace.CellCommentSet) (workspace.CellUpdateResult, error) {
 	return a.workspace.SetCellComment(update)
 }

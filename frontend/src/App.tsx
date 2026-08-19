@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import './App.css';
-import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellComment, SetCellFormula, SetColumnSchema, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellComment, SetCellFormula, SetCellText, SetColumnSchema, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
 import {schemamodel, workspace as workspaceModel} from "../wailsjs/go/models";
 import {useTranslation, type Language} from "./i18n";
 import {useTheme, type ThemePreference} from "./theme";
@@ -554,9 +554,12 @@ function App() {
                 setWorkspace(result.workspace as WorkspaceView);
                 return;
             }
+            const columnDefinition = table.columns.find((entry) => entry.name === column);
             const result = input.startsWith("=")
                 ? await SetCellFormula({path: table.path, rowID, column, expression: input.slice(1).trim()})
-                : await UpdateCell({path: table.path, rowID, column, expression: input});
+                : columnDefinition?.schema.kind === "string"
+                    ? await SetCellText({path: table.path, rowID, column, expression: input})
+                    : await UpdateCell({path: table.path, rowID, column, expression: input});
             updateActiveTable(result.table as TableDocument);
             setWorkspace(result.workspace as WorkspaceView);
         } catch (reason) {

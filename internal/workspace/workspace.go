@@ -1705,6 +1705,22 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 	return CellUpdateResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
+func (s *Service) SetCellText(update CellUpdate) (CellUpdateResult, error) {
+	if s.current == nil {
+		return CellUpdateResult{}, s.userError("workspace.noProject")
+	}
+	if !containsTable(s.current.Tree.Root, update.Path) {
+		return CellUpdateResult{}, s.userError("workspace.tableNotInProject", update.Path)
+	}
+	table, view, err := s.edit(update.Path, func() (document.Table, error) {
+		return document.SetCellText(update.Path, update.RowID, update.Column, update.Expression)
+	})
+	if err != nil {
+		return CellUpdateResult{}, err
+	}
+	return CellUpdateResult{Table: withTableMetadata(table, view), Workspace: view}, nil
+}
+
 func (s *Service) SetCellComment(update CellCommentSet) (CellUpdateResult, error) {
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
@@ -1909,6 +1925,14 @@ func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
 		return CellUpdateResult{}, s.userError("workspace.tableNotInProject", update.Path)
 	}
 	table, view, err := s.edit(update.Path, func() (document.Table, error) {
+		source, err := document.LoadTable(update.Path)
+		if err == nil {
+			for _, column := range source.Columns {
+				if column.Name == update.Column && column.Schema.Nullable && !column.Optional {
+					return document.SetCellValue(update.Path, update.RowID, update.Column, "null")
+				}
+			}
+		}
 		return document.ClearCell(update.Path, update.RowID, update.Column)
 	})
 	if err != nil {

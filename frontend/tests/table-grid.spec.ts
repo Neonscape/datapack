@@ -83,6 +83,7 @@ test.beforeEach(async ({page}) => {
             UpdateCell: () => Promise.resolve({table, workspace}),
             SetCellFormula: () => Promise.resolve({table, workspace}),
             SetCellComment: () => Promise.resolve({table: {...table, cellComments: {sword: {name: "comment"}}}, workspace}),
+            SetCellText: () => Promise.resolve({table, workspace}),
             CreateRow: () => Promise.resolve({table, workspace}),
             CreateTable: () => Promise.resolve({table, workspace}),
             ClearCell: () => Promise.resolve({table, workspace}),
@@ -355,7 +356,7 @@ test("compiles manually after pending edits", async ({page}) => {
     await page.evaluate(() => {
         const mock = (window as Window & {__mock: {table: unknown; workspace: {compile: {pending: boolean}}}}).__mock;
         const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
-        api.UpdateCell = () => Promise.resolve({table: mock.table, workspace: {...mock.workspace, compile: {...mock.workspace.compile, pending: true}}});
+        api.SetCellText = () => Promise.resolve({table: mock.table, workspace: {...mock.workspace, compile: {...mock.workspace.compile, pending: true}}});
     });
     const canvas = page.locator("canvas:visible").first();
     const box = await canvas.boundingBox();
@@ -374,9 +375,9 @@ test("compiles manually after pending edits", async ({page}) => {
 test("edits a cell through the formula bar", async ({page}) => {
     await page.evaluate(() => {
         const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
-        const updateCell = api.UpdateCell;
+        const setCellText = api.SetCellText;
         (window as Window & {formulaBarCalls: {rowID: string; column: string; expression: string}[]}).formulaBarCalls = [];
-        api.UpdateCell = (...args) => {
+        api.SetCellText = (...args) => {
             const argument = args[0] as {rowID: string; column: string; expression: string};
             (window as Window & {formulaBarCalls: {rowID: string; column: string; expression: string}[]}).formulaBarCalls.push(argument);
             return updateCell(...args);

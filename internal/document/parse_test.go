@@ -167,7 +167,7 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	if _, err := SetCellValue(path, "sword", "missing", "1"); err == nil {
 		t.Fatal("SetCellValue() accepted a missing column")
 	}
-	if _, err := SetCellValue(path, "sword", "name", "["); err == nil {
+	if _, err := SetCellValue(path, "sword", "name", "{"); err == nil {
 		t.Fatal("SetCellValue() accepted invalid CUE")
 	}
 	current, err := os.ReadFile(path)

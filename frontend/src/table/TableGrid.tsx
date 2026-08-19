@@ -94,7 +94,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
     const [draftError, setDraftError] = useState("");
     const [contextRow, setContextRow] = useState<number | null>(null);
     const [contextCell, setContextCell] = useState<{column: number; row: number} | null>(null);
-    const [menu, setMenu] = useState<{x: number; y: number} | null>(null);
+    const [menu, setMenu] = useState<{x: number; y: number; fixed?: boolean} | null>(null);
     const [columnMenu, setColumnMenu] = useState<{column: number; x: number; y: number} | null>(null);
     const [selectedColumn, setSelectedColumn] = useState<number | null>(null);
     const [gridSelection, setGridSelection] = useState<GridSelection>({columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: undefined});
@@ -152,8 +152,10 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
     const rawCellValue = (column: number, row: number): string => {
         const source = rowFor(row);
         if (column === 0) return source.id;
-        const cell = source.values[table.columns[column - 1].name];
-        return cell?.formula ? `=${cell.expression}` : cell?.expression ?? "";
+        const columnDefinition = table.columns[column - 1];
+        const cell = source.values[columnDefinition.name];
+        if (cell?.formula) return `=${cell.expression}`;
+        return columnDefinition.schema.kind === "string" ? cell?.display ?? "" : cell?.expression ?? "";
     };
     const selectedCellLabel = selectedCell ? `${selectedCell.column === 0 ? "id" : table.columns[selectedCell.column - 1].name} · ${rowFor(selectedCell.row).id || t("grid.draft")}` : "";
     useEffect(() => {
@@ -237,7 +239,10 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
             setCommentTooltip(null);
             return;
         }
-        setCommentTooltip({text: comment, left: args.bounds.x, top: args.bounds.y + args.bounds.height + 6});
+        const gridBounds = gridRef.current?.getBoundingClientRect();
+        const left = (gridBounds?.left ?? 0) + args.bounds.x;
+        const top = (gridBounds?.top ?? 0) + args.bounds.y + args.bounds.height + 6;
+        setCommentTooltip({text: comment, left: Math.max(4, Math.min(left, window.innerWidth - 340)), top: Math.max(4, Math.min(top, window.innerHeight - 160))});
     };
     const focusDiagnostic = (diagnostic: NonNullable<TableDocument["diagnostics"]>[number]) => {
         const row = table.rows.findIndex((entry) => entry.id === diagnostic.rowID);
@@ -267,7 +272,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
         }
         return {
             kind: GridCellKind.Text,
-            data: cell?.formula ? `=${cell.expression}` : cell?.expression ?? "",
+            data: cell?.formula ? `=${cell.expression}` : column !== 0 && columnDefinition.schema.kind === "string" ? cell?.display ?? "" : cell?.expression ?? "",
             displayData: cell?.display ?? "",
             allowOverlay: false,
             themeOverride: error ? {
@@ -524,10 +529,13 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                     event.preventDefault();
                     setContextRow(column === -1 ? row : null);
                     setContextCell(column >= 0 ? {column, row} : null);
-                    setMenu({x: event.localEventX, y: event.localEventY});
+                    const gridBounds = gridRef.current?.getBoundingClientRect();
+                    setMenu(column >= 0 && gridBounds
+                        ? {x: gridBounds.left + event.localEventX, y: gridBounds.top + event.localEventY, fixed: true}
+                        : {x: event.localEventX, y: event.localEventY});
                 }}
             />
-            {menu !== null && (contextRow !== null || contextCell !== null) && <div className="row-context-menu" style={{left: menu.x, top: menu.y}}>
+            {menu !== null && (contextRow !== null || contextCell !== null) && <div className={`row-context-menu ${menu.fixed ? "cell-comment-menu" : ""}`} style={{left: menu.x, top: menu.y}}>
                 {contextCell && <>
                     <button onClick={() => {
                         const rowID = table.rows[contextCell.row].id;

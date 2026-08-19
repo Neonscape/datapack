@@ -376,7 +376,7 @@ func expressionOf(expression ast.Expr) (string, error) {
 
 func displayOf(expression ast.Expr, fallback string) string {
 	if literal, ok := expression.(*ast.BasicLit); ok && literal.Kind == token.STRING {
-		if value, err := strconv.Unquote(literal.Value); err == nil {
+		if value, ok := displayStringExpression(literal.Value); ok {
 			return value
 		}
 	}
