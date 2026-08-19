@@ -55,6 +55,7 @@ export const en: Record<string, string> = {
     "tree.renameDefinition": "Rename definition",
     "tree.deleteDefinition": "Delete definition",
     "tree.newSchema": "New schema",
+    "tree.openSchema": "Open schema",
 
     "column.add": "Add column",
     "column.editSchema": "Edit column schema",

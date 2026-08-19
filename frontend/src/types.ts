@@ -6,7 +6,7 @@ export type LogEntry = {
 };
 
 export type TreeNode = {
-    kind: "project" | "namespace" | "group" | "table" | "localSchema" | "schemaDefinition" | "damaged";
+    kind: "project" | "namespace" | "group" | "table" | "schemaFile" | "localSchema" | "schemaDefinition" | "damaged";
     name: string;
     path?: string;
     diagnostics?: {severity: string; message: string; line?: number; column?: number}[];

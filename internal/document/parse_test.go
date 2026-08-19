@@ -62,6 +62,15 @@ _schema: {definitions: {
 	}
 }
 
+func TestLoadPublicSchemaKeepsEmptyDefinitionsNonNil(t *testing.T) {
+	path := writeSource(t, "empty.cue", `package empty
+_schema: {definitions: {}}`)
+	schema, err := LoadPublicSchema(path)
+	if err != nil || schema.Definitions == nil || len(schema.Definitions) != 0 {
+		t.Fatalf("LoadPublicSchema() = %#v, %v", schema, err)
+	}
+}
+
 func TestLoadTableReadsEnabledCSVExport(t *testing.T) {
 	path := writeSource(t, "item.cue", `package item
 #PrimaryKey: string

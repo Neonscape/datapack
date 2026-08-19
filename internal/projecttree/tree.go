@@ -18,6 +18,7 @@ const (
 	NodeNamespace        NodeKind = "namespace"
 	NodeGroup            NodeKind = "group"
 	NodeTable            NodeKind = "table"
+	NodeSchemaFile       NodeKind = "schemaFile"
 	NodeLocalSchema      NodeKind = "localSchema"
 	NodeSchemaDefinition NodeKind = "schemaDefinition"
 	NodeDamaged          NodeKind = "damaged"
@@ -89,7 +90,7 @@ func Scan(projectPath string, tableRoots, schemaRoots, excludes []string) (Tree,
 			continue
 		}
 		group := ensureNamespace(schema.Package)
-		group.schemas = append(group.schemas, schemaDefinitionNodes(schema)...)
+		group.schemas = append(group.schemas, Node{Kind: NodeSchemaFile, Name: filepath.Base(schema.Path), Path: schema.Path, Children: schemaDefinitionNodes(schema)})
 	}
 
 	sort.Strings(order)

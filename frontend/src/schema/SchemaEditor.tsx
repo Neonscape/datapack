@@ -7,6 +7,7 @@ import {schemaTypeReferenceOptions} from "./refs";
 import {SchemaForm, predicateKindsFor, schemaNodeWithKind} from "./SchemaForm";
 
 type SchemaDraft = {name: string; kind: "type" | "constraint"; type: string; appliesTo: string; expression: string; node: SchemaNode; custom: boolean};
+const emptyDefinitions: SchemaEditorState["definitions"] = [];
 
 export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, onCreate, onApply, onRename, onDelete}: {
     state: SchemaEditorState;
@@ -28,6 +29,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
     const [busy, setBusy] = useState(false);
     const [editorError, setEditorError] = useState("");
     const typeReferences = schemaTypeReferenceOptions(workspace).map((entry) => entry.value);
+    const definitions = state.definitions ?? emptyDefinitions;
 
     useEffect(() => {
         setCreating(false);
@@ -39,7 +41,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
             setCreating(true);
             return;
         }
-        const definition = state.definitions.find((entry) => entry.name === state.selected) ?? null;
+        const definition = definitions.find((entry) => entry.name === state.selected) ?? null;
             setDraft(definition ? {
             name: definition.name,
             kind: definition.kind,
@@ -49,7 +51,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
             node: definition.schema,
             custom: false,
         } : null);
-    }, [state.selected, state.definitions, state.creating]);
+    }, [state.selected, definitions, state.creating]);
 
     function startCreate() {
         setDraft({name: "", kind: "type", type: "string", appliesTo: "", expression: "string", node: {kind: "string"}, custom: false});
@@ -99,7 +101,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
                 <div className="schema-editor-title">{state.local ? t("schemaEditor.local") : t("schemaEditor.public")}</div>
                 <div className="schema-editor-file">{state.path}</div>
                 <div className="schema-definition-list">
-                    {state.definitions.map((definition) => <button
+                    {definitions.map((definition) => <button
                         className={`schema-definition-row ${state.selected === definition.name ? "schema-definition-row-selected" : ""}`}
                         key={definition.name}
                         onClick={() => onSelect(definition.name)}
@@ -107,7 +109,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
                         <span>#{definition.name}</span>
                         <span className={`schema-kind-dot schema-kind-${definition.kind}`} aria-hidden="true"/>
                     </button>)}
-                    {state.definitions.length === 0 && <div className="schema-editor-empty">{t("schemaEditor.noDefinitions")}</div>}
+                    {definitions.length === 0 && <div className="schema-editor-empty">{t("schemaEditor.noDefinitions")}</div>}
                 </div>
                 <button className="schema-editor-create" onClick={startCreate}>{t("schemaEditor.newDefinition")}</button>
             </aside>

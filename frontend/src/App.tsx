@@ -174,7 +174,8 @@ function App() {
                 state = {path, local: true, logicalTable: logical, definitions: document.localSchema, selected: definition ?? document.localSchema[0]?.name ?? null, creating};
             } else {
                 const document = await GetPublicSchema(path) as PublicSchemaDocument;
-                state = {path, local: false, package: document.package, definitions: document.definitions, selected: definition ?? document.definitions[0]?.name ?? null, creating};
+                const definitions = document.definitions ?? [];
+                state = {path, local: false, package: document.package, definitions, selected: definition ?? definitions[0]?.name ?? null, creating};
             }
             setTabs((current) => [...current, {id, kind: "schema", state}]);
             setActiveTabId(id);
@@ -200,7 +201,7 @@ function App() {
                     refreshed.push({...tab, state: {...tab.state, logicalTable: logical, definitions, selected: definitions.some((entry) => entry.name === tab.state.selected) ? tab.state.selected : (definitions[0]?.name ?? null), creating: false}});
                 } else {
                     const document = await GetPublicSchema(tab.state.path) as PublicSchemaDocument;
-                    const definitions = document.definitions;
+                    const definitions = document.definitions ?? [];
                     refreshed.push({...tab, state: {...tab.state, package: document.package, definitions, selected: definitions.some((entry) => entry.name === tab.state.selected) ? tab.state.selected : (definitions[0]?.name ?? null), creating: false}});
                 }
             } catch {
@@ -414,9 +415,18 @@ function App() {
         setTreeDialog({mode: "deleteTable", path, label});
     }
 
-    async function newDefinitionInNamespace(namespace: string) {
+    function schemaFileInNamespace(node: TreeNode): TreeNode | null {
+        const schemas = node.children?.find((child) => child.kind === "group" && child.name === "Schemas");
+        return schemas?.children?.find((child) => child.kind === "schemaFile") ?? null;
+    }
+
+    async function newDefinitionInNamespace(namespace: string, schemaPath?: string) {
         setError("");
         try {
+            if (schemaPath) {
+                await openSchemaByPath(schemaPath, null, false, true);
+                return;
+            }
             const definition = schemaDefinitions(workspace).find((entry) => !entry.table && entry.id.startsWith(`${namespace}.#`));
             if (definition) {
                 await openSchemaByPath(definition.path, null, false, true);
@@ -850,9 +860,18 @@ function App() {
                     <button onClick={() => { renameDefinitionAt(treeMenu.node.path!, treeMenu.node.name.replace(/^#/, "")); setTreeMenu(null); }}>{t("tree.renameDefinition")}</button>
                     <button className="tree-context-danger" onClick={() => { deleteDefinitionAt(treeMenu.node.path!, treeMenu.node.name.replace(/^#/, "")); setTreeMenu(null); }}>{t("tree.deleteDefinition")}</button>
                 </>}
+                {treeMenu.node.kind === "schemaFile" && <>
+                    <button onClick={() => { setTreeMenu(null); void openSchemaByPath(treeMenu.node.path!, null, false); }}>{t("tree.openSchema")}</button>
+                    <button onClick={() => { setTreeMenu(null); void newDefinitionInNamespace(treeMenu.namespace, treeMenu.node.path); }}>{t("tree.newDefinition")}</button>
+                </>}
                 {treeMenu.node.kind === "namespace" && <>
                     <button onClick={() => { setTreeMenu(null); setTableDialog({namespace: treeMenu.node.name, name: ""}); }}>{t("menu.newTable")}</button>
-                    <button onClick={() => { setTreeMenu(null); void newDefinitionInNamespace(treeMenu.node.name); }}>{t("tree.newSchema")}</button>
+                    {schemaFileInNamespace(treeMenu.node)
+                        ? <>
+                            <button onClick={() => { const schemaFile = schemaFileInNamespace(treeMenu.node); setTreeMenu(null); void openSchemaByPath(schemaFile!.path!, null, false); }}>{t("tree.openSchema")}</button>
+                            <button onClick={() => { const schemaFile = schemaFileInNamespace(treeMenu.node); setTreeMenu(null); void newDefinitionInNamespace(treeMenu.node.name, schemaFile!.path); }}>{t("tree.newDefinition")}</button>
+                        </>
+                        : <button onClick={() => { setTreeMenu(null); void newDefinitionInNamespace(treeMenu.node.name); }}>{t("tree.newSchema")}</button>}
                 </>}
             </div>}
             {error && <div className="error-toast" role="alert">{error}</div>}

@@ -165,7 +165,7 @@ func LoadPublicSchema(path string) (PublicSchema, error) {
 		return PublicSchema{}, fmt.Errorf("parse schema source: %w", err)
 	}
 	fields := fieldsOfFile(file)
-	document := PublicSchema{Path: path}
+	document := PublicSchema{Path: path, Definitions: []SchemaDefinition{}}
 	if packageDecl := packageOfFile(file); packageDecl != nil && packageDecl.Name != nil {
 		document.Package = packageDecl.Name.Name
 	}

@@ -40,8 +40,10 @@ const workspace = {
         ]},
         {kind: "namespace", name: "common", children: [
             {kind: "group", name: "Schemas", children: [
-                {kind: "schemaDefinition", name: "#GameID", path: publicSchema.path},
-                {kind: "schemaDefinition", name: "#NonNegative", path: publicSchema.path},
+                {kind: "schemaFile", name: "common.cue", path: publicSchema.path, children: [
+                    {kind: "schemaDefinition", name: "#GameID", path: publicSchema.path},
+                    {kind: "schemaDefinition", name: "#NonNegative", path: publicSchema.path},
+                ]},
             ]},
         ]},
     ]}},
@@ -622,7 +624,13 @@ test("shows project tree context menu actions", async ({page}) => {
 
     await page.getByRole("button", {name: "common", exact: true}).click({button: "right"});
     await expect(page.getByRole("button", {name: "New table"})).toBeVisible();
-    await expect(page.getByRole("button", {name: "New schema"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "Open schema"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "New definition"})).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", {name: "common.cue", exact: true}).click({button: "right"});
+    await expect(page.getByRole("button", {name: "Open schema"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "New definition"})).toBeVisible();
     await page.keyboard.press("Escape");
 
     await page.getByRole("button", {name: "#GameID", exact: true}).click({button: "right"});

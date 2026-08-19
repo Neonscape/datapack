@@ -89,6 +89,27 @@ _schema: {definitions: {GameID: {kind: "type", type: "string"}}}
 	}
 }
 
+func TestScanKeepsEmptySchemaFileNode(t *testing.T) {
+	root := t.TempDir()
+	projectPath := filepath.Join(root, "game.dtproj")
+	writeFile(t, projectPath, "{}")
+	if err := os.MkdirAll(filepath.Join(root, "tables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "schema", "item", "item.cue"), `package item
+_schema: {definitions: {}}
+`)
+
+	tree, err := Scan(projectPath, []string{"tables"}, []string{"schema"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := find(tree.Root, "item.cue")
+	if file == nil || file.Kind != NodeSchemaFile || file.Path != filepath.Join(root, "schema", "item", "item.cue") {
+		t.Fatalf("schema file = %#v", file)
+	}
+}
+
 func TestScanGroupsSameNameTablesByNamespace(t *testing.T) {
 	root := t.TempDir()
 	projectPath := filepath.Join(root, "game.dtproj")

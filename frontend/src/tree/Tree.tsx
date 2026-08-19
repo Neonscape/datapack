@@ -2,8 +2,8 @@ import type {TreeNode} from "../types";
 
 export function Tree({node, depth = 0, namespace = "", parentKey = "", collapsed, onToggleCollapse, onOpenTable, onOpenSchema, onOpenProjectSettings, onContextMenu}: { node: TreeNode; depth?: number; namespace?: string; parentKey?: string; collapsed: Set<string>; onToggleCollapse: (key: string) => void; onOpenTable: (path: string) => void; onOpenSchema: (node: TreeNode) => void; onOpenProjectSettings: () => void; onContextMenu: (node: TreeNode, position: {x: number; y: number}, namespace: string) => void }) {
     const key = `${parentKey}::${node.kind}:${node.name}`;
-    const isFile = node.kind === "table" || node.kind === "schemaDefinition" || node.kind === "damaged";
-    const isSchemaNode = node.kind === "schemaDefinition" || node.kind === "localSchema";
+    const isFile = node.kind === "table" || node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "damaged";
+    const isSchemaNode = node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "localSchema";
     const openTable = node.kind === "table" && node.path ? () => onOpenTable(node.path!) : undefined;
     const openSchema = isSchemaNode && node.path ? () => onOpenSchema(node) : undefined;
     const openProjectSettings = node.kind === "project" ? onOpenProjectSettings : undefined;

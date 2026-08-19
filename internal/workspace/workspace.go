@@ -2243,7 +2243,7 @@ func containsTable(node projecttree.Node, path string) bool {
 }
 
 func containsSchemaFile(node projecttree.Node, path string) bool {
-	if node.Kind == projecttree.NodeSchemaDefinition && node.Path == path {
+	if (node.Kind == projecttree.NodeSchemaFile || node.Kind == projecttree.NodeSchemaDefinition) && node.Path == path {
 		return true
 	}
 	for _, child := range node.Children {
@@ -2275,7 +2275,7 @@ func (s *Service) containsSchemaFile(path string) bool {
 }
 
 func collectSourcePaths(node projecttree.Node, paths *[]string) {
-	if (node.Kind == projecttree.NodeTable || node.Kind == projecttree.NodeSchemaDefinition) && node.Path != "" {
+	if (node.Kind == projecttree.NodeTable || node.Kind == projecttree.NodeSchemaFile || node.Kind == projecttree.NodeSchemaDefinition) && node.Path != "" {
 		*paths = append(*paths, node.Path)
 	}
 	for _, child := range node.Children {

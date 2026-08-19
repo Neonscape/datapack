@@ -55,6 +55,7 @@ export const zh: Record<string, string> = {
     "tree.renameDefinition": "重命名定义",
     "tree.deleteDefinition": "删除定义",
     "tree.newSchema": "新建 Schema",
+    "tree.openSchema": "打开 Schema",
 
     "column.add": "添加列",
     "column.editSchema": "编辑列 Schema",
