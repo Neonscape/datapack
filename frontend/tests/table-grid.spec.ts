@@ -82,6 +82,7 @@ test.beforeEach(async ({page}) => {
             GetPublicSchema: () => Promise.resolve(publicSchema),
             UpdateCell: () => Promise.resolve({table, workspace}),
             SetCellFormula: () => Promise.resolve({table, workspace}),
+            SetCellComment: () => Promise.resolve({table: {...table, cellComments: {sword: {name: "comment"}}}, workspace}),
             CreateRow: () => Promise.resolve({table, workspace}),
             CreateTable: () => Promise.resolve({table, workspace}),
             ClearCell: () => Promise.resolve({table, workspace}),
@@ -271,6 +272,19 @@ test("shows table diagnostics and focuses their cells", async ({page}) => {
     await diagnostic.click();
     await expect(page.locator(".table-diagnostics-title")).toContainText("2");
     await expect(page.getByRole("button", {name: /table.*invalid export configuration/})).toBeDisabled();
+});
+
+test("adds a multiline cell comment from the cell context menu", async ({page}) => {
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    await page.mouse.click(box.x + 225, box.y + 50, {button: "right"});
+    await page.getByRole("button", {name: "Add comment"}).click();
+    await expect(page.getByRole("heading", {name: "Cell comment"})).toBeVisible();
+    await page.getByRole("textbox", {name: "Comment"}).fill("第一行\n第二行");
+    await page.getByRole("button", {name: "Apply", exact: true}).click();
+    await expect(page.locator(".table-document")).toBeVisible();
 });
 
 test("edits the selected column Schema", async ({page}) => {

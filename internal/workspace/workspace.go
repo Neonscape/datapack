@@ -71,6 +71,13 @@ type CellUpdate struct {
 	Expression string `json:"expression"`
 }
 
+type CellCommentSet struct {
+	Path    string `json:"path"`
+	RowID   string `json:"rowID"`
+	Column  string `json:"column"`
+	Comment string `json:"comment"`
+}
+
 type CellUpdateResult struct {
 	Table     document.Table `json:"table"`
 	Workspace View           `json:"workspace"`
@@ -1691,6 +1698,22 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 	}
 	table, view, err := s.edit(update.Path, func() (document.Table, error) {
 		return document.SetCellValue(update.Path, update.RowID, update.Column, update.Expression)
+	})
+	if err != nil {
+		return CellUpdateResult{}, err
+	}
+	return CellUpdateResult{Table: withTableMetadata(table, view), Workspace: view}, nil
+}
+
+func (s *Service) SetCellComment(update CellCommentSet) (CellUpdateResult, error) {
+	if s.current == nil {
+		return CellUpdateResult{}, s.userError("workspace.noProject")
+	}
+	if !containsTable(s.current.Tree.Root, update.Path) {
+		return CellUpdateResult{}, s.userError("workspace.tableNotInProject", update.Path)
+	}
+	table, view, err := s.edit(update.Path, func() (document.Table, error) {
+		return document.SetCellComment(update.Path, update.RowID, update.Column, update.Comment)
 	})
 	if err != nil {
 		return CellUpdateResult{}, err

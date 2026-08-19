@@ -691,6 +691,24 @@
     background: var(--danger-bg);
 }
 
+.cell-comment-tooltip {
+    position: absolute;
+    z-index: 18;
+    max-width: min(320px, calc(100% - 20px));
+    max-height: 140px;
+    overflow: auto;
+    padding: 7px 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    color: var(--text-strong);
+    background: var(--bg-surface);
+    box-shadow: 0 8px 18px var(--shadow);
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    pointer-events: none;
+}
+
 .inline-cell-editor {
     position: absolute;
     z-index: 8;

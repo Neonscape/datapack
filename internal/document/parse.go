@@ -27,13 +27,14 @@ func LoadTable(path string) (Table, error) {
 	}
 	fields := fieldsOfFile(file)
 	document := Table{
-		Path:        path,
-		Columns:     []Column{},
-		Rows:        []Row{},
-		ForeignKeys: []ForeignKey{},
-		Formulas:    []Formula{},
-		LocalSchema: []SchemaDefinition{},
-		Exports:     map[string]ExportSettings{},
+		Path:         path,
+		Columns:      []Column{},
+		Rows:         []Row{},
+		ForeignKeys:  []ForeignKey{},
+		Formulas:     []Formula{},
+		LocalSchema:  []SchemaDefinition{},
+		Exports:      map[string]ExportSettings{},
+		CellComments: map[string]map[string]string{},
 	}
 	if packageDecl := packageOfFile(file); packageDecl != nil && packageDecl.Name != nil {
 		document.Package = packageDecl.Name.Name
@@ -61,6 +62,21 @@ func LoadTable(path string) (Table, error) {
 					return Table{}, fmt.Errorf("parse formula %q.%q: expression must be a string", labelOf(row), labelOf(formula))
 				}
 				document.Formulas = append(document.Formulas, Formula{RowID: labelOf(row), Column: labelOf(formula), Expression: expression})
+			}
+		}
+	}
+	if editor := fields["_editor"]; editor != nil {
+		if comments := fieldsOfStruct(editor.Value)["cellComments"]; comments != nil {
+			for _, row := range orderedStructFields(comments.Value) {
+				values := map[string]string{}
+				for _, column := range orderedStructFields(row.Value) {
+					if comment, ok := formulaExpression(column.Value); ok && comment != "" {
+						values[labelOf(column)] = comment
+					}
+				}
+				if len(values) > 0 {
+					document.CellComments[labelOf(row)] = values
+				}
 			}
 		}
 	}

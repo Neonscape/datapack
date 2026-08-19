@@ -150,6 +150,7 @@ export type TableDocument = {
     diagnostics?: { rowID: string; column?: string; message: string }[];
     localSchema: SchemaDefinitionDocument[];
     exports?: Record<string, {enabled: boolean; columns?: string[]}>;
+    cellComments?: Record<string, Record<string, string>>;
 };
 
 export type NavRequest = {

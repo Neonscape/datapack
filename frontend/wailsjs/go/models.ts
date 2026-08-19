@@ -302,6 +302,7 @@ export namespace document {
 	    diagnostics?: Diagnostic[];
 	    csvExport?: CSVExport;
 	    exports?: Record<string, ExportSettings>;
+	    cellComments?: Record<string, any>;
 	    localSchema: SchemaDefinition[];
 	
 	    static createFrom(source: any = {}) {
@@ -322,6 +323,7 @@ export namespace document {
 	        this.diagnostics = this.convertValues(source["diagnostics"], Diagnostic);
 	        this.csvExport = this.convertValues(source["csvExport"], CSVExport);
 	        this.exports = this.convertValues(source["exports"], ExportSettings, true);
+	        this.cellComments = source["cellComments"];
 	        this.localSchema = this.convertValues(source["localSchema"], SchemaDefinition);
 	    }
 	
@@ -800,6 +802,24 @@ export namespace workspace {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
 	        this.autoCompileDebounceSeconds = source["autoCompileDebounceSeconds"];
+	    }
+	}
+	export class CellCommentSet {
+	    path: string;
+	    rowID: string;
+	    column: string;
+	    comment: string;
+
+	    static createFrom(source: any = {}) {
+	        return new CellCommentSet(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.rowID = source["rowID"];
+	        this.column = source["column"];
+	        this.comment = source["comment"];
 	    }
 	}
 	export class CellUpdate {

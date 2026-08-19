@@ -11,6 +11,7 @@ export type GridColors = {
     draftCellText: string;
     formulaBg: string;
     formulaText: string;
+    commentColor: string;
 };
 
 type ThemeContextValue = {
@@ -24,8 +25,8 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const gridPalette: Record<ResolvedTheme, GridColors> = {
-    light: {errorCellBg: "#fff1f1", errorCellText: "#8a3030", draftCellBg: "#f7fafb", draftCellText: "#51616b", formulaBg: "#e8f3f5", formulaText: "#1c5d73"},
-    dark: {errorCellBg: "#3a2023", errorCellText: "#e08a8a", draftCellBg: "#1d2931", draftCellText: "#aab6bd", formulaBg: "#173039", formulaText: "#7fd0dc"},
+    light: {errorCellBg: "#fff1f1", errorCellText: "#8a3030", draftCellBg: "#f7fafb", draftCellText: "#51616b", formulaBg: "#e8f3f5", formulaText: "#1c5d73", commentColor: "#d3911c"},
+    dark: {errorCellBg: "#3a2023", errorCellText: "#e08a8a", draftCellBg: "#1d2931", draftCellText: "#aab6bd", formulaBg: "#173039", formulaText: "#7fd0dc", commentColor: "#e0b45c"},
 };
 
 // Overrides the glide-data-grid default (light) theme when the app is dark.

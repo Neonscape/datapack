@@ -246,4 +246,10 @@ export const zh: Record<string, string> = {
     "tableExport.selectAllColumns": "全选字段",
     "tableExport.clearColumns": "清空字段",
     "tableExport.noFormats": "没有已注册的导出格式",
+    "comment.add": "添加评论",
+    "comment.edit": "编辑评论",
+    "comment.clear": "清除评论",
+    "comment.title": "单元格评论",
+    "comment.input": "评论内容",
+    "comment.placeholder": "输入评论；留空表示清除评论。",
 };

@@ -75,6 +75,8 @@ export function SelectProject():Promise<workspace.View>;
 
 export function SelectProjectExportDirectory():Promise<string>;
 
+export function SetCellComment(arg1:workspace.CellCommentSet):Promise<workspace.CellUpdateResult>;
+
 export function SetCellFormula(arg1:workspace.FormulaSet):Promise<workspace.FormulaSetResult>;
 
 export function SetColumnSchema(arg1:workspace.ColumnSchemaSet):Promise<workspace.ColumnSchemaSetResult>;

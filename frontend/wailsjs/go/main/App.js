@@ -142,6 +142,10 @@ export function SelectProjectExportDirectory() {
   return window['go']['main']['App']['SelectProjectExportDirectory']();
 }
 
+export function SetCellComment(arg1) {
+  return window['go']['main']['App']['SetCellComment'](arg1);
+}
+
 export function SetCellFormula(arg1) {
   return window['go']['main']['App']['SetCellFormula'](arg1);
 }

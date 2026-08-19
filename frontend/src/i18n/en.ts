@@ -246,4 +246,10 @@ export const en: Record<string, string> = {
     "tableExport.selectAllColumns": "Select all fields",
     "tableExport.clearColumns": "Clear fields",
     "tableExport.noFormats": "No export formats are registered",
+    "comment.add": "Add comment",
+    "comment.edit": "Edit comment",
+    "comment.clear": "Clear comment",
+    "comment.title": "Cell comment",
+    "comment.input": "Comment",
+    "comment.placeholder": "Enter a comment. Leave empty to clear it.",
 };

@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from "react";
-import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type GridCell, type GridColumn, type GridSelection, type Item} from "@glideapps/glide-data-grid";
+import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type DrawCellCallback, type GridCell, type GridColumn, type GridMouseEventArgs, type GridSelection, type Item} from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import {useTranslation} from "../i18n";
 import {useTheme} from "../theme";
@@ -12,6 +12,8 @@ type InlineEditor = { column: number; row: number; value: string; bounds: {x: nu
 type ForeignKeyEditor = InlineEditor & {options: string[]; target: string};
 type ArrayEditor = {column: number; row: number; entries: string[]; pasted: string};
 type StructEditor = {column: number; row: number; values: Record<string, string>};
+type CommentEditor = {rowID: string; column: string; value: string};
+type CommentTooltip = {text: string; left: number; top: number};
 
 function arrayEntries(expression: string) {
     const source = expression.trim();
@@ -85,12 +87,13 @@ const enumRenderer: CustomRenderer<EnumCell> = {
     </select>, disablePadding: true}),
 };
 
-export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveExportSettings, onNavigate, focusTarget, onFocusDone}: { table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
+export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveComment, onSaveExportSettings, onNavigate, focusTarget, onFocusDone}: { table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveComment: (rowID: string, column: string, comment: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
     const {t} = useTranslation();
     const {grid, dataGridTheme} = useTheme();
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
     const [draftError, setDraftError] = useState("");
     const [contextRow, setContextRow] = useState<number | null>(null);
+    const [contextCell, setContextCell] = useState<{column: number; row: number} | null>(null);
     const [menu, setMenu] = useState<{x: number; y: number} | null>(null);
     const [columnMenu, setColumnMenu] = useState<{column: number; x: number; y: number} | null>(null);
     const [selectedColumn, setSelectedColumn] = useState<number | null>(null);
@@ -99,6 +102,9 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
     const [foreignKeyEditor, setForeignKeyEditor] = useState<ForeignKeyEditor | null>(null);
     const [arrayEditor, setArrayEditor] = useState<ArrayEditor | null>(null);
     const [structEditor, setStructEditor] = useState<StructEditor | null>(null);
+    const [commentEditor, setCommentEditor] = useState<CommentEditor | null>(null);
+    const [commentTooltip, setCommentTooltip] = useState<CommentTooltip | null>(null);
+    const [commentError, setCommentError] = useState("");
     const [selectedCell, setSelectedCell] = useState<{column: number; row: number} | null>(null);
     const [formulaEditing, setFormulaEditing] = useState(false);
     const [formulaValue, setFormulaValue] = useState("");
@@ -124,6 +130,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                 setMenu(null);
                 setContextRow(null);
                 setColumnMenu(null);
+                setContextCell(null);
             }
         };
         const closeOnEscape = (event: KeyboardEvent) => {
@@ -131,6 +138,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                 setMenu(null);
                 setContextRow(null);
                 setColumnMenu(null);
+                setContextCell(null);
             }
         };
         document.addEventListener("pointerdown", closeContextMenu);
@@ -204,6 +212,33 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
         return () => document.removeEventListener("keydown", navigateShortcut);
     }, [selectedCell, table]);
     const errorFor = (rowID: string, column: string) => table.diagnostics?.find((diagnostic) => diagnostic.rowID === rowID && (!diagnostic.column || diagnostic.column === column));
+    const commentFor = (rowID: string, column: string) => table.cellComments?.[rowID]?.[column] ?? "";
+    const cellColumnName = (column: number) => column === 0 ? "id" : table.columns[column - 1]?.name ?? "";
+    const drawCell: DrawCellCallback = (args, drawContent) => {
+        drawContent();
+        const column = cellColumnName(args.col);
+        const row = table.rows[args.row];
+        if (!row || !commentFor(row.id, column)) return;
+        args.ctx.save();
+        args.ctx.strokeStyle = grid.commentColor;
+        args.ctx.lineWidth = 2;
+        args.ctx.strokeRect(args.rect.x + 1, args.rect.y + 1, args.rect.width - 2, args.rect.height - 2);
+        args.ctx.restore();
+    };
+    const handleGridMouseMove = (args: GridMouseEventArgs) => {
+        if (args.kind !== "cell") {
+            setCommentTooltip(null);
+            return;
+        }
+        const [column, row] = args.location;
+        const source = table.rows[row];
+        const comment = source ? commentFor(source.id, cellColumnName(column)) : "";
+        if (!comment) {
+            setCommentTooltip(null);
+            return;
+        }
+        setCommentTooltip({text: comment, left: args.bounds.x, top: args.bounds.y + args.bounds.height + 6});
+    };
     const focusDiagnostic = (diagnostic: NonNullable<TableDocument["diagnostics"]>[number]) => {
         const row = table.rows.findIndex((entry) => entry.id === diagnostic.rowID);
         const column = diagnostic.column ? table.columns.findIndex((entry) => entry.name === diagnostic.column) + 1 : 0;
@@ -439,6 +474,8 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                 rowHeight={30}
                 headerHeight={34}
                 theme={dataGridTheme}
+                drawCell={drawCell}
+                onMouseMove={handleGridMouseMove}
                 smoothScrollX
                 smoothScrollY
                 onCellEdited={editCell}
@@ -483,18 +520,34 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                     setContextRow(null);
                 }}
                 onCellContextMenu={([column, row], event) => {
-                    if (row === table.rows.length || column !== -1) return;
+                    if (row === table.rows.length) return;
                     event.preventDefault();
-                    setContextRow(row);
+                    setContextRow(column === -1 ? row : null);
+                    setContextCell(column >= 0 ? {column, row} : null);
                     setMenu({x: event.localEventX, y: event.localEventY});
                 }}
             />
-            {menu !== null && contextRow !== null && <div className="row-context-menu" style={{left: menu.x, top: menu.y}}>
-                <button className="row-context-danger" onClick={() => {
+            {menu !== null && (contextRow !== null || contextCell !== null) && <div className="row-context-menu" style={{left: menu.x, top: menu.y}}>
+                {contextCell && <>
+                    <button onClick={() => {
+                        const rowID = table.rows[contextCell.row].id;
+                        const column = cellColumnName(contextCell.column);
+                        setCommentError("");
+                        setCommentEditor({rowID, column, value: commentFor(rowID, column)});
+                        setMenu(null);
+                        setContextCell(null);
+                    }}>{commentFor(table.rows[contextCell.row].id, cellColumnName(contextCell.column)) ? t("comment.edit") : t("comment.add")}</button>
+                    {commentFor(table.rows[contextCell.row].id, cellColumnName(contextCell.column)) && <button className="row-context-danger" onClick={() => {
+                        void onSaveComment(table.rows[contextCell.row].id, cellColumnName(contextCell.column), "");
+                        setMenu(null);
+                        setContextCell(null);
+                    }}>{t("comment.clear")}</button>}
+                </>}
+                {contextRow !== null && <button className="row-context-danger" onClick={() => {
                     onDeleteRow(table.rows[contextRow].id);
                     setMenu(null);
                     setContextRow(null);
-                }}>{t("grid.deleteRow")}</button>
+                }}>{t("grid.deleteRow")}</button>}
             </div>}
             {columnMenu && <div className="column-context-menu" style={{left: columnMenu.x, top: columnMenu.y}}>
                 <button disabled={columnMenu.column === 0} onClick={() => { onAddColumn(columnMenu.column - 1); setColumnMenu(null); }}>{t("grid.addToLeft")}</button>
@@ -550,7 +603,19 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                     <div className="dialog-actions"><button type="button" onClick={() => setStructEditor(null)}>{t("common.cancel")}</button><button type="button" onClick={saveStruct}>{t("common.apply")}</button></div>
                 </section>
             </div>}
+            {commentTooltip && <div className="cell-comment-tooltip" role="tooltip" style={{left: commentTooltip.left, top: commentTooltip.top}}>{commentTooltip.text}</div>}
         </div>
         <TableExportSettingsPanel table={table} formats={formats} onSave={onSaveExportSettings}/>
+        {commentEditor && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setCommentEditor(null)}>
+            <form className="structure-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => {
+                event.preventDefault();
+                void onSaveComment(commentEditor.rowID, commentEditor.column, commentEditor.value).then(() => setCommentEditor(null)).catch((reason) => setCommentError(reason instanceof Error ? reason.message : String(reason)));
+            }}>
+                <h2>{t("comment.title")}</h2>
+                <textarea autoFocus rows={7} aria-label={t("comment.input")} value={commentEditor.value} placeholder={t("comment.placeholder")} onChange={(event) => setCommentEditor({...commentEditor, value: event.target.value})}/>
+                {commentError && <div className="schema-editor-error">{commentError}</div>}
+                <div className="dialog-actions"><button type="button" onClick={() => setCommentEditor(null)}>{t("common.cancel")}</button><button type="submit">{t("common.apply")}</button></div>
+            </form>
+        </div>}
     </div>;
 }
