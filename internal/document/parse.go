@@ -107,6 +107,9 @@ func LoadTable(path string) (Table, error) {
 
 	rowSchema := requiredField(fields, "#Row")
 	for _, field := range orderedStructFields(rowSchema.Value) {
+		if field.Constraint == token.OPTION {
+			return Table{}, fmt.Errorf("table column %q must not be optional", labelOf(field))
+		}
 		schema, err := schemamodel.Parse(field.Value)
 		if err != nil {
 			return Table{}, fmt.Errorf("parse column %q: %w", labelOf(field), err)
@@ -117,7 +120,6 @@ func LoadTable(path string) (Table, error) {
 		}
 		document.Columns = append(document.Columns, Column{
 			Name:             labelOf(field),
-			Optional:         field.Constraint == token.OPTION,
 			Schema:           schema,
 			SchemaExpression: schemaExpression,
 		})

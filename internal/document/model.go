@@ -22,7 +22,6 @@ type Table struct {
 
 type Column struct {
 	Name              string           `json:"name"`
-	Optional          bool             `json:"optional"`
 	Schema            schemamodel.Node `json:"schema"`
 	SchemaExpression  string           `json:"schemaExpression"`
 	ForeignKeyTable   string           `json:"foreignKeyTable,omitempty"`

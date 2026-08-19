@@ -94,6 +94,9 @@ func writeTable(path string, table compiler.Table) error {
 }
 
 func encodeValue(value any) (string, error) {
+	if value == nil {
+		return "", nil
+	}
 	if stringValue, ok := value.(string); ok {
 		return stringValue, nil
 	}

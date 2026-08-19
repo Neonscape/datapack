@@ -3,6 +3,7 @@ package workspace
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -1908,8 +1909,29 @@ func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
 	if !containsTable(s.current.Tree.Root, create.Path) {
 		return RowCreateResult{}, s.userError("workspace.tableNotInProject", create.Path)
 	}
+	values := maps.Clone(create.Values)
+	if values == nil {
+		values = map[string]string{}
+	}
+	formulas := maps.Clone(create.Formulas)
+	if formulas == nil {
+		formulas = map[string]string{}
+	}
+	if source, err := document.LoadTable(create.Path); err == nil {
+		for _, column := range source.Columns {
+			if _, exists := values[column.Name]; exists {
+				continue
+			}
+			if _, formulaExists := formulas[column.Name]; formulaExists {
+				continue
+			}
+			if expression, ok := schemamodel.DefaultExpression(column.Schema); ok {
+				values[column.Name] = expression
+			}
+		}
+	}
 	table, view, err := s.edit(create.Path, func() (document.Table, error) {
-		return document.CreateRow(create.Path, create.RowID, create.Values, create.Formulas)
+		return document.CreateRow(create.Path, create.RowID, values, formulas)
 	})
 	if err != nil {
 		return RowCreateResult{}, err
@@ -1928,8 +1950,11 @@ func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
 		source, err := document.LoadTable(update.Path)
 		if err == nil {
 			for _, column := range source.Columns {
-				if column.Name == update.Column && column.Schema.Nullable && !column.Optional {
-					return document.SetCellValue(update.Path, update.RowID, update.Column, "null")
+				if column.Name == update.Column {
+					if expression, ok := schemamodel.DefaultExpression(column.Schema); ok {
+						return document.SetCellValue(update.Path, update.RowID, update.Column, expression)
+					}
+					return document.Table{}, fmt.Errorf("column %q has no safe default value", update.Column)
 				}
 			}
 		}

@@ -61,9 +61,8 @@ type Requirement struct {
 }
 
 type Field struct {
-	Name     string `json:"name"`
-	Optional bool   `json:"optional"`
-	Schema   Node   `json:"schema"`
+	Name   string `json:"name"`
+	Schema Node   `json:"schema"`
 }
 
 type Node struct {
@@ -75,6 +74,44 @@ type Node struct {
 	Element      *Node         `json:"element,omitempty"`
 	Fields       []Field       `json:"fields,omitempty"`
 	Requirements []Requirement `json:"requirements,omitempty"`
+}
+
+// DefaultExpression returns the safest concrete value for a schema node.
+// Explicit CUE defaults always take precedence over type defaults.
+func DefaultExpression(node Node) (string, bool) {
+	if node.Default != nil {
+		return node.Default.Expression, true
+	}
+	switch node.Kind {
+	case KindString, KindReference:
+		if node.Kind == KindReference {
+			return "", false
+		}
+		return `""`, true
+	case KindInteger, KindNumber:
+		return "0", true
+	case KindBoolean:
+		return "false", true
+	case KindEnum:
+		if len(node.EnumValues) == 0 {
+			return "", false
+		}
+		return node.EnumValues[0].Expression, true
+	case KindArray:
+		return "[]", true
+	case KindStruct:
+		parts := make([]string, 0, len(node.Fields))
+		for _, field := range node.Fields {
+			value, ok := DefaultExpression(field.Schema)
+			if !ok {
+				return "", false
+			}
+			parts = append(parts, field.Name+": "+value)
+		}
+		return "{" + strings.Join(parts, ", ") + "}", true
+	default:
+		return "", false
+	}
 }
 
 // Parse converts the supported CUE Schema subset into an editor model. Unknown
@@ -226,11 +263,14 @@ func parseStruct(structLiteral *ast.StructLit) (Node, error) {
 		if err != nil {
 			return Node{}, fmt.Errorf("read struct field: %w", err)
 		}
+		if field.Constraint == token.OPTION {
+			return Node{}, fmt.Errorf("struct field %q must not be optional", name)
+		}
 		schema, err := parse(field.Value)
 		if err != nil {
 			return Node{}, err
 		}
-		result.Fields = append(result.Fields, Field{Name: name, Optional: field.Constraint == token.OPTION, Schema: schema})
+		result.Fields = append(result.Fields, Field{Name: name, Schema: schema})
 	}
 	return result, nil
 }
@@ -470,11 +510,7 @@ func baseExpression(node Node) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			if field.Optional {
-				fields = append(fields, field.Name+"?: "+schema)
-			} else {
-				fields = append(fields, field.Name+": "+schema)
-			}
+			fields = append(fields, field.Name+": "+schema)
 		}
 		return "{" + strings.Join(fields, ", ") + "}", nil
 	case KindUnknown:

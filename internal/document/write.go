@@ -306,6 +306,17 @@ func AddColumn(path, name, schemaExpression, initialExpression string, position 
 	if err != nil {
 		return Table{}, fmt.Errorf("parse column Schema: %w", err)
 	}
+	if strings.TrimSpace(initialExpression) == "" {
+		node, err := schemamodel.Parse(schema)
+		if err != nil {
+			return Table{}, fmt.Errorf("derive column default: %w", err)
+		}
+		defaultExpression, ok := schemamodel.DefaultExpression(node)
+		if !ok {
+			return Table{}, fmt.Errorf("column %q has no safe default value", name)
+		}
+		initialExpression = defaultExpression
+	}
 	value, err := parser.ParseExpr(path, initialExpression)
 	if err != nil {
 		return Table{}, fmt.Errorf("parse initial column value: %w", err)

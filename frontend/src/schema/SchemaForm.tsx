@@ -187,10 +187,9 @@ export function SchemaForm({value, onChange, workspace, fixedKind, predicateKind
                 <select aria-label={t("schemaForm.fieldType", {index: index + 1})} value={field.schema.kind} onChange={(event) => onChange({...value, fields: (value.fields ?? []).map((entry, position) => position === index ? {...entry, schema: {kind: event.target.value}} : entry)})}>
                     {["string", "integer", "number", "boolean", "enum", "reference"].map((option) => <option key={option} value={option}>{option}</option>)}
                 </select>
-                <label className="schema-field-optional"><input type="checkbox" checked={!!field.optional} onChange={(event) => onChange({...value, fields: (value.fields ?? []).map((entry, position) => position === index ? {...entry, optional: event.target.checked} : entry)})}/>{t("schemaForm.optional")}</label>
                 <button aria-label={t("schemaForm.deleteField", {index: index + 1})} onClick={() => onChange({...value, fields: (value.fields ?? []).filter((_, position) => position !== index)})}>×</button>
             </div>)}
-            <button type="button" className="schema-form-add" onClick={() => onChange({...value, fields: [...(value.fields ?? []), {name: "", schema: {kind: "string"}, optional: false}]})}>{t("schemaForm.addField")}</button>
+            <button type="button" className="schema-form-add" onClick={() => onChange({...value, fields: [...(value.fields ?? []), {name: "", schema: {kind: "string"}}]})}>{t("schemaForm.addField")}</button>
         </div>}
         {kind !== "enum" && <div className="schema-form-block">
             <div className="schema-form-block-title">{t("schemaForm.conditions")}</div>

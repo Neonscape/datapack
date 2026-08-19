@@ -84,7 +84,6 @@ export namespace document {
 	}
 	export class Column {
 	    name: string;
-	    optional: boolean;
 	    schema: schemamodel.Node;
 	    schemaExpression: string;
 	    foreignKeyTable?: string;
@@ -97,7 +96,6 @@ export namespace document {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
-	        this.optional = source["optional"];
 	        this.schema = this.convertValues(source["schema"], schemamodel.Node);
 	        this.schemaExpression = source["schemaExpression"];
 	        this.foreignKeyTable = source["foreignKeyTable"];
@@ -633,7 +631,6 @@ export namespace schemamodel {
 	}
 	export class Field {
 	    name: string;
-	    optional: boolean;
 	    schema: Node;
 	
 	    static createFrom(source: any = {}) {
@@ -643,7 +640,6 @@ export namespace schemamodel {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
-	        this.optional = source["optional"];
 	        this.schema = this.convertValues(source["schema"], Node);
 	    }
 	

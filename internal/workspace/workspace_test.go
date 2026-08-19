@@ -688,7 +688,7 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
-func TestClearNullableCellWritesNull(t *testing.T) {
+func TestClearNullableCellWritesDefault(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
 	path := filepath.Join(projectRoot, "tables", "item.cue")
@@ -705,7 +705,7 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 		t.Fatal(err)
 	}
 	result, err := service.ClearCell(CellUpdate{Path: path, RowID: "sword", Column: "note"})
-	if err != nil || result.Table.Rows[0].Values["note"].Expression != "null" {
+	if err != nil || result.Table.Rows[0].Values["note"].Expression != `""` {
 		t.Fatalf("ClearCell() = %#v, %v", result, err)
 	}
 }

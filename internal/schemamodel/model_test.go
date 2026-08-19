@@ -48,6 +48,26 @@ func TestParseRepresentsStructuredFieldTypes(t *testing.T) {
 	}
 }
 
+func TestDefaultExpressionUsesTypeAndEnumDefaults(t *testing.T) {
+	cases := []struct {
+		node Node
+		want string
+	}{
+		{Node{Kind: KindString}, `""`},
+		{Node{Kind: KindInteger}, "0"},
+		{Node{Kind: KindNumber}, "0"},
+		{Node{Kind: KindBoolean}, "false"},
+		{Node{Kind: KindArray}, "[]"},
+		{Node{Kind: KindEnum, EnumValues: []Value{{Expression: `"N"`}, {Expression: `"R"`}}}, `"N"`},
+	}
+	for _, test := range cases {
+		got, ok := DefaultExpression(test.node)
+		if !ok || got != test.want {
+			t.Fatalf("DefaultExpression(%#v) = %q, %v; want %q", test.node, got, ok, test.want)
+		}
+	}
+}
+
 func TestParseKeepsReferencesAndConstraints(t *testing.T) {
 	file, err := parser.ParseFile("schema.cue", `value: common.#GameID & common.#NonEmpty`)
 	if err != nil {
@@ -125,7 +145,7 @@ func TestPrintRoundTripsSupportedSchema(t *testing.T) {
 		`"N" | "R" | "SR"`,
 		`string | null`,
 		`[...string]`,
-		`{x: number, y: number, label?: string}`,
+		`{x: number, y: number, label: string}`,
 		`common.#GameID`,
 		`string & common.#NonEmpty`,
 		`(int & >= 1) | *1`,
