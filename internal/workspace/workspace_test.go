@@ -688,6 +688,28 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestClearNullableCellWritesNull(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	path := filepath.Join(projectRoot, "tables", "item.cue")
+	writeFile(t, path, `package item
+#PrimaryKey: string
+#Row: {note: string | null}
+rows: {sword: {note: "memo"}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.ClearCell(CellUpdate{Path: path, RowID: "sword", Column: "note"})
+	if err != nil || result.Table.Rows[0].Values["note"].Expression != "null" {
+		t.Fatalf("ClearCell() = %#v, %v", result, err)
+	}
+}
+
 func TestFormulaAndClearCellAreUndoable(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
