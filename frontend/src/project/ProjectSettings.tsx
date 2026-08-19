@@ -125,7 +125,7 @@ export function ProjectSettings({onClose, onSaved}: {onClose: () => void; onSave
                 <div><strong>{t("projectSettings.exclude")}</strong><code>{settings?.project.exclude?.join(", ") || "-"}</code></div>
             </section>}
             {error && <div className="schema-editor-error">{error}</div>}
-            <div className="dialog-actions"><button type="button" onClick={onClose}>{t("common.cancel")}</button><button type="submit" disabled={busy}>{t("common.apply")}</button></div>
+            {tab === "export" && <div className="dialog-actions"><button type="button" onClick={onClose}>{t("common.cancel")}</button><button type="submit" disabled={busy}>{t("common.apply")}</button></div>}
         </form>
     </div>;
 }
