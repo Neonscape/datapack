@@ -138,7 +138,7 @@ func Evaluate(table document.Table) Result {
 				result.Diagnostics = append(result.Diagnostics, Diagnostic{RowID: row.ID, Column: column, Message: err.Error()})
 				continue
 			}
-			values[column] = decoded
+			values[column] = normalizeValueForColumn(decoded, columns[column])
 		}
 		result.Rows[row.ID] = values
 	}
@@ -172,7 +172,12 @@ func Evaluate(table document.Table) Result {
 			if err != nil {
 				continue // A formula dependency may be evaluated in a later pass.
 			}
-			value = normalizeFormulaValue(value, kind)
+			if err := validateFiniteFormulaValue(value); err != nil {
+				result.add(formula, err.Error())
+				delete(pending, key)
+				continue
+			}
+			value = normalizeValueForColumn(value, kind)
 			result.Rows[formula.RowID][formula.Column] = value
 			delete(pending, key)
 			progress = true
@@ -188,15 +193,29 @@ func Evaluate(table document.Table) Result {
 	return result
 }
 
-func normalizeFormulaValue(value any, kind schemamodel.Kind) any {
+func normalizeValueForColumn(value any, kind schemamodel.Kind) any {
 	if kind != schemamodel.KindInteger {
 		return value
 	}
 	number, ok := value.(float64)
-	if !ok || math.IsNaN(number) || math.IsInf(number, 0) || math.Trunc(number) != number {
+	if !ok || math.IsNaN(number) || math.IsInf(number, 0) || math.Trunc(number) != number || number < math.MinInt64 || number >= float64(math.MaxInt64) {
 		return value
 	}
 	return int64(number)
+}
+
+func validateFiniteFormulaValue(value any) error {
+	number, ok := value.(float64)
+	if !ok {
+		return nil
+	}
+	if math.IsNaN(number) {
+		return fmt.Errorf("formula result is NaN (possibly caused by division by zero)")
+	}
+	if math.IsInf(number, 0) {
+		return fmt.Errorf("formula result is infinite (possibly caused by division by zero or overflow)")
+	}
+	return nil
 }
 
 func deterministicFunctions() []expr.Option {

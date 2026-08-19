@@ -54,6 +54,10 @@ func writeTable(path string, table compiler.Table) error {
 	}
 	defer file.Close()
 	writer := csv.NewWriter(file)
+	knownColumns := make(map[string]bool, len(table.Columns))
+	for _, column := range table.Columns {
+		knownColumns[column] = true
+	}
 	if err := writer.Write(table.CSV.Columns); err != nil {
 		return fmt.Errorf("write CSV header: %w", err)
 	}
@@ -64,9 +68,13 @@ func writeTable(path string, table compiler.Table) error {
 				record = append(record, row.ID)
 				continue
 			}
+			if !knownColumns[column] {
+				return fmt.Errorf("export table %s: column %q does not exist", tableName(table), column)
+			}
 			value, exists := row.Values[column]
 			if !exists {
-				return fmt.Errorf("export table %s row %q: column %q has no value", tableName(table), row.ID, column)
+				record = append(record, "")
+				continue
 			}
 			encoded, err := encodeValue(value)
 			if err != nil {

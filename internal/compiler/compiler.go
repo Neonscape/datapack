@@ -47,6 +47,7 @@ type Table struct {
 	Name      string                             `json:"name"`
 	CSV       *CSV                               `json:"csv,omitempty"`
 	Exports   map[string]document.ExportSettings `json:"exports,omitempty"`
+	Columns   []string                           `json:"columns"`
 	Rows      []Row                              `json:"rows"`
 }
 
@@ -93,7 +94,11 @@ func compiledTableName(table Table) string {
 }
 
 func compileTable(table document.Table) (Table, []Diagnostic) {
-	compiled := Table{Path: table.Path, Namespace: table.Namespace, Name: table.Name, Exports: table.Exports}
+	columns := []string{"id"}
+	for _, column := range table.Columns {
+		columns = append(columns, column.Name)
+	}
+	compiled := Table{Path: table.Path, Namespace: table.Namespace, Name: table.Name, Exports: table.Exports, Columns: columns}
 	if table.CSVExport != nil {
 		compiled.CSV = &CSV{Columns: table.CSVExport.Columns}
 	}
