@@ -63,7 +63,6 @@ export const en: Record<string, string> = {
     "column.move": "Move column",
     "column.delete": "Delete column",
     "column.name": "Column name",
-    "column.initial": "Initial CUE value",
     "column.newName": "New name",
     "column.newPosition": "New zero-based position",
     "column.cueSchema": "CUE Schema",

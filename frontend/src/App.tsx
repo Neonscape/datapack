@@ -18,7 +18,6 @@ type StructureDialog = {
     name: string;
     second: string;
     schema: string;
-    initial: string;
     node?: SchemaNode;
     custom?: boolean;
 };
@@ -606,7 +605,7 @@ function App() {
             }
             let result;
             if (dialog.mode === "add") {
-                result = await AddColumn({path: table.path, name: dialog.name, schemaExpression, initialExpression: dialog.initial, position: Number(dialog.second)});
+                result = await AddColumn({path: table.path, name: dialog.name, schemaExpression, initialExpression: "", position: Number(dialog.second)});
             } else if (dialog.mode === "schema") {
                 result = await SetColumnSchema({path: table.path, name: dialog.name, schemaExpression});
             } else if (dialog.mode === "rename") {
@@ -776,7 +775,7 @@ function App() {
                         {tabs.map((tab) => (
                             <div key={tab.id} className="tab-panel" style={{display: tab.id === activeTabId && !selectedSchema ? "flex" : "none"}}>
                                 {tab.kind === "table"
-                                     ? <TableGrid key={tab.id} table={tab.table} formats={exportFormats} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", initial: `""`, node: {kind: "string"}, custom: false})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: "", initial: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), initial: "", node: tab.table.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: "", initial: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: "", initial: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onSaveComment={saveCellComment} onSaveExportSettings={saveTableExportSettings} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/>
+                                     ? <TableGrid key={tab.id} table={tab.table} formats={exportFormats} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", node: {kind: "string"}, custom: false})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), node: tab.table.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onSaveComment={saveCellComment} onSaveExportSettings={saveTableExportSettings} onNavigate={navigateTo} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/>
                                     : <SchemaEditor key={tab.id} state={tab.state} usages={schemaUsages} onOpenUsage={openUsage} workspace={workspace} onSelect={(name) => updateSchemaTabById(tab.id, {...tab.state, selected: name, creating: false})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition}/>}
                             </div>
                         ))}
@@ -906,7 +905,6 @@ function App() {
                             ? <SchemaForm value={dialog.node ?? {kind: "string"}} onChange={(node) => setDialog({...dialog, node})} workspace={workspace}/>
                             : <label>{t("column.cueSchema")}<textarea autoFocus value={dialog.schema} onChange={(event) => setDialog({...dialog, schema: event.target.value})}/></label>}
                     </>}
-                    {dialog.mode === "add" && <label>{t("column.initial")}<input value={dialog.initial} onChange={(event) => setDialog({...dialog, initial: event.target.value})}/></label>}
                     {dialog.mode === "rename" && <label>{t("column.newName")}<input value={dialog.second} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>}
                     {dialog.mode === "move" && <label>{t("column.newPosition")}<input type="number" min="0" value={dialog.second} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>}
                     {dialog.mode === "delete" && <p>{t("column.deleteBody")}</p>}

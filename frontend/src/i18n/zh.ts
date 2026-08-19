@@ -63,7 +63,6 @@ export const zh: Record<string, string> = {
     "column.move": "移动列",
     "column.delete": "删除列",
     "column.name": "列名",
-    "column.initial": "初始 CUE 值",
     "column.newName": "新名称",
     "column.newPosition": "新的从零开始的位置",
     "column.cueSchema": "CUE Schema",

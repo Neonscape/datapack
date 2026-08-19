@@ -240,8 +240,8 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
             return;
         }
         const gridBounds = gridRef.current?.getBoundingClientRect();
-        const left = (gridBounds?.left ?? 0) + args.bounds.x;
-        const top = (gridBounds?.top ?? 0) + args.bounds.y + args.bounds.height + 6;
+        const left = (gridBounds?.left ?? 0) + args.bounds.x + args.localEventX;
+        const top = (gridBounds?.top ?? 0) + args.bounds.y + args.localEventY + 12;
         setCommentTooltip({text: comment, left: Math.max(4, Math.min(left, window.innerWidth - 340)), top: Math.max(4, Math.min(top, window.innerHeight - 160))});
     };
     const focusDiagnostic = (diagnostic: NonNullable<TableDocument["diagnostics"]>[number]) => {
@@ -531,7 +531,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                     setContextCell(column >= 0 ? {column, row} : null);
                     const gridBounds = gridRef.current?.getBoundingClientRect();
                     setMenu(column >= 0 && gridBounds
-                        ? {x: gridBounds.left + event.localEventX, y: gridBounds.top + event.localEventY, fixed: true}
+                        ? {x: gridBounds.left + event.bounds.x + event.localEventX, y: gridBounds.top + event.bounds.y + event.localEventY, fixed: true}
                         : {x: event.localEventX, y: event.localEventY});
                 }}
             />
