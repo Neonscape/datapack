@@ -7,7 +7,7 @@ const table = {
     namespace: "rpg",
     name: "item",
     columns: [
-        {name: "tags", schemaExpression: "[...string]", schema: {kind: "array"}},
+        {name: "tags", displayName: "A very long display name for tags", schemaExpression: "[...string]", schema: {kind: "array"}},
         {name: "effectID", schemaExpression: "string", schema: {kind: "string"}, foreignKeyTable: "rpg.effect", foreignKeyOptions: ["burn", "freeze"]},
         {name: "name", schemaExpression: "string", schema: {kind: "string"}},
         {name: "position", schemaExpression: "{x: int, y: int, label?: string}", schema: {kind: "struct", fields: [{name: "x"}, {name: "y"}, {name: "label", optional: true}]}},
