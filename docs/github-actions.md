@@ -4,7 +4,7 @@ GitHub CI is defined in `.github/workflows/ci.yml`.
 
 ## Workflow behavior
 
-- Every push and pull request runs the complete Linux test suite: Go tests, race tests, frontend typechecking, and Playwright e2e tests.
+- Every push and pull request builds frontend assets before Go tests because `main.go` embeds `frontend/dist`; it then runs Go tests, race tests, frontend typechecking, and Playwright e2e tests.
 - Every push and pull request builds native Linux and Windows Wails binaries after the Linux test job passes.
 - A tag matching `v*.*.*` packages both platform binaries, uploads temporary Actions artifacts, creates a GitHub Release, and attaches all packages and SHA-256 files.
 
