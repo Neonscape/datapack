@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from "react";
-import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type DrawCellCallback, type DrawHeaderCallback, type GridCell, type GridColumn, type GridMouseEventArgs, type GridSelection, type Item} from "@glideapps/glide-data-grid";
+import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type DrawCellCallback, type GridCell, type GridColumn, type GridMouseEventArgs, type GridSelection, type Item} from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import {useTranslation} from "../i18n";
 import {useTheme} from "../theme";
@@ -166,51 +166,6 @@ export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, 
         args.ctx.strokeStyle = grid.commentColor;
         args.ctx.lineWidth = 2;
         args.ctx.strokeRect(args.rect.x + 1, args.rect.y + 1, args.rect.width - 2, args.rect.height - 2);
-        args.ctx.restore();
-    };
-    const drawHeader: DrawHeaderCallback = (args, drawContent) => {
-        drawContent();
-        const column = args.column;
-        if (args.columnIndex === 0 || !column.title.includes(" (")) return;
-        const separator = column.title.lastIndexOf(" (");
-        const displayName = column.title.slice(0, separator);
-        const fieldName = column.title.slice(separator + 2, -1);
-        args.ctx.save();
-        const textWidth = Math.max(0, Math.min(args.rect.width, args.menuBounds.x - args.rect.x - 4));
-        args.ctx.beginPath();
-        args.ctx.rect(args.rect.x, args.rect.y, textWidth, args.rect.height);
-        args.ctx.clip();
-        const background = args.isSelected
-            ? args.theme.accentColor
-            : args.hasSelectedCell
-                ? args.theme.bgHeaderHasFocus
-                : args.isHovered
-                    ? args.theme.bgHeaderHovered
-                    : args.theme.bgHeader;
-        args.ctx.fillStyle = background;
-        args.ctx.fillRect(args.rect.x, args.rect.y, textWidth, args.rect.height);
-        args.ctx.font = args.theme.headerFontStyle;
-        args.ctx.textBaseline = "middle";
-        const availableWidth = Math.max(0, textWidth - 16);
-        const ellipsis = "...";
-        const fitText = (value: string, width: number) => {
-            if (args.ctx.measureText(value).width <= width) return value;
-            let result = "";
-            for (const character of value) {
-                if (args.ctx.measureText(result + character + ellipsis).width > width) break;
-                result += character;
-            }
-            return result + ellipsis;
-        };
-        const fieldWidth = args.ctx.measureText(` (${fieldName})`).width;
-        const displayText = fitText(displayName, Math.max(0, availableWidth - Math.min(fieldWidth, availableWidth)));
-        const remainingWidth = Math.max(0, availableWidth - args.ctx.measureText(displayText).width);
-        const fieldText = remainingWidth > 0 ? fitText(` (${fieldName})`, remainingWidth) : "";
-        args.ctx.fillStyle = args.isSelected ? args.theme.textHeaderSelected : args.theme.textHeader;
-        args.ctx.fillText(displayText, args.rect.x + 8, args.rect.y + args.rect.height / 2);
-        const displayTextWidth = args.ctx.measureText(displayText).width;
-        args.ctx.fillStyle = args.isSelected ? args.theme.textHeaderSelected : args.theme.textMedium;
-        args.ctx.fillText(fieldText, args.rect.x + 8 + displayTextWidth, args.rect.y + args.rect.height / 2);
         args.ctx.restore();
     };
     const handleGridMouseMove = (args: GridMouseEventArgs) => {
@@ -474,7 +429,6 @@ export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, 
                 headerHeight={34}
                 theme={dataGridTheme}
                  drawCell={drawCell}
-                 drawHeader={drawHeader}
                 onMouseMove={handleGridMouseMove}
                 smoothScrollX
                 smoothScrollY
