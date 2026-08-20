@@ -11,6 +11,7 @@ import {SchemaForm} from "./schema/SchemaForm";
 import {ProjectSettings} from "./project/ProjectSettings";
 import {TableGrid} from "./table/TableGrid";
 import {Tree} from "./tree/Tree";
+import {useWorkspaceSession, type OpenTab} from "./workspace/useWorkspaceSession";
 import type {CellError, ExportFormat, NavRequest, NavTarget, PublicSchemaDocument, SchemaDefinition, SchemaEditorState, SchemaEditResult, SchemaNode, SchemaUsage, TableDocument, TableExportSettings as TableExportSettingsModel, TreeNode, WorkspaceView} from "./types";
 
 type StructureDialog = {
@@ -30,17 +31,10 @@ type TreeDialog =
     | {mode: "deleteDefinition"; path: string; name: string}
     | {mode: "newSchema"; namespace: string};
 
-type OpenTab =
-    | {id: string; kind: "table"; path: string; table: TableDocument}
-    | {id: string; kind: "schema"; state: SchemaEditorState};
-
 function App() {
     const {t, language, setLanguage} = useTranslation();
     const {preference, setPreference} = useTheme();
-    const [workspace, setWorkspace] = useState<WorkspaceView | null>(null);
-    const [selectedSchema, setSelectedSchema] = useState<SchemaDefinition | null>(null);
-    const [tabs, setTabs] = useState<OpenTab[]>([]);
-    const [activeTabId, setActiveTabId] = useState<string | null>(null);
+    const {workspace, setWorkspace, selectedSchema, setSelectedSchema, tabs, setTabs, activeTabId, setActiveTabId, activeTab, table, schemaDocument, activateTab, closeTab, updateActiveTable, updateActiveSchema, updateSchemaTabById, addTableTab, addSchemaTab} = useWorkspaceSession();
     const [cellError, setCellError] = useState<CellError | null>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
@@ -56,10 +50,6 @@ function App() {
     const [treeMenu, setTreeMenu] = useState<{node: TreeNode; namespace: string; x: number; y: number} | null>(null);
     const [treeDialog, setTreeDialog] = useState<TreeDialog | null>(null);
     const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
-
-    const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
-    const table = activeTab?.kind === "table" ? activeTab.table : null;
-    const schemaDocument = activeTab?.kind === "schema" ? activeTab.state : null;
 
     useEffect(() => {
         void (async () => {
@@ -101,37 +91,8 @@ function App() {
         return t(key, params);
     }
 
-    function activateTab(id: string) {
-        setActiveTabId(id);
-        setSelectedSchema(null);
-    }
-
-    function closeTab(id: string) {
-        setTabs((current) => {
-            const index = current.findIndex((tab) => tab.id === id);
-            if (index < 0) return current;
-            const next = current.filter((tab) => tab.id !== id);
-            if (id === activeTabId) {
-                setActiveTabId(next[Math.min(index, next.length - 1)]?.id ?? null);
-            }
-            return next;
-        });
-    }
-
     function closePeek() {
         setSelectedSchema(null);
-    }
-
-    function updateActiveTable(document: TableDocument) {
-        setTabs((current) => current.map((tab) => tab.id === activeTabId && tab.kind === "table" ? {...tab, table: document} : tab));
-    }
-
-    function updateActiveSchema(state: SchemaEditorState) {
-        setTabs((current) => current.map((tab) => tab.id === activeTabId && tab.kind === "schema" ? {...tab, state} : tab));
-    }
-
-    function updateSchemaTabById(id: string, state: SchemaEditorState) {
-        setTabs((current) => current.map((tab) => tab.id === id && tab.kind === "schema" ? {...tab, state} : tab));
     }
 
     async function openTableTab(path: string) {
@@ -143,9 +104,7 @@ function App() {
         setError("");
         try {
             const document = await GetTable(path) as TableDocument;
-            setTabs((current) => [...current, {id, kind: "table", path, table: document}]);
-            setActiveTabId(id);
-            setSelectedSchema(null);
+            addTableTab(path, document);
             setCellError(null);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
@@ -176,9 +135,7 @@ function App() {
                 const definitions = document.definitions ?? [];
                 state = {path, local: false, package: document.package, definitions, selected: definition ?? definitions[0]?.name ?? null, creating};
             }
-            setTabs((current) => [...current, {id, kind: "schema", state}]);
-            setActiveTabId(id);
-            setSelectedSchema(null);
+            addSchemaTab(path, state);
             setCellError(null);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
