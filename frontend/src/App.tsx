@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import './App.css';
-import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellComment, SetCellFormula, SetCellText, SetColumnSchema, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellComment, SetCellFormula, SetCellText, SetColumnDisplayName, SetColumnSchema, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
 import {schemamodel, workspace as workspaceModel} from "../wailsjs/go/models";
 import {useTranslation, type Language} from "./i18n";
 import {useTheme, type ThemePreference} from "./theme";
@@ -14,7 +14,7 @@ import {Tree} from "./tree/Tree";
 import type {CellError, ExportFormat, NavRequest, NavTarget, PublicSchemaDocument, SchemaDefinition, SchemaEditorState, SchemaEditResult, SchemaNode, SchemaUsage, TableDocument, TableExportSettings as TableExportSettingsModel, TreeNode, WorkspaceView} from "./types";
 
 type StructureDialog = {
-    mode: "add" | "schema" | "rename" | "move" | "delete";
+    mode: "add" | "schema" | "rename" | "move" | "delete" | "displayName";
     name: string;
     second: string;
     schema: string;
@@ -599,6 +599,13 @@ function App() {
         setError("");
         setCellError(null);
         try {
+            if (dialog.mode === "displayName") {
+                const result = await SetColumnDisplayName({path: table.path, column: dialog.name, displayName: dialog.second}) as {table: TableDocument; workspace: WorkspaceView};
+                updateActiveTable(result.table);
+                setWorkspace(result.workspace);
+                setDialog(null);
+                return;
+            }
             let schemaExpression = dialog.schema;
             if ((dialog.mode === "add" || dialog.mode === "schema") && !dialog.custom) {
                 schemaExpression = await PrintSchema((dialog.node ?? {kind: "string"}) as unknown as schemamodel.Node);
@@ -775,7 +782,7 @@ function App() {
                         {tabs.map((tab) => (
                             <div key={tab.id} className="tab-panel" style={{display: tab.id === activeTabId && !selectedSchema ? "flex" : "none"}}>
                                 {tab.kind === "table"
-                                     ? <TableGrid key={tab.id} table={tab.table} formats={exportFormats} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", node: {kind: "string"}, custom: false})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), node: tab.table.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onSaveComment={saveCellComment} onSaveExportSettings={saveTableExportSettings} onNavigate={navigateTo} onOpenSchemaReference={(reference) => { const localName = reference.startsWith("_local.#") ? reference.slice("_local.".length) : ""; const definition = schemaDefinitions(workspace).find((entry) => entry.id === reference || (localName && entry.id.endsWith("._local." + localName))); if (definition) void openSchemaByPath(definition.path, definition.id.split(".#")[1], !!definition.table); }} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/>
+                                     ? <TableGrid key={tab.id} table={tab.table} formats={exportFormats} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", node: {kind: "string"}, custom: false})} onSetColumnDisplayName={(name) => setDialog({mode: "displayName", name, second: tab.table.columns.find((column) => column.name === name)?.displayName ?? "", schema: ""})} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), node: tab.table.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onSaveComment={saveCellComment} onSaveExportSettings={saveTableExportSettings} onNavigate={navigateTo} onOpenSchemaReference={(reference) => { const localName = reference.startsWith("_local.#") ? reference.slice("_local.".length) : ""; const definition = schemaDefinitions(workspace).find((entry) => entry.id === reference || (localName && entry.id.endsWith("._local." + localName))); if (definition) void openSchemaByPath(definition.path, definition.id.split(".#")[1], !!definition.table); }} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/>
                                      : <SchemaEditor key={tab.id} state={tab.state} usages={schemaUsages} onOpenUsage={openUsage} workspace={workspace} onSelect={(name) => updateSchemaTabById(tab.id, {...tab.state, selected: name, creating: false})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition} onOpenSchemaReference={(reference) => { const localName = reference.startsWith("_local.#") ? reference.slice("_local.".length) : ""; const definition = schemaDefinitions(workspace).find((entry) => entry.id === reference || (localName && entry.id.endsWith("._local." + localName))); if (definition) void openSchemaByPath(definition.path, definition.id.split(".#")[1], !!definition.table); }}/>}
                             </div>
                         ))}
@@ -893,8 +900,8 @@ function App() {
             {notice && <div className="notice-toast" role="status">{notice}</div>}
             {dialog && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setDialog(null)}>
                 <form className="structure-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); submitStructureDialog(); }}>
-                    <h2>{dialog.mode === "add" ? t("column.add") : dialog.mode === "schema" ? t("column.editSchema") : dialog.mode === "rename" ? t("column.rename") : dialog.mode === "move" ? t("column.move") : t("column.delete")}</h2>
-                    {dialog.mode !== "schema" && <label>{t("column.name")}<input autoFocus value={dialog.name} onChange={(event) => setDialog({...dialog, name: event.target.value})}/></label>}
+                    <h2>{dialog.mode === "add" ? t("column.add") : dialog.mode === "schema" ? t("column.editSchema") : dialog.mode === "rename" ? t("column.rename") : dialog.mode === "move" ? t("column.move") : dialog.mode === "displayName" ? t("column.displayName") : t("column.delete")}</h2>
+                    {dialog.mode !== "schema" && dialog.mode !== "displayName" && <label>{t("column.name")}<input autoFocus value={dialog.name} onChange={(event) => setDialog({...dialog, name: event.target.value})}/></label>}
                     {dialog.mode === "schema" && <label>{t("column.name")}<input value={dialog.name} disabled/></label>}
                     {(dialog.mode === "add" || dialog.mode === "schema") && <>
                         <div className="schema-mode-toggle">
@@ -908,6 +915,10 @@ function App() {
                     {dialog.mode === "rename" && <label>{t("column.newName")}<input value={dialog.second} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>}
                     {dialog.mode === "move" && <label>{t("column.newPosition")}<input type="number" min="0" value={dialog.second} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>}
                     {dialog.mode === "delete" && <p>{t("column.deleteBody")}</p>}
+                    {dialog.mode === "displayName" && <>
+                        <label>{t("column.displayName")}<input autoFocus value={dialog.second} placeholder={t("column.displayNamePlaceholder")} onChange={(event) => setDialog({...dialog, second: event.target.value})}/></label>
+                        <p className="schema-editor-empty">{t("column.internalName")}: <code>{dialog.name}</code></p>
+                    </>}
                     <div className="dialog-actions"><button type="button" onClick={() => setDialog(null)}>{t("common.cancel")}</button><button className={dialog.mode === "delete" ? "dialog-danger" : ""} type="submit">{dialog.mode === "delete" ? t("column.delete") : t("common.apply")}</button></div>
                 </form>
             </div>}

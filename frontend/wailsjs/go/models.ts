@@ -84,6 +84,7 @@ export namespace document {
 	}
 	export class Column {
 	    name: string;
+	    displayName?: string;
 	    schema: schemamodel.Node;
 	    effectiveSchema: schemamodel.Node;
 	    schemaExpression: string;
@@ -97,6 +98,7 @@ export namespace document {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
+	        this.displayName = source["displayName"];
 	        this.schema = this.convertValues(source["schema"], schemamodel.Node);
 	        this.effectiveSchema = this.convertValues(source["effectiveSchema"], schemamodel.Node);
 	        this.schemaExpression = source["schemaExpression"];
@@ -1173,6 +1175,22 @@ export namespace workspace {
 		    }
 		    return a;
 		}
+	}
+	export class ColumnDisplayNameSet {
+	    path: string;
+	    column: string;
+	    displayName: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ColumnDisplayNameSet(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.column = source["column"];
+	        this.displayName = source["displayName"];
+	    }
 	}
 	export class ColumnMove {
 	    path: string;

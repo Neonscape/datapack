@@ -172,6 +172,10 @@ func (a *App) SetCellComment(update workspace.CellCommentSet) (workspace.CellUpd
 	return a.workspace.SetCellComment(update)
 }
 
+func (a *App) SetColumnDisplayName(update workspace.ColumnDisplayNameSet) (workspace.CellUpdateResult, error) {
+	return a.workspace.SetColumnDisplayName(update)
+}
+
 // SetCellFormula assigns an expr-lang/expr formula to one table cell.
 func (a *App) SetCellFormula(set workspace.FormulaSet) (workspace.FormulaSetResult, error) {
 	return a.workspace.SetCellFormula(set)

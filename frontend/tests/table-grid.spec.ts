@@ -192,6 +192,18 @@ test("uses the column menu for the ID header", async ({page}) => {
     await expect(page.getByRole("button", {name: "Delete column"})).toBeDisabled();
 });
 
+test("opens the field display name editor with its stable ID", async ({page}) => {
+    await expect(page.locator("canvas:visible").first()).toBeVisible();
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    await page.mouse.click(box.x + 225, box.y + 15, {button: "right"});
+    await page.getByRole("button", {name: "Set display name"}).click();
+    await expect(page.getByRole("heading", {name: "Display name"})).toBeVisible();
+    await expect(page.getByText("Field name")).toContainText("tags");
+});
+
 
 test("edits formula cells with the application inline editor", async ({page}) => {
     const pageErrors: Error[] = [];

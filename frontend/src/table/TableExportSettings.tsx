@@ -8,7 +8,7 @@ export function TableExportSettings({table, formats, onSave}: {table: TableDocum
     const [settings, setSettings] = useState<Settings["formats"]>({});
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
-    const columns = ["id", ...table.columns.map((column) => column.name)];
+    const columns = [{name: "id", label: "ID"}, ...table.columns.map((column) => ({name: column.name, label: column.displayName ? `${column.displayName} (${column.name})` : column.name}))];
 
     useEffect(() => {
         const next: Settings["formats"] = {};
@@ -24,7 +24,7 @@ export function TableExportSettings({table, formats, onSave}: {table: TableDocum
         setSettings((current) => {
             const entry = current[format.id] ?? {enabled: false, columns: []};
             const enabled = !entry.enabled;
-            return {...current, [format.id]: {enabled, columns: enabled && format.supportsColumns && (entry.columns?.length ?? 0) === 0 ? columns : entry.columns ?? []}};
+            return {...current, [format.id]: {enabled, columns: enabled && format.supportsColumns && (entry.columns?.length ?? 0) === 0 ? columns.map((column) => column.name) : entry.columns ?? []}};
         });
     }
 
@@ -62,16 +62,16 @@ export function TableExportSettings({table, formats, onSave}: {table: TableDocum
                     <div className="table-export-columns-head">
                         <span>{t("tableExport.columns")}</span>
                         <div>
-                            <button type="button" onClick={() => setColumns(format.id, columns)}>{t("tableExport.selectAllColumns")}</button>
+                            <button type="button" onClick={() => setColumns(format.id, columns.map((column) => column.name))}>{t("tableExport.selectAllColumns")}</button>
                             <button type="button" onClick={() => setColumns(format.id, [])}>{t("tableExport.clearColumns")}</button>
                         </div>
                     </div>
-                    <div className="table-export-columns">{columns.map((column) => <label key={column}>
-                        <input type="checkbox" checked={settings[format.id]?.columns?.includes(column) ?? false} onChange={() => {
+                    <div className="table-export-columns">{columns.map((column) => <label key={column.name}>
+                        <input type="checkbox" checked={settings[format.id]?.columns?.includes(column.name) ?? false} onChange={() => {
                             const selected = settings[format.id]?.columns ?? [];
-                            setColumns(format.id, selected.includes(column) ? selected.filter((entry) => entry !== column) : [...selected, column]);
+                            setColumns(format.id, selected.includes(column.name) ? selected.filter((entry) => entry !== column.name) : [...selected, column.name]);
                         }}/>
-                        {column}
+                        {column.label}
                     </label>)}</div>
                 </>}
             </section>)}

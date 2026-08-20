@@ -53,7 +53,7 @@ _tool: {
 
 _editor: {
     table: {title: "Combat Effects"}
-    columns: {}
+    columns: {name: {title: "Display Name"}, kind: {title: "Effect Kind"}, power: {title: "Power"}, chance: {title: "Proc Chance"}, duration: {title: "Duration"}, description: {title: "Description"}, tags: {title: "Tags"}}
 }
 
 _export: {

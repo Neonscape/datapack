@@ -130,6 +130,9 @@ func TestSkyharborExampleIndexesEveryLearningConcept(t *testing.T) {
 	if item.Columns[5].EffectiveSchema.Kind != "struct" || len(item.Columns[5].EffectiveSchema.Fields) != 3 {
 		t.Fatalf("resolved position schema = %#v", item.Columns[5].EffectiveSchema)
 	}
+	if item.Columns[2].DisplayName != "Buy Price" || item.Columns[3].DisplayName != "Primary Effect" {
+		t.Fatalf("display names = %q, %q", item.Columns[2].DisplayName, item.Columns[3].DisplayName)
+	}
 	if target, err := service.Navigate(navigation.Request{Kind: navigation.KindForeignKey, Path: itemPath, RowID: "burn", Column: "effectID"}); err != nil || target.Path == "" || target.RowID != "burn" {
 		t.Fatalf("foreign-key navigation = %#v, %v", target, err)
 	}

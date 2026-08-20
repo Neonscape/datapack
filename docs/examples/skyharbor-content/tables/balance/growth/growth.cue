@@ -50,7 +50,7 @@ _tool: {
 
 _editor: {
     table: {title: "Level Growth"}
-    columns: {}
+    columns: {level: {title: "Level"}, baseValue: {title: "Base Value"}, multiplier: {title: "Multiplier"}, value: {title: "Computed Value"}, nextValue: {title: "Next Value"}}
 }
 
 _export: {

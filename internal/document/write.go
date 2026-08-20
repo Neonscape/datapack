@@ -638,6 +638,14 @@ func removeColumn(file *ast.File, name string) error {
 			}
 		}
 	}
+	if editor := fields["_editor"]; editor != nil {
+		if columns := fieldsOfStruct(editor.Value)["columns"]; columns != nil {
+			removeNamedField(columns.Value, name)
+			if len(orderedStructFields(columns.Value)) == 0 {
+				removeNamedField(editor.Value, "columns")
+			}
+		}
+	}
 	return nil
 }
 
@@ -669,6 +677,11 @@ func renameColumn(file *ast.File, oldName, newName string) error {
 			if columns := fieldsOfStruct(format.Value)["columns"]; columns != nil {
 				renameStringListValue(columns.Value, oldName, newName)
 			}
+		}
+	}
+	if editor := fields["_editor"]; editor != nil {
+		if columns := fieldsOfStruct(editor.Value)["columns"]; columns != nil {
+			renameNamedField(columns.Value, oldName, newName)
 		}
 	}
 	return nil

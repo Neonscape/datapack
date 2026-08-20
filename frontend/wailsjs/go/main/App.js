@@ -154,6 +154,10 @@ export function SetCellText(arg1) {
   return window['go']['main']['App']['SetCellText'](arg1);
 }
 
+export function SetColumnDisplayName(arg1) {
+  return window['go']['main']['App']['SetColumnDisplayName'](arg1);
+}
+
 export function SetColumnSchema(arg1) {
   return window['go']['main']['App']['SetColumnSchema'](arg1);
 }

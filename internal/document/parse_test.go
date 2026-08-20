@@ -454,6 +454,29 @@ _editor: {columns: {}}`)
 	}
 }
 
+func TestSetColumnDisplayNameRoundTripsAndClears(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {price: int}
+rows: {sword: {price: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	table, err := SetColumnDisplayName(path, "price", "Buy Price")
+	if err != nil || table.Columns[0].DisplayName != "Buy Price" {
+		t.Fatalf("SetColumnDisplayName() = %#v, %v", table, err)
+	}
+	loaded, err := LoadTable(path)
+	if err != nil || loaded.Columns[0].DisplayName != "Buy Price" {
+		t.Fatalf("LoadTable() = %#v, %v", loaded, err)
+	}
+	if _, err := SetColumnDisplayName(path, "price", ""); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = LoadTable(path)
+	if err != nil || loaded.Columns[0].DisplayName != "" {
+		t.Fatalf("cleared display name = %#v, %v", loaded, err)
+	}
+}
+
 func TestDeleteColumnRemovesValuesAndMetadata(t *testing.T) {
 	path := writeSource(t, "item.cue", `package item
 #PrimaryKey: string

@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from "react";
-import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type DrawCellCallback, type GridCell, type GridColumn, type GridMouseEventArgs, type GridSelection, type Item} from "@glideapps/glide-data-grid";
+import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type DrawCellCallback, type DrawHeaderCallback, type GridCell, type GridColumn, type GridMouseEventArgs, type GridSelection, type Item} from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import {useTranslation} from "../i18n";
 import {useTheme} from "../theme";
@@ -87,7 +87,7 @@ const enumRenderer: CustomRenderer<EnumCell> = {
     </select>, disablePadding: true}),
 };
 
-export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveComment, onSaveExportSettings, onNavigate, onOpenSchemaReference, focusTarget, onFocusDone}: { table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveComment: (rowID: string, column: string, comment: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; onOpenSchemaReference: (reference: string) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
+export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveComment, onSaveExportSettings, onNavigate, onOpenSchemaReference, focusTarget, onFocusDone}: { table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onSetColumnDisplayName: (column: string) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveComment: (rowID: string, column: string, comment: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; onOpenSchemaReference: (reference: string) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
     const {t} = useTranslation();
     const {grid, dataGridTheme} = useTheme();
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
@@ -115,7 +115,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
     const gridRef = useRef<HTMLDivElement | null>(null);
     const columns: GridColumn[] = [
         {id: "id", title: "ID", width: 160, style: "highlight"},
-        ...table.columns.map((column) => ({id: column.name, title: column.name, width: 170})),
+        ...table.columns.map((column) => ({id: column.name, title: column.displayName ? `${column.displayName} (${column.name})` : column.name, width: 170})),
     ];
     const isDraft = (row: number) => row === table.rows.length;
     useEffect(() => {
@@ -227,6 +227,29 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
         args.ctx.strokeStyle = grid.commentColor;
         args.ctx.lineWidth = 2;
         args.ctx.strokeRect(args.rect.x + 1, args.rect.y + 1, args.rect.width - 2, args.rect.height - 2);
+        args.ctx.restore();
+    };
+    const drawHeader: DrawHeaderCallback = (args, drawContent) => {
+        drawContent();
+        const column = args.column;
+        if (args.columnIndex === 0 || !column.title.includes(" (")) return;
+        const separator = column.title.lastIndexOf(" (");
+        const displayName = column.title.slice(0, separator);
+        const fieldName = column.title.slice(separator + 2, -1);
+        args.ctx.save();
+        const textWidth = Math.max(0, Math.min(args.rect.width, args.menuBounds.x - args.rect.x - 4));
+        args.ctx.beginPath();
+        args.ctx.rect(args.rect.x, args.rect.y, textWidth || args.rect.width, args.rect.height);
+        args.ctx.clip();
+        args.ctx.fillStyle = args.theme.bgHeader;
+        args.ctx.fillRect(args.rect.x, args.rect.y, args.rect.width, args.rect.height);
+        args.ctx.font = args.theme.headerFontStyle;
+        args.ctx.textBaseline = "middle";
+        args.ctx.fillStyle = args.theme.textHeader;
+        args.ctx.fillText(displayName, args.rect.x + 8, args.rect.y + args.rect.height / 2);
+        const displayWidth = args.ctx.measureText(displayName).width;
+        args.ctx.fillStyle = args.theme.textMedium;
+        args.ctx.fillText(` (${fieldName})`, args.rect.x + 8 + displayWidth, args.rect.y + args.rect.height / 2);
         args.ctx.restore();
     };
     const handleGridMouseMove = (args: GridMouseEventArgs) => {
@@ -485,7 +508,8 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                 rowHeight={30}
                 headerHeight={34}
                 theme={dataGridTheme}
-                drawCell={drawCell}
+                 drawCell={drawCell}
+                 drawHeader={drawHeader}
                 onMouseMove={handleGridMouseMove}
                 smoothScrollX
                 smoothScrollY
@@ -561,8 +585,9 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                     setContextRow(null);
                 }}>{t("grid.deleteRow")}</button>}
             </div>}
-            {columnMenu && <div className="column-context-menu" style={{left: columnMenu.x, top: columnMenu.y}}>
-                <button disabled={columnMenu.column === 0} onClick={() => { onAddColumn(columnMenu.column - 1); setColumnMenu(null); }}>{t("grid.addToLeft")}</button>
+             {columnMenu && <div className="column-context-menu" style={{left: columnMenu.x, top: columnMenu.y}}>
+                 <button disabled={columnMenu.column === 0} onClick={() => { onSetColumnDisplayName(table.columns[columnMenu.column - 1].name); setColumnMenu(null); }}>{t("grid.setDisplayName")}</button>
+                 <button disabled={columnMenu.column === 0} onClick={() => { onAddColumn(columnMenu.column - 1); setColumnMenu(null); }}>{t("grid.addToLeft")}</button>
                 <button onClick={() => { onAddColumn(columnMenu.column); setColumnMenu(null); }}>{t("grid.addToRight")}</button>
                 <hr/>
                 <button disabled={columnMenu.column === 0} onClick={() => { const column = table.columns[columnMenu.column - 1]; onEditColumnSchema(column.name, column.schemaExpression); setColumnMenu(null); }}>{t("grid.editSchema")}</button>

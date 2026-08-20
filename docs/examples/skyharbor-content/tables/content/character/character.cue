@@ -55,7 +55,7 @@ _tool: {
 
 _editor: {
     table: {title: "Playable Characters"}
-    columns: {}
+    columns: {name: {title: "Character Name"}, level: {title: "Level"}, baseAttack: {title: "Base Attack"}, growthRate: {title: "Growth Rate"}, attack: {title: "Computed Attack"}, startingItem: {title: "Starting Item"}, description: {title: "Description"}}
     cellComments: {
         captain_lyra: {attack: "Previewed from baseAttack and growthRate."}
     }

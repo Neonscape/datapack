@@ -16,6 +16,9 @@ The project is intentionally small enough to understand in one sitting, but each
 8. Select a cell and use the formula bar, paste a rectangular range, and use Undo/Redo to compare the source change with the displayed result.
 9. Use the Schema editor to create or rename a definition. The tree shows the difference between a public Schema file and a table's local Schema definitions.
 10. Configure project export selection and the table export columns, then export CSV. The exported files are in `exports/`; arrays and structures use JSON encoding.
+11. In the `content.item` column menu, set a display name for `price`. The header becomes `Buy Price (price)`; formulas, source fields, and export configuration continue to use `price`.
+
+Display names are UI metadata and never change a field's stable identity. Without a display name, the header shows only the field name. Export settings show both names, but persist the field name.
 
 The application-level actions use the same project as a safe playground: use File > New project and File > Save project as to practice project lifecycle, use the project-tree context menus to create a table or Schema file, and use the table/Schema context menus to rename, move, or delete objects. These actions are deliberately not encoded in the source project because they change project structure; the functional and Playwright test suites exercise them on temporary copies.
 

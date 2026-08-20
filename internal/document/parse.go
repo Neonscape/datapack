@@ -36,6 +36,16 @@ func LoadTable(path string) (Table, error) {
 		Exports:      map[string]ExportSettings{},
 		CellComments: map[string]map[string]string{},
 	}
+	displayNames := map[string]string{}
+	if editor := fields["_editor"]; editor != nil {
+		if columns := fieldsOfStruct(editor.Value)["columns"]; columns != nil {
+			for name, metadata := range fieldsOfStruct(columns.Value) {
+				if title := fieldsOfStruct(metadata.Value)["title"]; title != nil {
+					displayNames[name] = stringOf(title.Value)
+				}
+			}
+		}
+	}
 	if packageDecl := packageOfFile(file); packageDecl != nil && packageDecl.Name != nil {
 		document.Package = packageDecl.Name.Name
 	}
@@ -120,6 +130,7 @@ func LoadTable(path string) (Table, error) {
 		}
 		document.Columns = append(document.Columns, Column{
 			Name:             labelOf(field),
+			DisplayName:      displayNames[labelOf(field)],
 			Schema:           schema,
 			SchemaExpression: schemaExpression,
 		})

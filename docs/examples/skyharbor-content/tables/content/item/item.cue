@@ -67,7 +67,16 @@ _tool: {
 
 _editor: {
     table: {title: "Items"}
-    columns: {}
+    columns: {
+        name: {title: "Item Name"}
+        rarity: {title: "Rarity"}
+        price: {title: "Buy Price"}
+        effectID: {title: "Primary Effect"}
+        effectIDs: {title: "Additional Effects"}
+        position: {title: "World Position"}
+        description: {title: "Description"}
+        sellPrice: {title: "Sell Price"}
+    }
 }
 
 _export: {

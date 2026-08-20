@@ -81,6 +81,8 @@ export function SetCellFormula(arg1:workspace.FormulaSet):Promise<workspace.Form
 
 export function SetCellText(arg1:workspace.CellUpdate):Promise<workspace.CellUpdateResult>;
 
+export function SetColumnDisplayName(arg1:workspace.ColumnDisplayNameSet):Promise<workspace.CellUpdateResult>;
+
 export function SetColumnSchema(arg1:workspace.ColumnSchemaSet):Promise<workspace.ColumnSchemaSetResult>;
 
 export function SetCompileMode(arg1:string):Promise<workspace.View>;
