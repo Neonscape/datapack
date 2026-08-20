@@ -8,15 +8,16 @@ on:
       - "v*.*.*"
   workflow_dispatch:
 
-# The Gitea server is local to the runner. Do not route checkout or API calls
-# through a developer-machine proxy inherited by the runner service.
+# The Gitea server is local to the runner, while tool downloads may need the
+# runner host's outbound proxy. Set RUNNER_HTTP_PROXY as a repository variable
+# to the proxy address reachable from the job container.
 env:
-  HTTP_PROXY: ""
-  HTTPS_PROXY: ""
-  ALL_PROXY: ""
-  http_proxy: ""
-  https_proxy: ""
-  all_proxy: ""
+  HTTP_PROXY: ${{ vars.RUNNER_HTTP_PROXY }}
+  HTTPS_PROXY: ${{ vars.RUNNER_HTTP_PROXY }}
+  ALL_PROXY: ${{ vars.RUNNER_HTTP_PROXY }}
+  http_proxy: ${{ vars.RUNNER_HTTP_PROXY }}
+  https_proxy: ${{ vars.RUNNER_HTTP_PROXY }}
+  all_proxy: ${{ vars.RUNNER_HTTP_PROXY }}
   NO_PROXY: "dev.projectmiraland.top,127.0.0.1,localhost"
   no_proxy: "dev.projectmiraland.top,127.0.0.1,localhost"
   # Git reads http.proxy from global/system config independently of the proxy

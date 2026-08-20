@@ -20,9 +20,19 @@ The workflow uses the built-in `${{ secrets.GITEA_TOKEN }}`. You normally do not
 
 Do not commit a personal access token to the repository or workflow file.
 
-The workflow explicitly clears common proxy variables because this repository's Gitea instance and runner are on the same host. It also injects an empty Git `http.proxy` configuration with Git's highest-priority configuration environment, because a proxy stored in the runner's global or system Git config is not affected by `NO_PROXY`. If the server hostname changes, update both `NO_PROXY` entries in `.gitea/workflows/ci.yml`.
+The workflow separates local Gitea traffic from external downloads. The Gitea hostname is in `NO_PROXY`, so checkout and release API calls go directly to the local instance. External downloads such as Go, Node, npm, and Playwright use the repository variable `RUNNER_HTTP_PROXY`.
 
-For a permanent runner fix, inspect the runner host and remove the proxy from every Git config layer:
+Set `RUNNER_HTTP_PROXY` to a proxy address reachable from the job environment, for example:
+
+```text
+http://host.docker.internal:7897
+```
+
+Do not use `http://127.0.0.1:7897` when the job runs in a Docker container: in that container, `127.0.0.1` means the container itself, not the Runner host. On Linux Docker, make sure the Runner configuration maps `host.docker.internal` to the host gateway, for example with an `extra_hosts` entry. If the Runner executes jobs directly on the host, `http://127.0.0.1:7897` is valid instead.
+
+If no outbound proxy is required, leave `RUNNER_HTTP_PROXY` unset. If the server hostname changes, update both `NO_PROXY` entries in `.gitea/workflows/ci.yml`.
+
+The workflow also injects an empty Git `http.proxy` configuration with Git's highest-priority configuration environment, because a proxy stored in the Runner's global or system Git config is not affected by `NO_PROXY`. For a permanent runner fix, inspect the runner host and remove stale proxy settings from every Git config layer:
 
 ```bash
 git config --show-origin --get-regexp '(^|\.)https?\.proxy$'
