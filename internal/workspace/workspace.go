@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cuelang.org/go/cue"
@@ -52,6 +53,7 @@ type CompileState struct {
 }
 
 type Service struct {
+	mu               sync.RWMutex
 	configRoot       string
 	current          *View
 	undoStack        []map[string][]byte
@@ -220,6 +222,8 @@ type CompileResult struct {
 
 // Compile runs one full compile and publishes the outcome into the workspace.
 func (s *Service) Compile() (CompileResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return CompileResult{}, s.userError("workspace.noProject")
 	}
@@ -230,6 +234,8 @@ func (s *Service) Compile() (CompileResult, error) {
 // SetCompileMode switches between auto and manual compilation and persists the
 // user-level editor settings.
 func (s *Service) SetCompileMode(mode string) (View, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return View{}, s.userError("workspace.noProject")
 	}
@@ -260,6 +266,8 @@ func (s *Service) SetCompileMode(mode string) (View, error) {
 
 // Navigate resolves one semantic jump to a document and location.
 func (s *Service) Navigate(request navigation.Request) (navigation.Target, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.current == nil {
 		return navigation.Target{}, s.userError("workspace.noProject")
 	}
@@ -523,6 +531,8 @@ func NewService(configRoot string) *Service {
 }
 
 func (s *Service) SetLogger(logger *logging.Logger) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.logger = logger
 }
 
@@ -573,11 +583,15 @@ func (s *Service) userError(key string, args ...any) error {
 
 // GetSettings returns the current user-level editor settings.
 func (s *Service) GetSettings() (EditorSettings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.loadSettings()
 }
 
 // SetLanguage persists a new interface language and re-publishes the open view.
 func (s *Service) SetLanguage(language string) (EditorSettings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !supportedLanguages[language] {
 		return EditorSettings{}, s.userError("workspace.unsupportedLanguage", language)
 	}
@@ -600,6 +614,8 @@ func (s *Service) SetLanguage(language string) (EditorSettings, error) {
 
 // SetTheme persists a new color theme preference.
 func (s *Service) SetTheme(theme string) (EditorSettings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !supportedThemes[theme] {
 		return EditorSettings{}, s.userError("workspace.unsupportedTheme", theme)
 	}
@@ -621,6 +637,8 @@ func (s *Service) SetTheme(theme string) (EditorSettings, error) {
 }
 
 func (s *Service) OpenProject(path string) (View, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	started := time.Now()
 	s.log(logging.Info, "open project started", map[string]any{"path": path})
 	project, err := LoadProject(path)
@@ -656,8 +674,9 @@ func (s *Service) compile() compiler.Result {
 	started := time.Now()
 	var publicSchemas []document.PublicSchema
 	var tables []document.Table
-	collectDocuments(s.current.Tree.Root, &publicSchemas, &tables)
+	collectionDiagnostics := collectDocuments(s.current.Tree.Root, &publicSchemas, &tables)
 	result := compiler.CompileAll(publicSchemas, tables)
+	result.Diagnostics = append(collectionDiagnostics, result.Diagnostics...)
 	appendTreeDiagnostics(s.current.Tree.Root, &result)
 	diagnostics := result.Diagnostics
 	if diagnostics == nil {
@@ -679,7 +698,7 @@ func (s *Service) compile() compiler.Result {
 func appendTreeDiagnostics(node projecttree.Node, result *compiler.Result) {
 	if node.Kind == projecttree.NodeDamaged {
 		for _, diagnostic := range node.Diagnostics {
-			result.Diagnostics = append(result.Diagnostics, compiler.Diagnostic{Path: node.Path, Message: diagnostic.Message})
+			result.Diagnostics = append(result.Diagnostics, compiler.Diagnostic{Path: node.Path, Key: "workspace.documentLoad", Message: diagnostic.Message})
 		}
 	}
 	for _, child := range node.Children {
@@ -703,7 +722,7 @@ func (s *Service) publishView(view *View) {
 func buildSchemaIndex(tree projecttree.Tree) schemaregistry.Index {
 	var publicSchemas []document.PublicSchema
 	var tables []document.Table
-	collectDocuments(tree.Root, &publicSchemas, &tables)
+	_ = collectDocuments(tree.Root, &publicSchemas, &tables)
 	return schemaregistry.Build(publicSchemas, tables).Index()
 }
 
@@ -723,31 +742,39 @@ func buildView(project Project, settings EditorSettings, tree projecttree.Tree) 
 	}
 }
 
-func collectDocuments(node projecttree.Node, publicSchemas *[]document.PublicSchema, tables *[]document.Table) {
+func collectDocuments(node projecttree.Node, publicSchemas *[]document.PublicSchema, tables *[]document.Table) []compiler.Diagnostic {
 	seen := map[string]bool{}
-	collectDocumentsInto(node, publicSchemas, tables, seen)
+	var diagnostics []compiler.Diagnostic
+	collectDocumentsInto(node, publicSchemas, tables, seen, &diagnostics)
+	return diagnostics
 }
 
-func collectDocumentsInto(node projecttree.Node, publicSchemas *[]document.PublicSchema, tables *[]document.Table, seenSchemas map[string]bool) {
+func collectDocumentsInto(node projecttree.Node, publicSchemas *[]document.PublicSchema, tables *[]document.Table, seenSchemas map[string]bool, diagnostics *[]compiler.Diagnostic) {
 	switch node.Kind {
 	case projecttree.NodeSchemaDefinition:
 		if node.Path != "" && !seenSchemas[node.Path] {
 			seenSchemas[node.Path] = true
 			if schema, err := document.LoadPublicSchema(node.Path); err == nil {
 				*publicSchemas = append(*publicSchemas, schema)
+			} else {
+				*diagnostics = append(*diagnostics, compiler.Diagnostic{Path: node.Path, Key: "workspace.documentLoad", Message: "load public Schema: " + err.Error()})
 			}
 		}
 	case projecttree.NodeTable:
 		if table, err := document.LoadTable(node.Path); err == nil {
 			*tables = append(*tables, table)
+		} else {
+			*diagnostics = append(*diagnostics, compiler.Diagnostic{Path: node.Path, Table: node.Name, Key: "workspace.documentLoad", Message: "load table: " + err.Error()})
 		}
 	}
 	for _, child := range node.Children {
-		collectDocumentsInto(child, publicSchemas, tables, seenSchemas)
+		collectDocumentsInto(child, publicSchemas, tables, seenSchemas, diagnostics)
 	}
 }
 
 func (s *Service) Current() (View, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.current == nil {
 		return View{}, false
 	}
@@ -755,6 +782,8 @@ func (s *Service) Current() (View, bool) {
 }
 
 func (s *Service) GetProjectSettings() (ProjectSettings, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.current == nil {
 		return ProjectSettings{}, s.userError("workspace.noProject")
 	}
@@ -762,6 +791,12 @@ func (s *Service) GetProjectSettings() (ProjectSettings, error) {
 }
 
 func (s *Service) GetExportFormats() []ExportFormat {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.exportFormats()
+}
+
+func (s *Service) exportFormats() []ExportFormat {
 	formats := s.exporters.Formats()
 	result := make([]ExportFormat, 0, len(formats))
 	for _, format := range formats {
@@ -771,6 +806,8 @@ func (s *Service) GetExportFormats() []ExportFormat {
 }
 
 func (s *Service) NormalizeProjectExportDirectory(path string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.current == nil {
 		return "", s.userError("workspace.noProject")
 	}
@@ -786,6 +823,8 @@ func (s *Service) NormalizeProjectExportDirectory(path string) (string, error) {
 }
 
 func (s *Service) SetTableExportSettings(settings TableExportSettings) (TableExportSettingsResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return TableExportSettingsResult{}, s.userError("workspace.noProject")
 	}
@@ -809,6 +848,8 @@ func (s *Service) SetTableExportSettings(settings TableExportSettings) (TableExp
 }
 
 func (s *Service) SetProjectExportSettings(settings ProjectExportSettings) (ProjectSettings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return ProjectSettings{}, s.userError("workspace.noProject")
 	}
@@ -850,7 +891,7 @@ func (s *Service) projectSettings() ProjectSettings {
 	return ProjectSettings{
 		Project:   ProjectInfo{Path: project.Path, Root: project.Root, TableRoots: append([]string(nil), project.Config.TableRoots...), SchemaRoots: append([]string(nil), project.Config.SchemaRoots...), Exclude: append([]string(nil), project.Config.Exclude...)},
 		Export:    project.Config.Export,
-		Formats:   s.GetExportFormats(),
+		Formats:   s.exportFormats(),
 		Tables:    tables,
 		Workspace: *s.current,
 	}
@@ -929,6 +970,8 @@ func copyBoolMap(values map[string]bool) map[string]bool {
 // path is resolved through the project tree instead of being read directly from
 // an untrusted frontend request.
 func (s *Service) GetTable(path string) (document.Table, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.current == nil {
 		err := s.userError("workspace.noProject")
 		s.log(logging.Error, "get table failed", map[string]any{"path": path, "error": err.Error()})
@@ -952,6 +995,8 @@ func (s *Service) GetTable(path string) (document.Table, error) {
 // GetPublicSchema loads a public Schema document that belongs to the current
 // project.
 func (s *Service) GetPublicSchema(path string) (document.PublicSchema, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.current == nil {
 		err := s.userError("workspace.noProject")
 		s.log(logging.Error, "get public schema failed", map[string]any{"path": path, "error": err.Error()})
@@ -1010,6 +1055,8 @@ func (s *Service) schemaDefinitionID(path, name string) (schemaregistry.ID, erro
 // CreateSchemaDefinition adds one definition to a public Schema file or to a
 // table's local Schema, then refreshes the workspace snapshot.
 func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaEditResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
@@ -1062,6 +1109,8 @@ func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaE
 
 // SetSchemaDefinition replaces one definition expression and metadata.
 func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
@@ -1115,6 +1164,8 @@ func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult
 // RenameSchemaDefinition renames a definition and rewrites every Schema
 // reference across all project source files.
 func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaEditResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
@@ -1156,6 +1207,8 @@ func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaE
 
 // DeleteSchemaDefinition removes a definition unless it is still referenced.
 func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaEditResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
@@ -1455,6 +1508,8 @@ func (s *Service) moduleName() (string, error) {
 }
 
 func (s *Service) CreateTable(create TableCreate) (TableCreateResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return TableCreateResult{}, s.userError("workspace.noProject")
 	}
@@ -1516,6 +1571,8 @@ _editor: {columns: {}}
 // RenameTable changes a table's namespace and name, moves its source directory,
 // and updates every foreign-key reference to it.
 func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return TableRenameResult{}, s.userError("workspace.noProject")
 	}
@@ -1605,6 +1662,8 @@ func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
 // DeleteTable removes a table source directory unless another table references
 // it through a foreign key.
 func (s *Service) DeleteTable(delete TableDelete) (TableDeleteResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return TableDeleteResult{}, s.userError("workspace.noProject")
 	}
@@ -1661,6 +1720,8 @@ func (s *Service) DeleteTable(delete TableDelete) (TableDeleteResult, error) {
 
 // CreateSchemaFile creates an empty public Schema package for a namespace.
 func (s *Service) CreateSchemaFile(namespace string) (SchemaFileCreateResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return SchemaFileCreateResult{}, s.userError("workspace.noProject")
 	}
@@ -1697,6 +1758,8 @@ func (s *Service) CreateSchemaFile(namespace string) (SchemaFileCreateResult, er
 // UpdateCell applies one CUE expression to an existing table cell, then
 // refreshes the project tree and Schema registry from the saved source.
 func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
@@ -1713,6 +1776,8 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 }
 
 func (s *Service) SetCellText(update CellUpdate) (CellUpdateResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
@@ -1729,6 +1794,8 @@ func (s *Service) SetCellText(update CellUpdate) (CellUpdateResult, error) {
 }
 
 func (s *Service) SetCellComment(update CellCommentSet) (CellUpdateResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
@@ -1745,6 +1812,8 @@ func (s *Service) SetCellComment(update CellCommentSet) (CellUpdateResult, error
 }
 
 func (s *Service) SetColumnDisplayName(update ColumnDisplayNameSet) (CellUpdateResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
@@ -1761,6 +1830,8 @@ func (s *Service) SetColumnDisplayName(update ColumnDisplayNameSet) (CellUpdateR
 }
 
 func (s *Service) Paste(paste Paste) (HistoryResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return HistoryResult{}, s.userError("workspace.noProject")
 	}
@@ -1777,14 +1848,20 @@ func (s *Service) Paste(paste Paste) (HistoryResult, error) {
 }
 
 func (s *Service) Undo() (HistoryResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.restoreHistory(true)
 }
 
 func (s *Service) Redo() (HistoryResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.restoreHistory(false)
 }
 
 func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return FormulaSetResult{}, s.userError("workspace.noProject")
 	}
@@ -1925,6 +2002,8 @@ func writeFileAtomic(path string, content []byte) error {
 }
 
 func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return RowCreateResult{}, s.userError("workspace.noProject")
 	}
@@ -1962,6 +2041,8 @@ func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
 }
 
 func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
@@ -1989,6 +2070,8 @@ func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
 }
 
 func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return RowAddResult{}, s.userError("workspace.noProject")
 	}
@@ -2005,6 +2088,8 @@ func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
 }
 
 func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return RowDeleteResult{}, s.userError("workspace.noProject")
 	}
@@ -2028,6 +2113,8 @@ func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
 }
 
 func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return RowRenameResult{}, s.userError("workspace.noProject")
 	}
@@ -2065,6 +2152,8 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 // Export writes configured CSV files only when a full compile is clean. The
 // exporter receives the compiled package and never re-validates data.
 func (s *Service) Export() (ExportResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		err := s.userError("workspace.noProject")
 		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
@@ -2160,6 +2249,8 @@ func removeExportTableSelection(config *ProjectConfig, id string) bool {
 }
 
 func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return ColumnAddResult{}, s.userError("workspace.noProject")
 	}
@@ -2187,6 +2278,8 @@ func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 }
 
 func (s *Service) SetColumnSchema(set ColumnSchemaSet) (ColumnSchemaSetResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return ColumnSchemaSetResult{}, s.userError("workspace.noProject")
 	}
@@ -2210,6 +2303,8 @@ func (s *Service) SetColumnSchema(set ColumnSchemaSet) (ColumnSchemaSetResult, e
 }
 
 func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return ColumnDeleteResult{}, s.userError("workspace.noProject")
 	}
@@ -2226,6 +2321,8 @@ func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) 
 }
 
 func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return ColumnRenameResult{}, s.userError("workspace.noProject")
 	}
@@ -2242,6 +2339,8 @@ func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) 
 }
 
 func (s *Service) MoveColumn(move ColumnMove) (ColumnMoveResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		return ColumnMoveResult{}, s.userError("workspace.noProject")
 	}

@@ -5,12 +5,61 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"datapack/internal/document"
 	"datapack/internal/navigation"
 	"datapack/internal/projecttree"
 )
+
+func TestServiceConcurrentReadsAndSettingsAreSerialized(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "tables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(t.TempDir())
+	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
+		t.Fatal(err)
+	}
+	var group sync.WaitGroup
+	for index := 0; index < 20; index++ {
+		group.Add(2)
+		go func() { defer group.Done(); _, _ = service.Current() }()
+		go func() { defer group.Done(); _, _ = service.GetSettings() }()
+	}
+	group.Wait()
+}
+
+func TestOpenProjectPreservesDamagedDocumentDiagnostics(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
+	if err := os.MkdirAll(filepath.Join(projectRoot, "tables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(projectRoot, "tables", "broken.cue"), "package broken\n#Row: {")
+	service := NewService(t.TempDir())
+	view, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, diagnostic := range view.Compile.Diagnostics {
+		if diagnostic.Path == filepath.Join(projectRoot, "tables", "broken.cue") && diagnostic.Key == "workspace.documentLoad" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("compile diagnostics = %#v", view.Compile.Diagnostics)
+	}
+}
 
 func TestOpenProjectLoadsSettingsAndSourceTree(t *testing.T) {
 	projectRoot := t.TempDir()
