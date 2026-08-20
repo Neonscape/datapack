@@ -58,5 +58,3 @@ require (
 	golang.org/x/tools v0.45.0 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 )
-
-// replace github.com/wailsapp/wails/v2 v2.13.0 => /home/neonscape/go/pkg/mod
