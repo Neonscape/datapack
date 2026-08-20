@@ -36,13 +36,23 @@ func LoadTable(path string) (Table, error) {
 		Exports:      map[string]ExportSettings{},
 		CellComments: map[string]map[string]string{},
 	}
-	displayNames := map[string]string{}
+	type columnEditorMetadata struct {
+		displayName string
+		width       int
+	}
+	columnMetadata := map[string]columnEditorMetadata{}
 	if editor := fields["_editor"]; editor != nil {
 		if columns := fieldsOfStruct(editor.Value)["columns"]; columns != nil {
 			for name, metadata := range fieldsOfStruct(columns.Value) {
-				if title := fieldsOfStruct(metadata.Value)["title"]; title != nil {
-					displayNames[name] = stringOf(title.Value)
+				entry := columnEditorMetadata{}
+				metadataFields := fieldsOfStruct(metadata.Value)
+				if title := metadataFields["title"]; title != nil {
+					entry.displayName = stringOf(title.Value)
 				}
+				if width := metadataFields["width"]; width != nil {
+					entry.width = intOf(width.Value)
+				}
+				columnMetadata[name] = entry
 			}
 		}
 	}
@@ -130,7 +140,8 @@ func LoadTable(path string) (Table, error) {
 		}
 		document.Columns = append(document.Columns, Column{
 			Name:             labelOf(field),
-			DisplayName:      displayNames[labelOf(field)],
+			DisplayName:      columnMetadata[labelOf(field)].displayName,
+			Width:            columnMetadata[labelOf(field)].width,
 			Schema:           schema,
 			SchemaExpression: schemaExpression,
 		})
@@ -361,6 +372,18 @@ func stringOf(expression ast.Expr) string {
 	value, err := strconv.Unquote(literal.Value)
 	if err != nil {
 		panic(fmt.Sprintf("invalid CUE string: %v", err))
+	}
+	return value
+}
+
+func intOf(expression ast.Expr) int {
+	literal, ok := expression.(*ast.BasicLit)
+	if !ok || literal.Kind != token.INT {
+		return 0
+	}
+	value, err := strconv.Atoi(literal.Value)
+	if err != nil {
+		return 0
 	}
 	return value
 }

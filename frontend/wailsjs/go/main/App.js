@@ -162,6 +162,10 @@ export function SetColumnSchema(arg1) {
   return window['go']['main']['App']['SetColumnSchema'](arg1);
 }
 
+export function SetColumnWidth(arg1) {
+  return window['go']['main']['App']['SetColumnWidth'](arg1);
+}
+
 export function SetCompileMode(arg1) {
   return window['go']['main']['App']['SetCompileMode'](arg1);
 }

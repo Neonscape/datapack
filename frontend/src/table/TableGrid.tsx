@@ -25,7 +25,7 @@ const enumRenderer: CustomRenderer<EnumCell> = {
     </select>, disablePadding: true}),
 };
 
-export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveComment, onSaveExportSettings, onNavigate, onOpenSchemaReference, focusTarget, onFocusDone}: { table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onSetColumnDisplayName: (column: string) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveComment: (rowID: string, column: string, comment: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; onOpenSchemaReference: (reference: string) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
+export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, onSetColumnWidth, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveComment, onSaveExportSettings, onNavigate, onOpenSchemaReference, focusTarget, onFocusDone}: { table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onSetColumnDisplayName: (column: string) => void; onSetColumnWidth: (column: string, width: number) => Promise<void>; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveComment: (rowID: string, column: string, comment: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; onOpenSchemaReference: (reference: string) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
     const {t} = useTranslation();
     const {grid, dataGridTheme} = useTheme();
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
@@ -51,9 +51,10 @@ export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, 
     const formulaBarRef = useRef<HTMLInputElement | null>(null);
     const dataEditorRef = useRef<DataEditorRef | null>(null);
     const gridRef = useRef<HTMLDivElement | null>(null);
+    const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const columns: GridColumn[] = [
         {id: "id", title: "ID", width: 160, style: "highlight"},
-        ...table.columns.map((column) => ({id: column.name, title: column.displayName ? `${column.displayName} (${column.name})` : column.name, width: 170})),
+        ...table.columns.map((column) => ({id: column.name, title: column.displayName ? `${column.displayName} (${column.name})` : column.name, width: columnWidths[column.name] ?? column.width ?? 170})),
     ];
     const isDraft = (row: number) => row === table.rows.length;
     useEffect(() => {
@@ -461,7 +462,11 @@ export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, 
         <div ref={gridRef} className="table-grid">
             <DataEditor
                 ref={dataEditorRef}
-                columns={columns}
+                 columns={columns}
+                 minColumnWidth={80}
+                 maxColumnWidth={600}
+                 onColumnResize={(column, width) => setColumnWidths((current) => ({...current, [String(column.id)]: width}))}
+                 onColumnResizeEnd={(column, width) => { void onSetColumnWidth(String(column.id), width); }}
                 getCellContent={getCellContent}
                 rows={table.rows.length + 1}
                 rowMarkers="clickable-number"

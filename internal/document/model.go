@@ -23,6 +23,7 @@ type Table struct {
 type Column struct {
 	Name              string           `json:"name"`
 	DisplayName       string           `json:"displayName,omitempty"`
+	Width             int              `json:"width,omitempty"`
 	Schema            schemamodel.Node `json:"schema"`
 	EffectiveSchema   schemamodel.Node `json:"effectiveSchema"`
 	SchemaExpression  string           `json:"schemaExpression"`

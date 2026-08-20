@@ -477,6 +477,24 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	}
 }
 
+func TestSetColumnWidthRoundTrips(t *testing.T) {
+	path := writeSource(t, "item.cue", `package item
+#PrimaryKey: string
+#Row: {price: int}
+rows: {sword: {price: 10}}
+_tool: {table: {namespace: "rpg", name: "item"}}`)
+	if _, err := SetColumnWidth(path, "price", 240); err != nil {
+		t.Fatal(err)
+	}
+	table, err := LoadTable(path)
+	if err != nil || table.Columns[0].Width != 240 {
+		t.Fatalf("width = %#v, %v", table.Columns, err)
+	}
+	if _, err := SetColumnWidth(path, "price", 40); err == nil {
+		t.Fatal("accepted too-small width")
+	}
+}
+
 func TestDeleteColumnRemovesValuesAndMetadata(t *testing.T) {
 	path := writeSource(t, "item.cue", `package item
 #PrimaryKey: string
