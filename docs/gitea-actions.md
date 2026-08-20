@@ -20,6 +20,8 @@ The workflow uses the built-in `${{ secrets.GITEA_TOKEN }}`. You normally do not
 
 Do not commit a personal access token to the repository or workflow file.
 
+The workflow explicitly clears common proxy variables because this repository's Gitea instance and runner are on the same host. This is required even for the checkout step: `actions/checkout` uses Git before any later shell step can unset a proxy. If the server hostname changes, update both `NO_PROXY` entries in `.gitea/workflows/ci.yml`.
+
 ## Release tag
 
 Push a semantic-version tag to publish a release:
