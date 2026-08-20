@@ -241,14 +241,21 @@ export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, 
         args.ctx.beginPath();
         args.ctx.rect(args.rect.x, args.rect.y, textWidth || args.rect.width, args.rect.height);
         args.ctx.clip();
-        args.ctx.fillStyle = args.theme.bgHeader;
+        const background = args.isSelected
+            ? args.theme.accentColor
+            : args.hasSelectedCell
+                ? args.theme.bgHeaderHasFocus
+                : args.isHovered
+                    ? args.theme.bgHeaderHovered
+                    : args.theme.bgHeader;
+        args.ctx.fillStyle = background;
         args.ctx.fillRect(args.rect.x, args.rect.y, args.rect.width, args.rect.height);
         args.ctx.font = args.theme.headerFontStyle;
         args.ctx.textBaseline = "middle";
-        args.ctx.fillStyle = args.theme.textHeader;
+        args.ctx.fillStyle = args.isSelected ? args.theme.textHeaderSelected : args.theme.textHeader;
         args.ctx.fillText(displayName, args.rect.x + 8, args.rect.y + args.rect.height / 2);
         const displayWidth = args.ctx.measureText(displayName).width;
-        args.ctx.fillStyle = args.theme.textMedium;
+        args.ctx.fillStyle = args.isSelected ? args.theme.textHeaderSelected : args.theme.textMedium;
         args.ctx.fillText(` (${fieldName})`, args.rect.x + 8 + displayWidth, args.rect.y + args.rect.height / 2);
         args.ctx.restore();
     };
