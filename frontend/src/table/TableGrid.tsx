@@ -5,6 +5,7 @@ import {useTranslation} from "../i18n";
 import {useTheme} from "../theme";
 import {TableExportSettings as TableExportSettingsPanel} from "./TableExportSettings";
 import type {ExportFormat, NavRequest, TableDocument, TableExportSettings as TableExportSettingsModel} from "../types";
+import {arrayEntries, structValues} from "./valueCodecs";
 
 type DraftRow = { id: string; values: Record<string, string> };
 type EnumCell = CustomCell<{kind: "enum"; value: string; options: string[]}>;
@@ -14,8 +15,9 @@ type ArrayEditor = {column: number; row: number; entries: string[]; pasted: stri
 type StructEditor = {column: number; row: number; values: Record<string, string>};
 type CommentEditor = {rowID: string; column: string; value: string};
 type CommentTooltip = {text: string; left: number; top: number};
-
-function arrayEntries(expression: string) {
+/* codec implementations live in valueCodecs.ts */
+/*
+function unusedLegacyArrayEntries(expression: string) {
     const source = expression.trim();
     if (!source.startsWith("[") || !source.endsWith("]")) return [];
     const entries: string[] = [];
@@ -44,7 +46,7 @@ function arrayEntries(expression: string) {
     return entries;
 }
 
-function structValues(expression: string, fieldNames: string[]) {
+function unusedLegacyStructValues(expression: string, fieldNames: string[]) {
     const source = expression.trim();
     const values: Record<string, string> = {};
     if (!source.startsWith("{") || !source.endsWith("}")) return values;
@@ -77,6 +79,7 @@ function structValues(expression: string, fieldNames: string[]) {
     }
     return values;
 }
+*/
 
 const enumRenderer: CustomRenderer<EnumCell> = {
     kind: GridCellKind.Custom,
