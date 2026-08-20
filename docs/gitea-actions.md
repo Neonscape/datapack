@@ -13,24 +13,16 @@ The repository contains a Linux CI and release workflow at `.gitea/workflows/ci.
 
 1. Enable Actions for the repository in **Settings > Actions > General**.
 2. Register a trusted Linux Gitea Runner. The runner needs Docker if jobs use container execution.
-3. Ensure the runner image or host can install GTK 3 and WebKitGTK 4.1 development packages. The workflow installs these packages on Debian/Ubuntu runners.
+3. Ensure the runner image or host has Go 1.25+, Node.js 20+, npm, Wails CLI 2.13, GTK 3, and WebKitGTK 4.1 development packages. The workflow checks the toolchain and installs the Debian/Ubuntu system packages.
 4. Ensure the repository Actions token maximum permissions allow `code: read` and `releases: write`.
 
 The workflow uses the built-in `${{ secrets.GITEA_TOKEN }}`. You normally do not need to create this secret manually: Gitea supplies it to Actions jobs. If the instance disables release write access for the built-in token, create a repository secret named `GITEA_TOKEN` containing a Gitea personal access token with repository release write permission, or adjust the repository/owner Actions token permissions.
 
 Do not commit a personal access token to the repository or workflow file.
 
-The workflow separates local Gitea traffic from external downloads. The Gitea hostname is in `NO_PROXY`, so checkout and release API calls go directly to the local instance. External downloads such as Go, Node, npm, and Playwright use the repository variable `RUNNER_HTTP_PROXY`.
+The workflow does not use `setup-go` or `setup-node`: those actions download toolchains and can fail before useful diagnostics are available when the Runner service has an invalid proxy environment. Instead, the Runner host must provide the pinned toolchain and the workflow prints its versions. Configure the proxy on the Runner service itself, not only in your interactive shell. The Gitea hostname is always placed in `NO_PROXY` so checkout and release API calls go directly to the local instance.
 
-Set `RUNNER_HTTP_PROXY` to a proxy address reachable from the job environment, for example:
-
-```text
-http://host.docker.internal:7897
-```
-
-Do not use `http://127.0.0.1:7897` when the job runs in a Docker container: in that container, `127.0.0.1` means the container itself, not the Runner host. On Linux Docker, make sure the Runner configuration maps `host.docker.internal` to the host gateway, for example with an `extra_hosts` entry. If the Runner executes jobs directly on the host, `http://127.0.0.1:7897` is valid instead.
-
-If no outbound proxy is required, leave `RUNNER_HTTP_PROXY` unset. If the server hostname changes, update both `NO_PROXY` entries in `.gitea/workflows/ci.yml`.
+If the Runner is managed by systemd, inspect the service environment and restart it after changes. A proxy configured as `127.0.0.1:7897` is valid only if the proxy is listening in the same network namespace as the Runner process. Verify it as the Runner service user, not only from your desktop shell.
 
 The workflow also injects an empty Git `http.proxy` configuration with Git's highest-priority configuration environment, because a proxy stored in the Runner's global or system Git config is not affected by `NO_PROXY`. For a permanent runner fix, inspect the runner host and remove stale proxy settings from every Git config layer:
 

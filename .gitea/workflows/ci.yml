@@ -8,16 +8,9 @@ on:
       - "v*.*.*"
   workflow_dispatch:
 
-# The Gitea server is local to the runner, while tool downloads may need the
-# runner host's outbound proxy. Set RUNNER_HTTP_PROXY as a repository variable
-# to the proxy address reachable from the job container.
+# The Runner is expected to provide the build toolchain and its own outbound
+# network configuration. Keep the local Gitea host out of any proxy.
 env:
-  HTTP_PROXY: ${{ vars.RUNNER_HTTP_PROXY }}
-  HTTPS_PROXY: ${{ vars.RUNNER_HTTP_PROXY }}
-  ALL_PROXY: ${{ vars.RUNNER_HTTP_PROXY }}
-  http_proxy: ${{ vars.RUNNER_HTTP_PROXY }}
-  https_proxy: ${{ vars.RUNNER_HTTP_PROXY }}
-  all_proxy: ${{ vars.RUNNER_HTTP_PROXY }}
   NO_PROXY: "dev.projectmiraland.top,127.0.0.1,localhost"
   no_proxy: "dev.projectmiraland.top,127.0.0.1,localhost"
   # Git reads http.proxy from global/system config independently of the proxy
@@ -38,26 +31,22 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.25.x"
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20.x"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+      - name: Check runner toolchain
+        run: |
+          set -euo pipefail
+          command -v go
+          command -v node
+          command -v npm
+          command -v wails
+          go version
+          node --version
+          npm --version
+          wails version
 
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install --yes build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev jq curl
-
-      - name: Install Go tools
-        run: |
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
