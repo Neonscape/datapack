@@ -19,6 +19,12 @@ env:
   all_proxy: ""
   NO_PROXY: "dev.projectmiraland.top,127.0.0.1,localhost"
   no_proxy: "dev.projectmiraland.top,127.0.0.1,localhost"
+  # Git reads http.proxy from global/system config independently of the proxy
+  # environment variables. These environment entries override that config
+  # before actions/checkout starts.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: "http.proxy"
+  GIT_CONFIG_VALUE_0: ""
 
 permissions:
   code: read

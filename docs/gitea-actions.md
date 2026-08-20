@@ -20,7 +20,17 @@ The workflow uses the built-in `${{ secrets.GITEA_TOKEN }}`. You normally do not
 
 Do not commit a personal access token to the repository or workflow file.
 
-The workflow explicitly clears common proxy variables because this repository's Gitea instance and runner are on the same host. This is required even for the checkout step: `actions/checkout` uses Git before any later shell step can unset a proxy. If the server hostname changes, update both `NO_PROXY` entries in `.gitea/workflows/ci.yml`.
+The workflow explicitly clears common proxy variables because this repository's Gitea instance and runner are on the same host. It also injects an empty Git `http.proxy` configuration with Git's highest-priority configuration environment, because a proxy stored in the runner's global or system Git config is not affected by `NO_PROXY`. If the server hostname changes, update both `NO_PROXY` entries in `.gitea/workflows/ci.yml`.
+
+For a permanent runner fix, inspect the runner host and remove the proxy from every Git config layer:
+
+```bash
+git config --show-origin --get-regexp '(^|\.)https?\.proxy$'
+git config --global --unset-all http.proxy || true
+git config --global --unset-all https.proxy || true
+```
+
+If the output identifies `/etc/gitconfig`, remove the setting there as root or update the runner's container image/environment. The workflow override is intentionally kept so checkout remains local even if the runner service later inherits the old setting again.
 
 ## Release tag
 
