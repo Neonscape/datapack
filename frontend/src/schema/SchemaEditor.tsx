@@ -4,12 +4,12 @@ import {schemamodel} from "../../wailsjs/go/models";
 import {useTranslation} from "../i18n";
 import type {SchemaEditorState, SchemaNode, SchemaUsage, WorkspaceView} from "../types";
 import {schemaTypeReferenceOptions} from "./refs";
-import {SchemaForm, predicateKindsFor, schemaNodeWithKind} from "./SchemaForm";
+import {SchemaForm, predicateKindsFor, schemaKindLabel, schemaNodeWithKind} from "./SchemaForm";
 
 type SchemaDraft = {name: string; kind: "type" | "constraint"; type: string; appliesTo: string; expression: string; node: SchemaNode; custom: boolean};
 const emptyDefinitions: SchemaEditorState["definitions"] = [];
 
-export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, onCreate, onApply, onRename, onDelete}: {
+export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, onCreate, onApply, onRename, onDelete, onOpenSchemaReference}: {
     state: SchemaEditorState;
     usages: (name: string) => SchemaUsage[];
     onOpenUsage: (usage: SchemaUsage) => void;
@@ -19,6 +19,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
     onApply: (name: string, kind: "type" | "constraint", type: string, appliesTo: string[], expression: string) => Promise<void>;
     onRename: (oldName: string, newName: string) => Promise<void>;
     onDelete: (name: string) => Promise<void>;
+    onOpenSchemaReference?: (reference: string) => void;
 }) {
     const {t} = useTranslation();
     const [draft, setDraft] = useState<SchemaDraft | null>(null);
@@ -124,7 +125,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
                     </div>
                     {draft.kind === "type" ? (
                         <label>{t("common.type")}<select aria-label={t("common.type")} value={draft.type} onChange={(event) => setDraft({...draft, type: event.target.value, node: schemaNodeWithKind(draft.node, event.target.value, typeReferences)})}>
-                            {["string", "integer", "number", "boolean", "enum", "array", "struct", "reference"].map((option) => <option key={option} value={option}>{option}</option>)}
+                            {["string", "integer", "number", "boolean", "enum", "array", "struct", "reference"].map((option) => <option key={option} value={option}>{schemaKindLabel(option, t)}</option>)}
                         </select></label>
                     ) : (
                         <label>{t("schemaEditor.appliesTo")}<input aria-label={t("schemaEditor.appliesTo")} value={draft.appliesTo} placeholder={t("schemaEditor.appliesToPlaceholder")} onChange={(event) => setDraft({...draft, appliesTo: event.target.value})}/></label>
@@ -135,7 +136,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
                     </div>
                     {draft.custom
                         ? <label>{t("schemaEditor.schemaExpression")}<textarea aria-label={t("schemaEditor.schemaExpression")} rows={6} value={draft.expression} onChange={(event) => setDraft({...draft, expression: event.target.value})}/></label>
-                        : <SchemaForm value={draft.node} onChange={(node) => setDraft({...draft, node})} workspace={workspace} fixedKind={draft.kind === "type" ? draft.type : "unknown"} predicateKinds={draft.kind === "constraint" ? predicateKindsFor(draft.appliesTo.split(",").map((entry) => entry.trim()).filter(Boolean), t) : undefined}/>}
+                         : <SchemaForm value={draft.node} onChange={(node) => setDraft({...draft, node})} workspace={workspace} fixedKind={draft.kind === "type" ? draft.type : "unknown"} predicateKinds={draft.kind === "constraint" ? predicateKindsFor(draft.appliesTo.split(",").map((entry) => entry.trim()).filter(Boolean), t) : undefined} onOpenSchemaReference={onOpenSchemaReference}/>}
                     <div className="schema-editor-actions">
                         <button disabled={busy} onClick={submit}>{creating ? t("common.create") : t("common.apply")}</button>
                         {creating ? <button onClick={() => { setCreating(false); setDraft(null); }}>{t("common.cancel")}</button> : <>

@@ -4,6 +4,11 @@ import {schemaConstraintReferenceOptions, schemaTypeReferenceOptions} from "./re
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
+export function schemaKindLabel(kind: string, t: Translate): string {
+    const keys: Record<string, string> = {string: "schemaKind.string", integer: "schemaKind.integer", number: "schemaKind.number", boolean: "schemaKind.boolean", enum: "schemaKind.enum", array: "schemaKind.array", struct: "schemaKind.struct", reference: "schemaKind.reference"};
+    return keys[kind] ? t(keys[kind]) : kind;
+}
+
 function predicateOptions(kind: string, t: Translate): {kind: string; label: string}[] {
     if (kind === "string") {
         return [
@@ -125,7 +130,7 @@ function RequirementInput({requirement, baseType, constraintOptions, onChange, t
     return <input aria-label={t("schemaForm.customExpression")} value={requirement.expression ?? ""} placeholder=">=0" onChange={(event) => onChange({...requirement, expression: event.target.value})}/>;
 }
 
-export function SchemaForm({value, onChange, workspace, fixedKind, predicateKinds}: {value: SchemaNode; onChange: (node: SchemaNode) => void; workspace: WorkspaceView | null; fixedKind?: string; predicateKinds?: string[]}) {
+export function SchemaForm({value, onChange, workspace, fixedKind, predicateKinds, onOpenSchemaReference}: {value: SchemaNode; onChange: (node: SchemaNode) => void; workspace: WorkspaceView | null; fixedKind?: string; predicateKinds?: string[]; onOpenSchemaReference?: (reference: string) => void}) {
     const {t} = useTranslation();
     const kind = fixedKind ?? value.kind ?? "unknown";
     const typeReferences = schemaTypeReferenceOptions(workspace);
@@ -152,15 +157,15 @@ export function SchemaForm({value, onChange, workspace, fixedKind, predicateKind
     return <div className="schema-form">
         {fixedKind === undefined && <label className="schema-form-row">{t("schemaForm.baseType")}
             <select aria-label={t("schemaForm.baseType")} value={kind} onChange={(event) => setKind(event.target.value)}>
-                {["string", "integer", "number", "boolean", "enum", "array", "struct", "reference"].map((option) => <option key={option} value={option}>{option}</option>)}
+                {["string", "integer", "number", "boolean", "enum", "array", "struct", "reference"].map((option) => <option key={option} value={option}>{schemaKindLabel(option, t)}</option>)}
             </select>
         </label>}
-        {kind === "reference" && <label className="schema-form-row">{t("schemaForm.typeSchema")}
+        {kind === "reference" && <div className="schema-form-reference-row"><label className="schema-form-row">{t("schemaForm.typeSchema")}
             <select aria-label={t("schemaForm.typeSchema")} value={value.reference ?? ""} onChange={(event) => onChange({...value, reference: event.target.value})}>
                 <option value="">{t("schemaForm.chooseType")}</option>
                 {typeReferences.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-        </label>}
+            </label><button type="button" disabled={!value.reference || !onOpenSchemaReference} onClick={() => value.reference && onOpenSchemaReference?.(value.reference)}>{t("schemaForm.openTypeSchema")}</button></div>}
         {kind === "enum" && <div className="schema-form-block">
             <div className="schema-form-block-title">{t("schemaForm.enumValues")}</div>
             {(value.enumValues ?? []).map((enumValue, index) => <div className="schema-enum-row" key={index}>
@@ -171,21 +176,21 @@ export function SchemaForm({value, onChange, workspace, fixedKind, predicateKind
         </div>}
         {kind === "array" && <label className="schema-form-row">{t("schemaForm.elementType")}
             <select aria-label={t("schemaForm.elementType")} value={value.element?.kind ?? "string"} onChange={(event) => onChange({...value, element: {kind: event.target.value}})}>
-                {["string", "integer", "number", "boolean", "reference"].map((option) => <option key={option} value={option}>{option}</option>)}
+                {["string", "integer", "number", "boolean", "reference"].map((option) => <option key={option} value={option}>{schemaKindLabel(option, t)}</option>)}
             </select>
         </label>}
-        {kind === "array" && value.element?.kind === "reference" && <label className="schema-form-row">{t("schemaForm.elementSchema")}
+        {kind === "array" && value.element?.kind === "reference" && <div className="schema-form-reference-row"><label className="schema-form-row">{t("schemaForm.elementSchema")}
             <select aria-label={t("schemaForm.elementSchema")} value={value.element.reference ?? ""} onChange={(event) => onChange({...value, element: {...value.element!, reference: event.target.value}})}>
                 <option value="">{t("schemaForm.chooseType")}</option>
                 {typeReferences.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-        </label>}
+        </label><button type="button" disabled={!value.element.reference || !onOpenSchemaReference} onClick={() => value.element?.reference && onOpenSchemaReference?.(value.element.reference)}>{t("schemaForm.openTypeSchema")}</button></div>}
         {kind === "struct" && <div className="schema-form-block">
             <div className="schema-form-block-title">{t("schemaForm.fields")}</div>
             {(value.fields ?? []).map((field, index) => <div className="schema-enum-row" key={index}>
                 <input aria-label={t("schemaForm.fieldName", {index: index + 1})} value={field.name} placeholder="name" onChange={(event) => onChange({...value, fields: (value.fields ?? []).map((entry, position) => position === index ? {...entry, name: event.target.value} : entry)})}/>
                 <select aria-label={t("schemaForm.fieldType", {index: index + 1})} value={field.schema.kind} onChange={(event) => onChange({...value, fields: (value.fields ?? []).map((entry, position) => position === index ? {...entry, schema: {kind: event.target.value}} : entry)})}>
-                    {["string", "integer", "number", "boolean", "enum", "reference"].map((option) => <option key={option} value={option}>{option}</option>)}
+                    {["string", "integer", "number", "boolean", "enum", "reference"].map((option) => <option key={option} value={option}>{schemaKindLabel(option, t)}</option>)}
                 </select>
                 <button aria-label={t("schemaForm.deleteField", {index: index + 1})} onClick={() => onChange({...value, fields: (value.fields ?? []).filter((_, position) => position !== index)})}>×</button>
             </div>)}

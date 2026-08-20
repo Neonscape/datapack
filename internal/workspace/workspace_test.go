@@ -968,7 +968,7 @@ _tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectIDs: {table
 	}
 }
 
-func TestGetTableIncludesScalarForeignKeyOptions(t *testing.T) {
+func TestGetTableIncludesForeignKeyOptions(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeFile(t, filepath.Join(projectRoot, "game.dtproj"), `{"version": 1, "tableRoots": ["tables"], "schemaRoots": ["schema"], "export": {"directory": "exports", "targets": ["csv"]}}`)
 	writeFile(t, filepath.Join(projectRoot, "tables", "effect", "effect.cue"), `package effect
@@ -993,7 +993,7 @@ _tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if table.Columns[0].ForeignKeyTable != "rpg.effect" || !reflect.DeepEqual(table.Columns[0].ForeignKeyOptions, []string{"burn", "freeze"}) || table.Columns[1].ForeignKeyTable != "" {
+	if table.Columns[0].ForeignKeyTable != "rpg.effect" || !reflect.DeepEqual(table.Columns[0].ForeignKeyOptions, []string{"burn", "freeze"}) || table.Columns[1].ForeignKeyTable != "rpg.effect" || !reflect.DeepEqual(table.Columns[1].ForeignKeyOptions, []string{"burn", "freeze"}) {
 		t.Fatalf("columns = %#v", table.Columns)
 	}
 }

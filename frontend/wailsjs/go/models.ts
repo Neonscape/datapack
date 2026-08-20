@@ -85,6 +85,7 @@ export namespace document {
 	export class Column {
 	    name: string;
 	    schema: schemamodel.Node;
+	    effectiveSchema: schemamodel.Node;
 	    schemaExpression: string;
 	    foreignKeyTable?: string;
 	    foreignKeyOptions?: string[];
@@ -97,6 +98,7 @@ export namespace document {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.schema = this.convertValues(source["schema"], schemamodel.Node);
+	        this.effectiveSchema = this.convertValues(source["effectiveSchema"], schemamodel.Node);
 	        this.schemaExpression = source["schemaExpression"];
 	        this.foreignKeyTable = source["foreignKeyTable"];
 	        this.foreignKeyOptions = source["foreignKeyOptions"];
@@ -712,6 +714,7 @@ export namespace schemaregistry {
 	    id: string;
 	    kind: string;
 	    appliesTo?: string[];
+	    schema: schemamodel.Node;
 	    path: string;
 	    table?: string;
 	    usages?: Usage[];
@@ -725,6 +728,7 @@ export namespace schemaregistry {
 	        this.id = source["id"];
 	        this.kind = source["kind"];
 	        this.appliesTo = source["appliesTo"];
+	        this.schema = this.convertValues(source["schema"], schemamodel.Node);
 	        this.path = source["path"];
 	        this.table = source["table"];
 	        this.usages = this.convertValues(source["usages"], Usage);

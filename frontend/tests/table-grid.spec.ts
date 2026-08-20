@@ -12,7 +12,7 @@ const table = {
         {name: "name", schemaExpression: "string", schema: {kind: "string"}},
         {name: "position", schemaExpression: "{x: int, y: int, label?: string}", schema: {kind: "struct", fields: [{name: "x"}, {name: "y"}, {name: "label", optional: true}]}},
         {name: "rarity", schemaExpression: `"N" | "R"`, schema: {kind: "enum", enumValues: [{expression: `"N"`}, {expression: `"R"`}]}},
-        {name: "testAttack", schemaExpression: "_local.#Position", schema: {kind: "reference", reference: "_local.#Position"}},
+        {name: "testAttack", schemaExpression: "_local.#Position", schema: {kind: "reference", reference: "_local.#Position"}, effectiveSchema: {kind: "struct", fields: [{name: "x"}, {name: "y"}]}},
     ],
     rows: [{id: "sword", values: {tags: {expression: `["starter", "weapon"]`, display: `["starter", "weapon"]`}, position: {expression: `{x: 4, y: 8}`, display: `{x: 4, y: 8}`}, name: {expression: "20 + 5", display: "25", formula: true}, rarity: {expression: `"N"`, display: "N"}, effectID: {expression: `"burn"`, display: "burn"}}}],
     diagnostics: [{rowID: "sword", column: "effectID", message: "foreign key references missing row rpg.effect.burn"}, {rowID: "", message: "table has an invalid export configuration"}],
@@ -220,7 +220,7 @@ test("edits formula cells with the application inline editor", async ({page}) =>
     expect(pageErrors).toEqual([]);
 });
 
-test("offers existing IDs while allowing manual foreign-key input", async ({page}) => {
+test("offers only existing IDs in the foreign-key selector", async ({page}) => {
     const canvas = page.locator("canvas:visible").first();
     const box = await canvas.boundingBox();
     expect(box).not.toBeNull();
@@ -230,9 +230,8 @@ test("offers existing IDs while allowing manual foreign-key input", async ({page
 
     const input = page.getByRole("combobox", {name: "Select rpg.effect ID"});
     await expect(input).toHaveValue("burn");
-    expect(await page.locator("datalist option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value))).toEqual(["burn", "freeze"]);
-    await input.fill("unreleased_effect");
-    await input.press("Enter");
+    expect(await input.locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value))).toEqual(["", "burn", "freeze"]);
+    await input.selectOption("freeze");
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
 });
 
@@ -266,6 +265,25 @@ test("edits flat struct fields", async ({page}) => {
     await page.getByRole("textbox", {name: "Struct field label"}).fill(`"spawn"`);
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
+});
+
+test("keeps structured and foreign-key cells out of the formula bar", async ({page}) => {
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    await page.mouse.click(box.x + 225, box.y + 50);
+    const formulaBar = page.getByRole("textbox", {name: "Formula bar"});
+    await expect(formulaBar).toHaveAttribute("readonly", "");
+    await page.mouse.dblclick(box.x + 225, box.y + 50);
+    await expect(page.getByRole("dialog", {name: "Edit tags"})).toBeVisible();
+    await page.getByRole("button", {name: "Close array editor"}).click();
+
+    await page.mouse.click(box.x + 395, box.y + 50);
+    await expect(formulaBar).toHaveAttribute("readonly", "");
+    await page.mouse.dblclick(box.x + 395, box.y + 50);
+    await expect(page.getByRole("combobox", {name: "Select rpg.effect ID"})).toBeVisible();
 });
 
 test("shows table diagnostics and focuses their cells", async ({page}) => {
@@ -587,7 +605,7 @@ test("hides value options for constraint Schemas", async ({page}) => {
     await expect(page.getByText("Default value")).toBeHidden();
 });
 
-test("does not save an unchanged empty cell on blur", async ({page}) => {
+test("does not save an unchanged formula on blur", async ({page}) => {
     const pageErrors: Error[] = [];
     page.on("pageerror", (error) => pageErrors.push(error));
     await page.evaluate(() => {
@@ -604,12 +622,22 @@ test("does not save an unchanged empty cell on blur", async ({page}) => {
     expect(box).not.toBeNull();
     if (!box) return;
 
-    await page.mouse.dblclick(box.x + 1075, box.y + 50);
-    await expect(page.locator("textarea")).toHaveValue("");
+    await page.mouse.dblclick(box.x + 565, box.y + 50);
+    await expect(page.locator("textarea")).toHaveValue("=20 + 5");
     await page.mouse.click(box.x + 1250, box.y + 200);
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
     expect(await page.evaluate(() => (window as Window & {clearCalls: number}).clearCalls)).toBe(0);
     expect(pageErrors).toEqual([]);
+});
+
+test("edits a named Schema reference through its effective type", async ({page}) => {
+    const canvas = page.locator("canvas:visible").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    await page.mouse.dblclick(box.x + 1075, box.y + 50);
+    await expect(page.getByRole("dialog", {name: "Edit testAttack"})).toBeVisible();
 });
 
 test("renders a workspace with null Schema collections", async ({page}) => {

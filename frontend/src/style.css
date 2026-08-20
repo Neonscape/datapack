@@ -3,6 +3,7 @@
     --bg-surface: #ffffff;
     --bg-panel: #fbfcfc;
     --bg-subtle: #f0f3f5;
+    --bg-input: #ffffff;
     --bg-hover: #eef4f5;
     --bg-selected: #e4f0f2;
     --text: #20272f;
@@ -33,6 +34,7 @@
     --backdrop: rgba(31, 44, 52, 0.32);
     --focus-ring: rgba(18, 108, 123, 0.15);
     --brand: #183a4a;
+    --color-scheme: light;
 }
 
 [data-theme="dark"] {
@@ -40,6 +42,7 @@
     --bg-surface: #1b242b;
     --bg-panel: #161d23;
     --bg-subtle: #202a32;
+    --bg-input: #12181d;
     --bg-hover: #23313b;
     --bg-selected: #223540;
     --text: #d5dde3;
@@ -70,6 +73,7 @@
     --backdrop: rgba(0, 0, 0, 0.5);
     --focus-ring: rgba(47, 157, 176, 0.25);
     --brand: #7fd0dc;
+    --color-scheme: dark;
 }
 
 html {

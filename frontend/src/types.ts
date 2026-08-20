@@ -99,6 +99,7 @@ export type SchemaDefinition = {
     path: string;
     table?: string;
     usages?: SchemaUsage[];
+    schema?: SchemaNode;
 };
 
 export type SchemaDiagnostic = {
@@ -145,7 +146,7 @@ export type TableDocument = {
     path: string;
     namespace: string;
     name: string;
-    columns: { name: string; optional?: boolean; schema: SchemaNode; schemaExpression: string; foreignKeyTable?: string; foreignKeyOptions?: string[] }[];
+    columns: { name: string; optional?: boolean; schema: SchemaNode; effectiveSchema?: SchemaNode; schemaExpression: string; foreignKeyTable?: string; foreignKeyOptions?: string[] }[];
     rows: { id: string; values: Record<string, { expression: string; display: string; formula?: boolean }> }[];
     diagnostics?: { rowID: string; column?: string; message: string }[];
     localSchema: SchemaDefinitionDocument[];

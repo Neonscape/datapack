@@ -2416,11 +2416,55 @@ func withDiagnostics(table document.Table, view View) document.Table {
 }
 
 func withTableMetadata(table document.Table, view View) document.Table {
-	return withForeignKeyOptions(withDiagnostics(table, view), view.Tree)
+	table = withForeignKeyOptions(withDiagnostics(table, view), view.Tree)
+	definitions := map[string]schemamodel.Node{}
+	for _, definition := range view.Schemas.Definitions {
+		definitions[string(definition.ID)] = definition.Schema
+	}
+	logical := table.Name
+	if table.Namespace != "" {
+		logical = table.Namespace + "." + table.Name
+	}
+	for index := range table.Columns {
+		table.Columns[index].EffectiveSchema = resolveEffectiveSchema(table.Columns[index].Schema, logical, definitions, map[string]bool{})
+	}
+	return table
 }
 
-// withForeignKeyOptions exposes target IDs only for scalar foreign keys. Array
-// keys keep CUE expression editing until their dedicated list editor exists.
+func resolveEffectiveSchema(node schemamodel.Node, logical string, definitions map[string]schemamodel.Node, resolving map[string]bool) schemamodel.Node {
+	if node.Kind == schemamodel.KindReference {
+		id := node.Reference
+		if strings.HasPrefix(id, "_local.#") {
+			id = logical + "." + id
+		}
+		if resolving[id] {
+			return node
+		}
+		resolved, ok := definitions[id]
+		if !ok {
+			return node
+		}
+		resolving[id] = true
+		result := resolveEffectiveSchema(resolved, logical, definitions, resolving)
+		delete(resolving, id)
+		result.Nullable = result.Nullable || node.Nullable
+		if result.Default == nil {
+			result.Default = node.Default
+		}
+		return result
+	}
+	result := node
+	if node.Element != nil {
+		element := resolveEffectiveSchema(*node.Element, logical, definitions, resolving)
+		result.Element = &element
+	}
+	for index, field := range node.Fields {
+		result.Fields[index].Schema = resolveEffectiveSchema(field.Schema, logical, definitions, resolving)
+	}
+	return result
+}
+
+// withForeignKeyOptions exposes target IDs for scalar and array foreign keys.
 func withForeignKeyOptions(table document.Table, tree projecttree.Tree) document.Table {
 	targets := map[string][]string{}
 	var tables []document.Table
@@ -2436,7 +2480,7 @@ func withForeignKeyOptions(table document.Table, tree projecttree.Tree) document
 	}
 	for index := range table.Columns {
 		for _, key := range table.ForeignKeys {
-			if key.Column == table.Columns[index].Name && table.Columns[index].Schema.Kind != "array" {
+			if key.Column == table.Columns[index].Name {
 				table.Columns[index].ForeignKeyTable = key.Table
 				table.Columns[index].ForeignKeyOptions = targets[key.Table]
 				break

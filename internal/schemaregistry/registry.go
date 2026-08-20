@@ -56,12 +56,13 @@ type Index struct {
 }
 
 type IndexedDefinition struct {
-	ID        ID       `json:"id"`
-	Kind      string   `json:"kind"`
-	AppliesTo []string `json:"appliesTo,omitempty"`
-	Path      string   `json:"path"`
-	Table     string   `json:"table,omitempty"`
-	Usages    []Usage  `json:"usages,omitempty"`
+	ID        ID               `json:"id"`
+	Kind      string           `json:"kind"`
+	AppliesTo []string         `json:"appliesTo,omitempty"`
+	Schema    schemamodel.Node `json:"schema"`
+	Path      string           `json:"path"`
+	Table     string           `json:"table,omitempty"`
+	Usages    []Usage          `json:"usages,omitempty"`
 }
 
 func Build(publicSchemas []document.PublicSchema, tables []document.Table) Registry {
@@ -138,6 +139,7 @@ func (r Registry) Index() Index {
 			ID:        id,
 			Kind:      definition.Kind,
 			AppliesTo: definition.AppliesTo,
+			Schema:    definition.Schema,
 			Path:      definition.Path,
 			Table:     definition.Table,
 			Usages:    r.Usages[id],

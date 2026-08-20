@@ -10,7 +10,7 @@ type DraftRow = { id: string; values: Record<string, string> };
 type EnumCell = CustomCell<{kind: "enum"; value: string; options: string[]}>;
 type InlineEditor = { column: number; row: number; value: string; bounds: {x: number; y: number; width: number; height: number} };
 type ForeignKeyEditor = InlineEditor & {options: string[]; target: string};
-type ArrayEditor = {column: number; row: number; entries: string[]; pasted: string};
+type ArrayEditor = {column: number; row: number; entries: string[]; pasted: string; options: string[]};
 type StructEditor = {column: number; row: number; values: Record<string, string>};
 type CommentEditor = {rowID: string; column: string; value: string};
 type CommentTooltip = {text: string; left: number; top: number};
@@ -87,7 +87,7 @@ const enumRenderer: CustomRenderer<EnumCell> = {
     </select>, disablePadding: true}),
 };
 
-export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveComment, onSaveExportSettings, onNavigate, focusTarget, onFocusDone}: { table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveComment: (rowID: string, column: string, comment: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
+export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveComment, onSaveExportSettings, onNavigate, onOpenSchemaReference, focusTarget, onFocusDone}: { table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveComment: (rowID: string, column: string, comment: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; onOpenSchemaReference: (reference: string) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
     const {t} = useTranslation();
     const {grid, dataGridTheme} = useTheme();
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
@@ -109,7 +109,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
     const [formulaEditing, setFormulaEditing] = useState(false);
     const [formulaValue, setFormulaValue] = useState("");
     const editorRef = useRef<HTMLTextAreaElement | null>(null);
-    const foreignKeyEditorRef = useRef<HTMLInputElement | null>(null);
+    const foreignKeyEditorRef = useRef<HTMLSelectElement | null>(null);
     const formulaBarRef = useRef<HTMLInputElement | null>(null);
     const dataEditorRef = useRef<DataEditorRef | null>(null);
     const gridRef = useRef<HTMLDivElement | null>(null);
@@ -121,7 +121,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
     useEffect(() => {
         const editor = inlineEditor ? editorRef.current : foreignKeyEditorRef.current;
         editor?.focus();
-        editor?.select();
+        if (editor instanceof HTMLInputElement || editor instanceof HTMLTextAreaElement) editor.select();
     }, [inlineEditor, foreignKeyEditor]);
     useEffect(() => {
         const closeContextMenu = (event: PointerEvent) => {
@@ -149,15 +149,17 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
         };
     }, []);
     const rowFor = (row: number): TableDocument["rows"][number] => isDraft(row) ? {id: draft.id, values: Object.fromEntries(Object.entries(draft.values).map(([name, expression]) => [name, {expression, display: expression, formula: false}]))} : table.rows[row];
+    const effectiveSchemaFor = (column: number) => table.columns[column - 1]?.effectiveSchema ?? table.columns[column - 1]?.schema;
     const rawCellValue = (column: number, row: number): string => {
         const source = rowFor(row);
         if (column === 0) return source.id;
         const columnDefinition = table.columns[column - 1];
         const cell = source.values[columnDefinition.name];
         if (cell?.formula) return `=${cell.expression}`;
-        return columnDefinition.schema.kind === "string" ? cell?.display ?? "" : cell?.expression ?? "";
+        return effectiveSchemaFor(column)?.kind === "string" ? cell?.display ?? "" : cell?.expression ?? "";
     };
     const selectedCellLabel = selectedCell ? `${selectedCell.column === 0 ? "id" : table.columns[selectedCell.column - 1].name} · ${rowFor(selectedCell.row).id || t("grid.draft")}` : "";
+    const formulaBarEditable = selectedCell !== null && (selectedCell.column === 0 || (!table.columns[selectedCell.column - 1]?.foreignKeyTable && !["array", "struct", "reference", "enum", "boolean"].includes(effectiveSchemaFor(selectedCell.column)?.kind ?? "")));
     useEffect(() => {
         if (formulaEditing || !selectedCell) return;
         setFormulaValue(rawCellValue(selectedCell.column, selectedCell.row));
@@ -256,22 +258,23 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
         const cell = column === 0 ? {display: source.id, expression: source.id} : source.values[table.columns[column - 1].name];
         const error = isDraft(row) ? draftError : errorFor(source.id, table.columns[column - 1]?.name ?? "");
         const columnDefinition = table.columns[column - 1];
-        if (column !== 0 && ["array", "struct"].includes(columnDefinition.schema.kind) && !cell?.formula) {
+        const effectiveSchema = column === 0 ? undefined : effectiveSchemaFor(column);
+        if (column !== 0 && ["array", "struct"].includes(effectiveSchema?.kind ?? "") && !cell?.formula) {
             return {kind: GridCellKind.Text, data: cell?.expression ?? "[]", displayData: cell?.display ?? "[]", allowOverlay: false, themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined};
         }
         if (column !== 0 && columnDefinition.foreignKeyTable && !cell?.formula) {
             return {kind: GridCellKind.Text, data: cell?.expression ?? "", displayData: cell?.display ?? "", allowOverlay: false, themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined};
         }
-        if (column !== 0 && columnDefinition.schema.kind === "enum" && !cell?.formula) {
-            const options = columnDefinition.schema.enumValues?.map((entry) => entry.expression.replace(/^"|"$/g, "")) ?? [];
+        if (column !== 0 && effectiveSchema?.kind === "enum" && !cell?.formula) {
+            const options = effectiveSchema.enumValues?.map((entry) => entry.expression.replace(/^"|"$/g, "")) ?? [];
             return {kind: GridCellKind.Custom, allowOverlay: true, copyData: cell?.display ?? "", data: {kind: "enum", value: cell?.display ?? options[0] ?? "", options}, themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined} as EnumCell;
         }
-        if (column !== 0 && columnDefinition.schema.kind === "boolean" && !cell?.formula) {
+        if (column !== 0 && effectiveSchema?.kind === "boolean" && !cell?.formula) {
             return {kind: GridCellKind.Boolean, allowOverlay: false, data: cell?.expression === "true", themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined};
         }
         return {
             kind: GridCellKind.Text,
-            data: cell?.formula ? `=${cell.expression}` : column !== 0 && columnDefinition.schema.kind === "string" ? cell?.display ?? "" : cell?.expression ?? "",
+            data: cell?.formula ? `=${cell.expression}` : column !== 0 && effectiveSchema?.kind === "string" ? cell?.display ?? "" : cell?.expression ?? "",
             displayData: cell?.display ?? "",
             allowOverlay: false,
             themeOverride: error ? {
@@ -340,24 +343,27 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
         const source = rowFor(row);
         const cell = column === 0 ? {expression: source.id, formula: false} : source.values[table.columns[column - 1].name];
         const columnDefinition = table.columns[column - 1];
-        if (column !== 0 && columnDefinition.schema.kind === "struct" && !cell?.formula) {
-            window.requestAnimationFrame(() => setStructEditor({column, row, values: structValues(cell?.expression ?? "{}", columnDefinition.schema.fields?.map((field) => field.name) ?? [])}));
+        const effectiveSchema = column === 0 ? undefined : effectiveSchemaFor(column);
+        if (column !== 0 && effectiveSchema?.kind === "struct" && !cell?.formula) {
+            window.requestAnimationFrame(() => setStructEditor({column, row, values: structValues(cell?.expression ?? "{}", effectiveSchema.fields?.map((field) => field.name) ?? [])}));
             return;
         }
-        if (column !== 0 && columnDefinition.schema.kind === "array" && !cell?.formula) {
-            window.requestAnimationFrame(() => setArrayEditor({column, row, entries: arrayEntries(cell?.expression ?? "[]"), pasted: ""}));
+        if (column !== 0 && effectiveSchema?.kind === "array" && !cell?.formula) {
+            window.requestAnimationFrame(() => setArrayEditor({column, row, entries: arrayEntries(cell?.expression ?? "[]"), pasted: "", options: table.columns[column - 1].foreignKeyOptions ?? []}));
             return;
         }
         if (column !== 0 && columnDefinition.foreignKeyTable && !cell?.formula) {
             window.requestAnimationFrame(() => setForeignKeyEditor({column, row, value: cell?.expression.replace(/^"|"$/g, "") ?? "", bounds, options: columnDefinition.foreignKeyOptions ?? [], target: columnDefinition.foreignKeyTable!}));
             return;
         }
-        if (column !== 0 && ["enum", "boolean"].includes(table.columns[column - 1].schema.kind)) return;
+        if (column !== 0 && ["enum", "boolean", "reference"].includes(effectiveSchema?.kind ?? "")) return;
         window.setTimeout(() => setInlineEditor({column, row, value: cell?.formula ? `=${cell.expression}` : cell?.expression ?? "", bounds}), 0);
     };
     const finishForeignKeyEdit = (value: string) => {
         if (!foreignKeyEditor) return;
         const target = foreignKeyEditor;
+        const options = table.columns[target.column - 1].foreignKeyOptions ?? [];
+        if (!options.includes(value)) return;
         setForeignKeyEditor(null);
         void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: JSON.stringify(value), displayData: value});
     };
@@ -370,7 +376,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
     const saveStruct = () => {
         if (!structEditor) return;
         const target = structEditor;
-        const fields = table.columns[target.column - 1].schema.fields ?? [];
+        const fields = effectiveSchemaFor(target.column)?.fields ?? [];
         const entries = fields.filter((field) => target.values[field.name]?.trim()).map((field) => `${field.name}: ${target.values[field.name].trim()}`);
         setStructEditor(null);
         void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: `{${entries.join(", ")}}`, displayData: ""});
@@ -403,6 +409,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                 const text = event.clipboardData?.getData("text/plain");
                 if (text === undefined) return;
                 event.preventDefault();
+                if (Array.from({length: range.width}, (_, column) => table.columns[range.x + column - 1]).some((column) => column.foreignKeyTable)) return;
                 void onPaste(range.y, range.x, text);
             }
         };
@@ -438,11 +445,11 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                 aria-label={t("grid.formulaBar")}
                 value={formulaValue}
                 disabled={!selectedCell}
-                readOnly={!formulaEditing}
+                 readOnly={!formulaBarEditable || !formulaEditing}
                 placeholder={t("grid.selectCell")}
                 onChange={(event) => setFormulaValue(event.target.value)}
                 onClick={() => {
-                    if (!selectedCell || formulaEditing) return;
+                     if (!formulaBarEditable || formulaEditing) return;
                     setInlineEditor(null);
                     setFormulaEditing(true);
                     window.requestAnimationFrame(() => formulaBarRef.current?.select());
@@ -493,6 +500,7 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                     }
                 }}
                 onCellClicked={([column, row], event) => {
+                    if (column < 0 || row < 0) return;
                     setSelectedColumn(null);
                     setSelectedCell({column, row});
                     setFormulaEditing(false);
@@ -576,34 +584,35 @@ export function TableGrid({table, formats, onAddColumn, onDeleteColumn, onDelete
                     if (event.key === "Escape") setInlineEditor(null);
                 }}
             />}
-            {foreignKeyEditor && <div className="foreign-key-cell-editor" style={{left: foreignKeyEditor.bounds.x, top: foreignKeyEditor.bounds.y, width: foreignKeyEditor.bounds.width, minHeight: foreignKeyEditor.bounds.height}}>
-                <input ref={foreignKeyEditorRef} defaultValue={foreignKeyEditor.value} list={`foreign-key-options-${foreignKeyEditor.column}`} aria-label={t("grid.selectId", {target: foreignKeyEditor.target})} onKeyDown={(event) => {
-                    if (event.key === "Enter") finishForeignKeyEdit(event.currentTarget.value);
-                    if (event.key === "Escape") setForeignKeyEditor(null);
-                }} onBlur={(event) => finishForeignKeyEdit(event.currentTarget.value)}/>
-                <datalist id={`foreign-key-options-${foreignKeyEditor.column}`}>{foreignKeyEditor.options.map((option) => <option key={option} value={option}/>)}</datalist>
-            </div>}
+             {foreignKeyEditor && <div className="foreign-key-cell-editor" style={{left: foreignKeyEditor.bounds.x, top: foreignKeyEditor.bounds.y, width: foreignKeyEditor.bounds.width, minHeight: foreignKeyEditor.bounds.height}}>
+                 <select ref={foreignKeyEditorRef} autoFocus value={foreignKeyEditor.value} aria-label={t("grid.selectId", {target: foreignKeyEditor.target})} onChange={(event) => finishForeignKeyEdit(event.currentTarget.value)} onKeyDown={(event) => {
+                     if (event.key === "Escape") setForeignKeyEditor(null);
+                 }}>
+                     <option value="">{t("grid.chooseId")}</option>
+                     {foreignKeyEditor.options.map((option) => <option key={option} value={option}>{option}</option>)}
+                 </select>
+             </div>}
             {arrayEditor && <div className="array-editor-backdrop" role="presentation" onMouseDown={() => setArrayEditor(null)}>
                 <section className="array-editor-dialog" role="dialog" aria-label={t("grid.editColumn", {name: table.columns[arrayEditor.column - 1].name})} onMouseDown={(event) => event.stopPropagation()}>
                     <header><div><span>{t("grid.arrayValues")}</span><h2>{table.columns[arrayEditor.column - 1].name}</h2></div><button type="button" aria-label={t("grid.closeArrayEditor")} onClick={() => setArrayEditor(null)}>x</button></header>
                     <div className="array-entry-list">
-                        {arrayEditor.entries.map((entry, index) => <div className="array-entry" key={`${index}:${entry}`}>
-                            <code>{index + 1}</code>
-                            <input aria-label={t("grid.arrayItem", {index: index + 1})} value={entry} onChange={(event) => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? event.target.value : value)})}/>
+                         {arrayEditor.entries.map((entry, index) => <div className="array-entry" key={`${index}:${entry}`}>
+                             <code>{index + 1}</code>
+                             {arrayEditor.options.length > 0 ? <select aria-label={t("grid.arrayItem", {index: index + 1})} value={entry.replace(/^"|"$/g, "")} onChange={(event) => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? JSON.stringify(event.target.value) : value)})}>{arrayEditor.options.map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input aria-label={t("grid.arrayItem", {index: index + 1})} value={entry} onChange={(event) => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? event.target.value : value)})}/>}
                             <button type="button" aria-label={t("grid.moveItemUp", {index: index + 1})} disabled={index === 0} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? arrayEditor.entries[index - 1] : position === index - 1 ? arrayEditor.entries[index] : value)})}>{t("grid.up")}</button>
                             <button type="button" aria-label={t("grid.moveItemDown", {index: index + 1})} disabled={index === arrayEditor.entries.length - 1} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.map((value, position) => position === index ? arrayEditor.entries[index + 1] : position === index + 1 ? arrayEditor.entries[index] : value)})}>{t("grid.down")}</button>
                             <button type="button" aria-label={t("grid.deleteItem", {index: index + 1})} onClick={() => setArrayEditor({...arrayEditor, entries: arrayEditor.entries.filter((_, position) => position !== index)})}>{t("grid.delete")}</button>
                         </div>)}
                     </div>
-                    <button className="array-add" type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, ""]})}>{t("grid.addItem")}</button>
-                    <label className="array-paste">{t("grid.pasteItems")}<textarea aria-label={t("grid.pasteArrayItems")} value={arrayEditor.pasted} placeholder={t("grid.pastePlaceholder")} onChange={(event) => setArrayEditor({...arrayEditor, pasted: event.target.value})}/></label>
-                    <div className="dialog-actions"><button type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, ...arrayEditor.pasted.replace(/\r/g, "").split("\n").map((entry) => entry.trim()).filter(Boolean)], pasted: ""})} disabled={!arrayEditor.pasted.trim()}>{t("grid.addPastedItems")}</button><button type="button" onClick={() => setArrayEditor(null)}>{t("common.cancel")}</button><button type="button" onClick={saveArray}>{t("common.apply")}</button></div>
+                     <button className="array-add" type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, arrayEditor.options[0] ? JSON.stringify(arrayEditor.options[0]) : ""]})}>{t("grid.addItem")}</button>
+                     {arrayEditor.options.length === 0 && <label className="array-paste">{t("grid.pasteItems")}<textarea aria-label={t("grid.pasteArrayItems")} value={arrayEditor.pasted} placeholder={t("grid.pastePlaceholder")} onChange={(event) => setArrayEditor({...arrayEditor, pasted: event.target.value})}/></label>}
+                     <div className="dialog-actions">{arrayEditor.options.length === 0 && <button type="button" onClick={() => setArrayEditor({...arrayEditor, entries: [...arrayEditor.entries, ...arrayEditor.pasted.replace(/\r/g, "").split("\n").map((entry) => entry.trim()).filter(Boolean)], pasted: ""})} disabled={!arrayEditor.pasted.trim()}>{t("grid.addPastedItems")}</button>}<button type="button" onClick={() => setArrayEditor(null)}>{t("common.cancel")}</button><button type="button" onClick={saveArray}>{t("common.apply")}</button></div>
                 </section>
             </div>}
             {structEditor && <div className="array-editor-backdrop" role="presentation" onMouseDown={() => setStructEditor(null)}>
-                <section className="struct-editor-dialog" role="dialog" aria-label={t("grid.editColumn", {name: table.columns[structEditor.column - 1].name})} onMouseDown={(event) => event.stopPropagation()}>
-                    <header><div><span>{t("grid.structureValues")}</span><h2>{table.columns[structEditor.column - 1].name}</h2></div><button type="button" aria-label={t("grid.closeStructEditor")} onClick={() => setStructEditor(null)}>x</button></header>
-                    <div className="struct-field-list">{(table.columns[structEditor.column - 1].schema.fields ?? []).map((field) => <label key={field.name}>{field.name}<input aria-label={t("grid.structField", {name: field.name})} value={structEditor.values[field.name] ?? ""} placeholder={t("grid.cueExpression")} onChange={(event) => setStructEditor({...structEditor, values: {...structEditor.values, [field.name]: event.target.value}})}/></label>)}</div>
+                 <section className="struct-editor-dialog" role="dialog" aria-label={t("grid.editColumn", {name: table.columns[structEditor.column - 1].name})} onMouseDown={(event) => event.stopPropagation()}>
+                     <header><div><span>{t("grid.structureValues")}</span><h2>{table.columns[structEditor.column - 1].name}</h2></div><button type="button" aria-label={t("grid.closeStructEditor")} onClick={() => setStructEditor(null)}>x</button></header>
+                     <div className="struct-field-list">{(effectiveSchemaFor(structEditor.column)?.fields ?? []).map((field) => <label key={field.name}>{field.name}<input aria-label={t("grid.structField", {name: field.name})} value={structEditor.values[field.name] ?? ""} placeholder={t("grid.cueExpression")} onChange={(event) => setStructEditor({...structEditor, values: {...structEditor.values, [field.name]: event.target.value}})}/></label>)}</div>
                     <div className="dialog-actions"><button type="button" onClick={() => setStructEditor(null)}>{t("common.cancel")}</button><button type="button" onClick={saveStruct}>{t("common.apply")}</button></div>
                 </section>
             </div>}

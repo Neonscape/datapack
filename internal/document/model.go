@@ -23,6 +23,7 @@ type Table struct {
 type Column struct {
 	Name              string           `json:"name"`
 	Schema            schemamodel.Node `json:"schema"`
+	EffectiveSchema   schemamodel.Node `json:"effectiveSchema"`
 	SchemaExpression  string           `json:"schemaExpression"`
 	ForeignKeyTable   string           `json:"foreignKeyTable,omitempty"`
 	ForeignKeyOptions []string         `json:"foreignKeyOptions,omitempty"`
