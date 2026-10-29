@@ -54,12 +54,11 @@ func RenameRow(path, oldID, newID string, references []RowReference) (Table, err
 	if err != nil {
 		return Table{}, err
 	}
-	if err := renameRowID(target, oldID, newID); err != nil {
+	if err := renameRowCellComments(target, oldID, newID); err != nil {
 		return Table{}, err
 	}
-	if err := renameFormulaRowReferences(target, oldID, newID); err != nil {
-		return Table{}, err
-	}
+	// References identify rows in the original source. Apply them before
+	// relabeling the target so references within that same row still resolve.
 	for _, reference := range references {
 		file, err := loadFile(reference.Path)
 		if err != nil {
@@ -68,6 +67,12 @@ func RenameRow(path, oldID, newID string, references []RowReference) (Table, err
 		if err := renameReference(file, reference, oldID, newID); err != nil {
 			return Table{}, err
 		}
+	}
+	if err := renameRowID(target, oldID, newID); err != nil {
+		return Table{}, err
+	}
+	if err := renameFormulaRowReferences(target, oldID, newID); err != nil {
+		return Table{}, err
 	}
 
 	candidates := map[string][]byte{}
@@ -92,6 +97,37 @@ func RenameRow(path, oldID, newID string, references []RowReference) (Table, err
 		return Table{}, fmt.Errorf("reload renamed table: %w", err)
 	}
 	return table, nil
+}
+
+func renameRowCellComments(file *ast.File, oldID, newID string) error {
+	editor := fieldsOfFile(file)["_editor"]
+	if editor == nil {
+		return nil
+	}
+	if _, ok := editor.Value.(*ast.StructLit); !ok {
+		return fmt.Errorf("_editor must be a struct")
+	}
+	comments := fieldsOfStruct(editor.Value)["cellComments"]
+	if comments == nil {
+		return nil
+	}
+	if _, ok := comments.Value.(*ast.StructLit); !ok {
+		return fmt.Errorf("_editor.cellComments must be a struct")
+	}
+	// Even orphaned or empty destination metadata belongs to a different row.
+	// Reject instead of overwriting it or attaching it to the renamed row.
+	if fieldsOfStruct(comments.Value)[newID] != nil {
+		return fmt.Errorf("cell comments for row %q already exist", newID)
+	}
+	for _, row := range orderedStructFields(comments.Value) {
+		if labelOf(row) == oldID {
+			if _, ok := row.Value.(*ast.StructLit); !ok {
+				return fmt.Errorf("_editor.cellComments.%s must be a struct", oldID)
+			}
+			row.Label = ast.NewIdent(newID)
+		}
+	}
+	return nil
 }
 
 func renameRowID(file *ast.File, oldID, newID string) error {
