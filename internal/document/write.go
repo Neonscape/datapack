@@ -668,9 +668,6 @@ func renameColumn(file *ast.File, oldName, newName string) error {
 		if foreignKeys := toolFields["foreignKeys"]; foreignKeys != nil {
 			renameNamedField(foreignKeys.Value, oldName, newName)
 		}
-		if formulas := toolFields["formulas"]; formulas != nil {
-			renameNamedField(formulas.Value, oldName, newName)
-		}
 	}
 	if export := fields["_export"]; export != nil {
 		for _, format := range orderedStructFields(export.Value) {
@@ -681,7 +678,24 @@ func renameColumn(file *ast.File, oldName, newName string) error {
 	}
 	if editor := fields["_editor"]; editor != nil {
 		if columns := fieldsOfStruct(editor.Value)["columns"]; columns != nil {
+			if fieldsOfStruct(columns.Value)[newName] != nil {
+				return fmt.Errorf("editor metadata for column %q already exists", newName)
+			}
 			renameNamedField(columns.Value, oldName, newName)
+		}
+		if comments := fieldsOfStruct(editor.Value)["cellComments"]; comments != nil {
+			if _, ok := comments.Value.(*ast.StructLit); !ok {
+				return fmt.Errorf("_editor.cellComments must be a struct")
+			}
+			for _, row := range orderedStructFields(comments.Value) {
+				if _, ok := row.Value.(*ast.StructLit); !ok {
+					return fmt.Errorf("cell comments for row %q must be a struct", labelOf(row))
+				}
+				if fieldsOfStruct(row.Value)[newName] != nil {
+					return fmt.Errorf("cell comments for %s.%s already exist", labelOf(row), newName)
+				}
+				renameNamedField(row.Value, oldName, newName)
+			}
 		}
 	}
 	return nil

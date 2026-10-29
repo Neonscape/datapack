@@ -27,6 +27,9 @@ func RenameTable(path, newNamespace, newName string, references []TableReference
 		paths = append(paths, reference.Path)
 	}
 	err := editSchemaSourceFiles(paths, func(files map[string]*ast.File) error {
+		if err := renameFormulaTableReferences(files[path], newNamespace, newName); err != nil {
+			return err
+		}
 		if err := renameTableIdentity(files[path], newNamespace, newName); err != nil {
 			return err
 		}
