@@ -157,6 +157,9 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         if (columnIndex >= 0) {
             const rowIndex = focusTarget.rowID ? table.rows.findIndex((entry) => entry.id === focusTarget.rowID) : -1;
             if (rowIndex >= 0) {
+                setSelectedCell({column: columnIndex, row: rowIndex});
+                setFormulaEditing(false);
+                setSelectedColumn(null);
                 setGridSelection({columns: CompactSelection.fromSingleSelection(columnIndex), rows: CompactSelection.fromSingleSelection(rowIndex), current: {cell: [columnIndex, rowIndex], range: {x: columnIndex, y: rowIndex, width: 1, height: 1}, rangeStack: []}});
                 dataEditorRef.current?.scrollTo(columnIndex, rowIndex, "both", 24, 48, {hAlign: "center", vAlign: "center"});
                 dataEditorRef.current?.focus();
@@ -217,6 +220,9 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         const row = table.rows.findIndex((entry) => entry.id === diagnostic.rowID);
         const column = diagnostic.column ? table.columns.findIndex((entry) => entry.name === diagnostic.column) + 1 : 0;
         if (row < 0 || column < 0) return;
+        setSelectedCell({column, row});
+        setFormulaEditing(false);
+        setSelectedColumn(null);
         setGridSelection({columns: CompactSelection.fromSingleSelection(column), rows: CompactSelection.fromSingleSelection(row), current: {cell: [column, row], range: {x: column, y: row, width: 1, height: 1}, rangeStack: []}});
         dataEditorRef.current?.scrollTo(column, row, "both", 24, 48, {hAlign: "center", vAlign: "center"});
         dataEditorRef.current?.focus();
@@ -327,7 +333,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
             return;
         }
         if (column !== 0 && ["enum", "boolean", "reference"].includes(effectiveSchema?.kind ?? "")) return;
-        window.setTimeout(() => setInlineEditor({column, row, value: cell?.formula ? `=${cell.expression}` : cell?.expression ?? "", bounds}), 0);
+        window.setTimeout(() => setInlineEditor({column, row, value: isDraft(row) ? cell?.expression ?? "" : rawCellValue(column, row), bounds}), 0);
     };
     const finishForeignKeyEdit = (value: string) => {
         if (!foreignKeyEditor) return;
