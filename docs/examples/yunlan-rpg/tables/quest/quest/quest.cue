@@ -78,7 +78,7 @@ rows: {
     "关卡ID": "stage_03",
     "前置任务ID": "quest_05",
     "类型": "收集",
-    "目标道具ID": "item_material_01",
+    "目标道具ID": "item_material_02",
     "需求数量": 2,
     "奖励金币": 80,
     "奖励道具ID": ["item_potion_01"]
@@ -100,7 +100,7 @@ rows: {
     "关卡ID": "stage_04",
     "前置任务ID": "quest_07",
     "类型": "收集",
-    "目标道具ID": "item_material_01",
+    "目标道具ID": "item_material_02",
     "需求数量": 2,
     "奖励金币": 90,
     "奖励道具ID": ["item_potion_01"]
@@ -122,7 +122,7 @@ rows: {
     "关卡ID": "stage_05",
     "前置任务ID": "quest_09",
     "类型": "收集",
-    "目标道具ID": "item_material_01",
+    "目标道具ID": "item_material_03",
     "需求数量": 2,
     "奖励金币": 100,
     "奖励道具ID": ["item_potion_01"]
@@ -144,7 +144,7 @@ rows: {
     "关卡ID": "stage_06",
     "前置任务ID": "quest_11",
     "类型": "收集",
-    "目标道具ID": "item_material_01",
+    "目标道具ID": "item_material_03",
     "需求数量": 2,
     "奖励金币": 110,
     "奖励道具ID": ["item_potion_01"]
@@ -166,7 +166,7 @@ rows: {
     "关卡ID": "stage_07",
     "前置任务ID": "quest_13",
     "类型": "收集",
-    "目标道具ID": "item_material_01",
+    "目标道具ID": "item_material_04",
     "需求数量": 2,
     "奖励金币": 120,
     "奖励道具ID": ["item_potion_01"]
@@ -188,7 +188,7 @@ rows: {
     "关卡ID": "stage_08",
     "前置任务ID": "quest_15",
     "类型": "收集",
-    "目标道具ID": "item_material_01",
+    "目标道具ID": "item_material_04",
     "需求数量": 2,
     "奖励金币": 130,
     "奖励道具ID": ["item_potion_01"]
@@ -254,7 +254,7 @@ rows: {
     "关卡ID": "stage_11",
     "前置任务ID": "quest_21",
     "类型": "收集",
-    "目标道具ID": "item_material_05",
+    "目标道具ID": "item_material_06",
     "需求数量": 2,
     "奖励金币": 160,
     "奖励道具ID": ["item_potion_05"]
@@ -276,7 +276,7 @@ rows: {
     "关卡ID": "stage_12",
     "前置任务ID": "quest_23",
     "类型": "收集",
-    "目标道具ID": "item_material_05",
+    "目标道具ID": "item_material_06",
     "需求数量": 2,
     "奖励金币": 170,
     "奖励道具ID": ["item_potion_05"]
@@ -298,7 +298,7 @@ rows: {
     "关卡ID": "stage_13",
     "前置任务ID": "quest_25",
     "类型": "收集",
-    "目标道具ID": "item_material_05",
+    "目标道具ID": "item_material_07",
     "需求数量": 2,
     "奖励金币": 180,
     "奖励道具ID": ["item_potion_05"]
@@ -320,7 +320,7 @@ rows: {
     "关卡ID": "stage_14",
     "前置任务ID": "quest_27",
     "类型": "收集",
-    "目标道具ID": "item_material_05",
+    "目标道具ID": "item_material_07",
     "需求数量": 2,
     "奖励金币": 190,
     "奖励道具ID": ["item_potion_05"]
@@ -342,7 +342,7 @@ rows: {
     "关卡ID": "stage_15",
     "前置任务ID": "quest_29",
     "类型": "收集",
-    "目标道具ID": "item_material_05",
+    "目标道具ID": "item_material_08",
     "需求数量": 2,
     "奖励金币": 200,
     "奖励道具ID": ["item_potion_05"]
@@ -364,7 +364,7 @@ rows: {
     "关卡ID": "stage_16",
     "前置任务ID": "quest_31",
     "类型": "收集",
-    "目标道具ID": "item_material_05",
+    "目标道具ID": "item_material_08",
     "需求数量": 2,
     "奖励金币": 210,
     "奖励道具ID": ["item_potion_05"]
@@ -430,7 +430,7 @@ rows: {
     "关卡ID": "stage_19",
     "前置任务ID": "quest_37",
     "类型": "收集",
-    "目标道具ID": "item_material_09",
+    "目标道具ID": "item_material_10",
     "需求数量": 2,
     "奖励金币": 240,
     "奖励道具ID": ["item_potion_09"]
@@ -452,7 +452,7 @@ rows: {
     "关卡ID": "stage_20",
     "前置任务ID": "quest_39",
     "类型": "收集",
-    "目标道具ID": "item_material_09",
+    "目标道具ID": "item_material_10",
     "需求数量": 2,
     "奖励金币": 250,
     "奖励道具ID": ["item_potion_09"]
@@ -474,7 +474,7 @@ rows: {
     "关卡ID": "stage_21",
     "前置任务ID": "quest_41",
     "类型": "收集",
-    "目标道具ID": "item_material_09",
+    "目标道具ID": "item_material_11",
     "需求数量": 2,
     "奖励金币": 260,
     "奖励道具ID": ["item_potion_09"]
@@ -496,7 +496,7 @@ rows: {
     "关卡ID": "stage_22",
     "前置任务ID": "quest_43",
     "类型": "收集",
-    "目标道具ID": "item_material_09",
+    "目标道具ID": "item_material_11",
     "需求数量": 2,
     "奖励金币": 270,
     "奖励道具ID": ["item_potion_09"]
@@ -518,7 +518,7 @@ rows: {
     "关卡ID": "stage_23",
     "前置任务ID": "quest_45",
     "类型": "收集",
-    "目标道具ID": "item_material_09",
+    "目标道具ID": "item_material_12",
     "需求数量": 2,
     "奖励金币": 280,
     "奖励道具ID": ["item_potion_09"]
@@ -540,7 +540,7 @@ rows: {
     "关卡ID": "stage_24",
     "前置任务ID": "quest_47",
     "类型": "收集",
-    "目标道具ID": "item_material_09",
+    "目标道具ID": "item_material_12",
     "需求数量": 2,
     "奖励金币": 290,
     "奖励道具ID": ["item_potion_09"]

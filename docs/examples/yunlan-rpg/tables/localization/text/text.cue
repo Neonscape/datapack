@@ -912,43 +912,43 @@ rows: {
     "使用说明": null
   },
   "skill_01_name": {
-    "简体中文": "陆青禾·破阵式",
-    "英语": "Lu Qinghe Strike 1",
+    "简体中文": "陆青禾·破阵斩",
+    "英语": "Lu Qinghe Breach Slash",
     "使用说明": null
   },
   "skill_01_desc": {
-    "简体中文": "陆青禾在第1式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Lu Qinghe applies the primary effect, then the listed bonus effects.",
+    "简体中文": "陆青禾的破阵斩施加伤害主效果，额外效果按列表顺序结算。",
+    "英语": "Lu Qinghe uses Breach Slash. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_02_name": {
-    "简体中文": "陆青禾·疾矢诀",
-    "英语": "Lu Qinghe Volley 2",
+    "简体中文": "陆青禾·守心势",
+    "英语": "Lu Qinghe Heartguard",
     "使用说明": null
   },
   "skill_02_desc": {
-    "简体中文": "陆青禾在第2式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Lu Qinghe applies the primary effect, then the listed bonus effects.",
+    "简体中文": "陆青禾的守心势施加增益主效果，额外效果按列表顺序结算。",
+    "英语": "Lu Qinghe uses Heartguard. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_03_name": {
-    "简体中文": "陆青禾·回春势",
-    "英语": "Lu Qinghe Renewal 3",
+    "简体中文": "陆青禾·铁壁",
+    "英语": "Lu Qinghe Ironwall",
     "使用说明": null
   },
   "skill_03_desc": {
-    "简体中文": "陆青禾在第3式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Lu Qinghe applies the primary effect, then the listed bonus effects.",
+    "简体中文": "陆青禾的铁壁为开战时触发一次的被动，不消耗法力且无冷却。",
+    "英语": "Lu Qinghe uses Ironwall. A battle-start passive with no mana cost or cooldown.",
     "使用说明": null
   },
   "skill_04_name": {
-    "简体中文": "陆青禾·引星终章",
-    "英语": "Lu Qinghe Starcall 4",
+    "简体中文": "陆青禾·震地击",
+    "英语": "Lu Qinghe Earthshaker",
     "使用说明": null
   },
   "skill_04_desc": {
-    "简体中文": "陆青禾在第4式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Lu Qinghe applies the primary effect, then the listed bonus effects.",
+    "简体中文": "陆青禾的震地击施加控制主效果，额外效果按列表顺序结算。",
+    "英语": "Lu Qinghe uses Earthshaker. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "hero_01_name": {
@@ -962,43 +962,43 @@ rows: {
     "使用说明": null
   },
   "skill_05_name": {
-    "简体中文": "沈鸣川·疾矢式",
-    "英语": "Shen Mingchuan Volley 1",
+    "简体中文": "沈鸣川·疾矢射",
+    "英语": "Shen Mingchuan Swift Arrow",
     "使用说明": null
   },
   "skill_05_desc": {
-    "简体中文": "沈鸣川在第1式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Shen Mingchuan applies the primary effect, then the listed bonus effects.",
+    "简体中文": "沈鸣川的疾矢射施加伤害主效果，额外效果按列表顺序结算。",
+    "英语": "Shen Mingchuan uses Swift Arrow. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_06_name": {
-    "简体中文": "沈鸣川·回春诀",
-    "英语": "Shen Mingchuan Renewal 2",
+    "简体中文": "沈鸣川·缚足箭",
+    "英语": "Shen Mingchuan Binding Arrow",
     "使用说明": null
   },
   "skill_06_desc": {
-    "简体中文": "沈鸣川在第2式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Shen Mingchuan applies the primary effect, then the listed bonus effects.",
+    "简体中文": "沈鸣川的缚足箭施加控制主效果，额外效果按列表顺序结算。",
+    "英语": "Shen Mingchuan uses Binding Arrow. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_07_name": {
-    "简体中文": "沈鸣川·引星势",
-    "英语": "Shen Mingchuan Starcall 3",
+    "简体中文": "沈鸣川·鹰眼",
+    "英语": "Shen Mingchuan Hawk Eye",
     "使用说明": null
   },
   "skill_07_desc": {
-    "简体中文": "沈鸣川在第3式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Shen Mingchuan applies the primary effect, then the listed bonus effects.",
+    "简体中文": "沈鸣川的鹰眼为开战时触发一次的被动，不消耗法力且无冷却。",
+    "英语": "Shen Mingchuan uses Hawk Eye. A battle-start passive with no mana cost or cooldown.",
     "使用说明": null
   },
   "skill_08_name": {
-    "简体中文": "沈鸣川·破阵终章",
-    "英语": "Shen Mingchuan Strike 4",
+    "简体中文": "沈鸣川·穿云矢",
+    "英语": "Shen Mingchuan Cloudpiercer",
     "使用说明": null
   },
   "skill_08_desc": {
-    "简体中文": "沈鸣川在第4式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Shen Mingchuan applies the primary effect, then the listed bonus effects.",
+    "简体中文": "沈鸣川的穿云矢施加伤害主效果，额外效果按列表顺序结算。",
+    "英语": "Shen Mingchuan uses Cloudpiercer. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "hero_02_name": {
@@ -1012,43 +1012,43 @@ rows: {
     "使用说明": null
   },
   "skill_09_name": {
-    "简体中文": "林照野·回春式",
-    "英语": "Lin Zhaoye Renewal 1",
+    "简体中文": "林照野·回春术",
+    "英语": "Lin Zhaoye Renewal",
     "使用说明": null
   },
   "skill_09_desc": {
-    "简体中文": "林照野在第1式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Lin Zhaoye applies the primary effect, then the listed bonus effects.",
+    "简体中文": "林照野的回春术施加治疗主效果，额外效果按列表顺序结算。",
+    "英语": "Lin Zhaoye uses Renewal. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_10_name": {
-    "简体中文": "林照野·引星诀",
-    "英语": "Lin Zhaoye Starcall 2",
+    "简体中文": "林照野·清心诀",
+    "英语": "Lin Zhaoye Mending Verse",
     "使用说明": null
   },
   "skill_10_desc": {
-    "简体中文": "林照野在第2式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Lin Zhaoye applies the primary effect, then the listed bonus effects.",
+    "简体中文": "林照野的清心诀施加治疗主效果，额外效果按列表顺序结算。",
+    "英语": "Lin Zhaoye uses Mending Verse. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_11_name": {
-    "简体中文": "林照野·破阵势",
-    "英语": "Lin Zhaoye Strike 3",
+    "简体中文": "林照野·药理",
+    "英语": "Lin Zhaoye Herbal Lore",
     "使用说明": null
   },
   "skill_11_desc": {
-    "简体中文": "林照野在第3式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Lin Zhaoye applies the primary effect, then the listed bonus effects.",
+    "简体中文": "林照野的药理为开战时触发一次的被动，不消耗法力且无冷却。",
+    "英语": "Lin Zhaoye uses Herbal Lore. A battle-start passive with no mana cost or cooldown.",
     "使用说明": null
   },
   "skill_12_name": {
-    "简体中文": "林照野·疾矢终章",
-    "英语": "Lin Zhaoye Volley 4",
+    "简体中文": "林照野·济世光",
+    "英语": "Lin Zhaoye Mercy Light",
     "使用说明": null
   },
   "skill_12_desc": {
-    "简体中文": "林照野在第4式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Lin Zhaoye applies the primary effect, then the listed bonus effects.",
+    "简体中文": "林照野的济世光施加治疗主效果，额外效果按列表顺序结算。",
+    "英语": "Lin Zhaoye uses Mercy Light. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "hero_03_name": {
@@ -1062,43 +1062,43 @@ rows: {
     "使用说明": null
   },
   "skill_13_name": {
-    "简体中文": "苏见微·引星式",
-    "英语": "Su Jianwei Starcall 1",
+    "简体中文": "苏见微·引星术",
+    "英语": "Su Jianwei Starcall",
     "使用说明": null
   },
   "skill_13_desc": {
-    "简体中文": "苏见微在第1式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Su Jianwei applies the primary effect, then the listed bonus effects.",
+    "简体中文": "苏见微的引星术施加伤害主效果，额外效果按列表顺序结算。",
+    "英语": "Su Jianwei uses Starcall. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_14_name": {
-    "简体中文": "苏见微·破阵诀",
-    "英语": "Su Jianwei Strike 2",
+    "简体中文": "苏见微·星缚",
+    "英语": "Su Jianwei Starbind",
     "使用说明": null
   },
   "skill_14_desc": {
-    "简体中文": "苏见微在第2式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Su Jianwei applies the primary effect, then the listed bonus effects.",
+    "简体中文": "苏见微的星缚施加控制主效果，额外效果按列表顺序结算。",
+    "英语": "Su Jianwei uses Starbind. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_15_name": {
-    "简体中文": "苏见微·疾矢势",
-    "英语": "Su Jianwei Volley 3",
+    "简体中文": "苏见微·聚星",
+    "英语": "Su Jianwei Star Focus",
     "使用说明": null
   },
   "skill_15_desc": {
-    "简体中文": "苏见微在第3式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Su Jianwei applies the primary effect, then the listed bonus effects.",
+    "简体中文": "苏见微的聚星为开战时触发一次的被动，不消耗法力且无冷却。",
+    "英语": "Su Jianwei uses Star Focus. A battle-start passive with no mana cost or cooldown.",
     "使用说明": null
   },
   "skill_16_name": {
-    "简体中文": "苏见微·回春终章",
-    "英语": "Su Jianwei Renewal 4",
+    "简体中文": "苏见微·陨星",
+    "英语": "Su Jianwei Meteor",
     "使用说明": null
   },
   "skill_16_desc": {
-    "简体中文": "苏见微在第4式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Su Jianwei applies the primary effect, then the listed bonus effects.",
+    "简体中文": "苏见微的陨星施加伤害主效果，额外效果按列表顺序结算。",
+    "英语": "Su Jianwei uses Meteor. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "hero_04_name": {
@@ -1112,43 +1112,43 @@ rows: {
     "使用说明": null
   },
   "skill_17_name": {
-    "简体中文": "裴赤衡·破阵式",
-    "英语": "Pei Chiheng Strike 1",
+    "简体中文": "裴赤衡·破阵斩",
+    "英语": "Pei Chiheng Breach Slash",
     "使用说明": null
   },
   "skill_17_desc": {
-    "简体中文": "裴赤衡在第1式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Pei Chiheng applies the primary effect, then the listed bonus effects.",
+    "简体中文": "裴赤衡的破阵斩施加伤害主效果，额外效果按列表顺序结算。",
+    "英语": "Pei Chiheng uses Breach Slash. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_18_name": {
-    "简体中文": "裴赤衡·疾矢诀",
-    "英语": "Pei Chiheng Volley 2",
+    "简体中文": "裴赤衡·守心势",
+    "英语": "Pei Chiheng Heartguard",
     "使用说明": null
   },
   "skill_18_desc": {
-    "简体中文": "裴赤衡在第2式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Pei Chiheng applies the primary effect, then the listed bonus effects.",
+    "简体中文": "裴赤衡的守心势施加增益主效果，额外效果按列表顺序结算。",
+    "英语": "Pei Chiheng uses Heartguard. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_19_name": {
-    "简体中文": "裴赤衡·回春势",
-    "英语": "Pei Chiheng Renewal 3",
+    "简体中文": "裴赤衡·铁壁",
+    "英语": "Pei Chiheng Ironwall",
     "使用说明": null
   },
   "skill_19_desc": {
-    "简体中文": "裴赤衡在第3式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Pei Chiheng applies the primary effect, then the listed bonus effects.",
+    "简体中文": "裴赤衡的铁壁为开战时触发一次的被动，不消耗法力且无冷却。",
+    "英语": "Pei Chiheng uses Ironwall. A battle-start passive with no mana cost or cooldown.",
     "使用说明": null
   },
   "skill_20_name": {
-    "简体中文": "裴赤衡·引星终章",
-    "英语": "Pei Chiheng Starcall 4",
+    "简体中文": "裴赤衡·震地击",
+    "英语": "Pei Chiheng Earthshaker",
     "使用说明": null
   },
   "skill_20_desc": {
-    "简体中文": "裴赤衡在第4式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Pei Chiheng applies the primary effect, then the listed bonus effects.",
+    "简体中文": "裴赤衡的震地击施加控制主效果，额外效果按列表顺序结算。",
+    "英语": "Pei Chiheng uses Earthshaker. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "hero_05_name": {
@@ -1162,43 +1162,43 @@ rows: {
     "使用说明": null
   },
   "skill_21_name": {
-    "简体中文": "顾砚沙·疾矢式",
-    "英语": "Gu Yansha Volley 1",
+    "简体中文": "顾砚沙·疾矢射",
+    "英语": "Gu Yansha Swift Arrow",
     "使用说明": null
   },
   "skill_21_desc": {
-    "简体中文": "顾砚沙在第1式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Gu Yansha applies the primary effect, then the listed bonus effects.",
+    "简体中文": "顾砚沙的疾矢射施加伤害主效果，额外效果按列表顺序结算。",
+    "英语": "Gu Yansha uses Swift Arrow. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_22_name": {
-    "简体中文": "顾砚沙·回春诀",
-    "英语": "Gu Yansha Renewal 2",
+    "简体中文": "顾砚沙·缚足箭",
+    "英语": "Gu Yansha Binding Arrow",
     "使用说明": null
   },
   "skill_22_desc": {
-    "简体中文": "顾砚沙在第2式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Gu Yansha applies the primary effect, then the listed bonus effects.",
+    "简体中文": "顾砚沙的缚足箭施加控制主效果，额外效果按列表顺序结算。",
+    "英语": "Gu Yansha uses Binding Arrow. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_23_name": {
-    "简体中文": "顾砚沙·引星势",
-    "英语": "Gu Yansha Starcall 3",
+    "简体中文": "顾砚沙·鹰眼",
+    "英语": "Gu Yansha Hawk Eye",
     "使用说明": null
   },
   "skill_23_desc": {
-    "简体中文": "顾砚沙在第3式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Gu Yansha applies the primary effect, then the listed bonus effects.",
+    "简体中文": "顾砚沙的鹰眼为开战时触发一次的被动，不消耗法力且无冷却。",
+    "英语": "Gu Yansha uses Hawk Eye. A battle-start passive with no mana cost or cooldown.",
     "使用说明": null
   },
   "skill_24_name": {
-    "简体中文": "顾砚沙·破阵终章",
-    "英语": "Gu Yansha Strike 4",
+    "简体中文": "顾砚沙·穿云矢",
+    "英语": "Gu Yansha Cloudpiercer",
     "使用说明": null
   },
   "skill_24_desc": {
-    "简体中文": "顾砚沙在第4式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Gu Yansha applies the primary effect, then the listed bonus effects.",
+    "简体中文": "顾砚沙的穿云矢施加伤害主效果，额外效果按列表顺序结算。",
+    "英语": "Gu Yansha uses Cloudpiercer. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "hero_06_name": {
@@ -1212,43 +1212,43 @@ rows: {
     "使用说明": null
   },
   "skill_25_name": {
-    "简体中文": "温归云·回春式",
-    "英语": "Wen Guiyun Renewal 1",
+    "简体中文": "温归云·回春术",
+    "英语": "Wen Guiyun Renewal",
     "使用说明": null
   },
   "skill_25_desc": {
-    "简体中文": "温归云在第1式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Wen Guiyun applies the primary effect, then the listed bonus effects.",
+    "简体中文": "温归云的回春术施加治疗主效果，额外效果按列表顺序结算。",
+    "英语": "Wen Guiyun uses Renewal. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_26_name": {
-    "简体中文": "温归云·引星诀",
-    "英语": "Wen Guiyun Starcall 2",
+    "简体中文": "温归云·清心诀",
+    "英语": "Wen Guiyun Mending Verse",
     "使用说明": null
   },
   "skill_26_desc": {
-    "简体中文": "温归云在第2式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Wen Guiyun applies the primary effect, then the listed bonus effects.",
+    "简体中文": "温归云的清心诀施加治疗主效果，额外效果按列表顺序结算。",
+    "英语": "Wen Guiyun uses Mending Verse. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_27_name": {
-    "简体中文": "温归云·破阵势",
-    "英语": "Wen Guiyun Strike 3",
+    "简体中文": "温归云·药理",
+    "英语": "Wen Guiyun Herbal Lore",
     "使用说明": null
   },
   "skill_27_desc": {
-    "简体中文": "温归云在第3式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Wen Guiyun applies the primary effect, then the listed bonus effects.",
+    "简体中文": "温归云的药理为开战时触发一次的被动，不消耗法力且无冷却。",
+    "英语": "Wen Guiyun uses Herbal Lore. A battle-start passive with no mana cost or cooldown.",
     "使用说明": null
   },
   "skill_28_name": {
-    "简体中文": "温归云·疾矢终章",
-    "英语": "Wen Guiyun Volley 4",
+    "简体中文": "温归云·济世光",
+    "英语": "Wen Guiyun Mercy Light",
     "使用说明": null
   },
   "skill_28_desc": {
-    "简体中文": "温归云在第4式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Wen Guiyun applies the primary effect, then the listed bonus effects.",
+    "简体中文": "温归云的济世光施加治疗主效果，额外效果按列表顺序结算。",
+    "英语": "Wen Guiyun uses Mercy Light. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "hero_07_name": {
@@ -1262,43 +1262,43 @@ rows: {
     "使用说明": null
   },
   "skill_29_name": {
-    "简体中文": "唐栖月·引星式",
-    "英语": "Tang Qiyue Starcall 1",
+    "简体中文": "唐栖月·引星术",
+    "英语": "Tang Qiyue Starcall",
     "使用说明": null
   },
   "skill_29_desc": {
-    "简体中文": "唐栖月在第1式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Tang Qiyue applies the primary effect, then the listed bonus effects.",
+    "简体中文": "唐栖月的引星术施加伤害主效果，额外效果按列表顺序结算。",
+    "英语": "Tang Qiyue uses Starcall. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_30_name": {
-    "简体中文": "唐栖月·破阵诀",
-    "英语": "Tang Qiyue Strike 2",
+    "简体中文": "唐栖月·星缚",
+    "英语": "Tang Qiyue Starbind",
     "使用说明": null
   },
   "skill_30_desc": {
-    "简体中文": "唐栖月在第2式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Tang Qiyue applies the primary effect, then the listed bonus effects.",
+    "简体中文": "唐栖月的星缚施加控制主效果，额外效果按列表顺序结算。",
+    "英语": "Tang Qiyue uses Starbind. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_31_name": {
-    "简体中文": "唐栖月·疾矢势",
-    "英语": "Tang Qiyue Volley 3",
+    "简体中文": "唐栖月·聚星",
+    "英语": "Tang Qiyue Star Focus",
     "使用说明": null
   },
   "skill_31_desc": {
-    "简体中文": "唐栖月在第3式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Tang Qiyue applies the primary effect, then the listed bonus effects.",
+    "简体中文": "唐栖月的聚星为开战时触发一次的被动，不消耗法力且无冷却。",
+    "英语": "Tang Qiyue uses Star Focus. A battle-start passive with no mana cost or cooldown.",
     "使用说明": null
   },
   "skill_32_name": {
-    "简体中文": "唐栖月·回春终章",
-    "英语": "Tang Qiyue Renewal 4",
+    "简体中文": "唐栖月·陨星",
+    "英语": "Tang Qiyue Meteor",
     "使用说明": null
   },
   "skill_32_desc": {
-    "简体中文": "唐栖月在第4式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Tang Qiyue applies the primary effect, then the listed bonus effects.",
+    "简体中文": "唐栖月的陨星施加伤害主效果，额外效果按列表顺序结算。",
+    "英语": "Tang Qiyue uses Meteor. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "hero_08_name": {
@@ -1312,43 +1312,43 @@ rows: {
     "使用说明": null
   },
   "skill_33_name": {
-    "简体中文": "白霜岚·破阵式",
-    "英语": "Bai Shuanglan Strike 1",
+    "简体中文": "白霜岚·破阵斩",
+    "英语": "Bai Shuanglan Breach Slash",
     "使用说明": null
   },
   "skill_33_desc": {
-    "简体中文": "白霜岚在第1式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Bai Shuanglan applies the primary effect, then the listed bonus effects.",
+    "简体中文": "白霜岚的破阵斩施加伤害主效果，额外效果按列表顺序结算。",
+    "英语": "Bai Shuanglan uses Breach Slash. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_34_name": {
-    "简体中文": "白霜岚·疾矢诀",
-    "英语": "Bai Shuanglan Volley 2",
+    "简体中文": "白霜岚·守心势",
+    "英语": "Bai Shuanglan Heartguard",
     "使用说明": null
   },
   "skill_34_desc": {
-    "简体中文": "白霜岚在第2式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Bai Shuanglan applies the primary effect, then the listed bonus effects.",
+    "简体中文": "白霜岚的守心势施加增益主效果，额外效果按列表顺序结算。",
+    "英语": "Bai Shuanglan uses Heartguard. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "skill_35_name": {
-    "简体中文": "白霜岚·回春势",
-    "英语": "Bai Shuanglan Renewal 3",
+    "简体中文": "白霜岚·铁壁",
+    "英语": "Bai Shuanglan Ironwall",
     "使用说明": null
   },
   "skill_35_desc": {
-    "简体中文": "白霜岚在第3式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Bai Shuanglan applies the primary effect, then the listed bonus effects.",
+    "简体中文": "白霜岚的铁壁为开战时触发一次的被动，不消耗法力且无冷却。",
+    "英语": "Bai Shuanglan uses Ironwall. A battle-start passive with no mana cost or cooldown.",
     "使用说明": null
   },
   "skill_36_name": {
-    "简体中文": "白霜岚·引星终章",
-    "英语": "Bai Shuanglan Starcall 4",
+    "简体中文": "白霜岚·震地击",
+    "英语": "Bai Shuanglan Earthshaker",
     "使用说明": null
   },
   "skill_36_desc": {
-    "简体中文": "白霜岚在第4式使用主效果，额外效果按列表顺序结算。",
-    "英语": "Bai Shuanglan applies the primary effect, then the listed bonus effects.",
+    "简体中文": "白霜岚的震地击施加控制主效果，额外效果按列表顺序结算。",
+    "英语": "Bai Shuanglan uses Earthshaker. Applies the primary effect, then listed bonus effects.",
     "使用说明": null
   },
   "hero_09_name": {
@@ -1362,23 +1362,23 @@ rows: {
     "使用说明": null
   },
   "skill_37_name": {
-    "简体中文": "楚星遥·疾矢式",
-    "英语": "Chu Xingyao Volley 1",
+    "简体中文": "楚星遥·疾矢射",
+    "英语": "Chu Xingyao Swift Arrow",
     "使用说明": null
   },
   "skill_38_name": {
-    "简体中文": "楚星遥·回春诀",
-    "英语": "Chu Xingyao Renewal 2",
+    "简体中文": "楚星遥·缚足箭",
+    "英语": "Chu Xingyao Binding Arrow",
     "使用说明": null
   },
   "skill_39_name": {
-    "简体中文": "楚星遥·引星势",
-    "英语": "Chu Xingyao Starcall 3",
+    "简体中文": "楚星遥·鹰眼",
+    "英语": "Chu Xingyao Hawk Eye",
     "使用说明": null
   },
   "skill_40_name": {
-    "简体中文": "楚星遥·破阵终章",
-    "英语": "Chu Xingyao Strike 4",
+    "简体中文": "楚星遥·穿云矢",
+    "英语": "Chu Xingyao Cloudpiercer",
     "使用说明": null
   },
   "hero_10_name": {
@@ -1392,23 +1392,23 @@ rows: {
     "使用说明": null
   },
   "skill_41_name": {
-    "简体中文": "宁望舒·回春式",
-    "英语": "Ning Wangshu Renewal 1",
+    "简体中文": "宁望舒·回春术",
+    "英语": "Ning Wangshu Renewal",
     "使用说明": null
   },
   "skill_42_name": {
-    "简体中文": "宁望舒·引星诀",
-    "英语": "Ning Wangshu Starcall 2",
+    "简体中文": "宁望舒·清心诀",
+    "英语": "Ning Wangshu Mending Verse",
     "使用说明": null
   },
   "skill_43_name": {
-    "简体中文": "宁望舒·破阵势",
-    "英语": "Ning Wangshu Strike 3",
+    "简体中文": "宁望舒·药理",
+    "英语": "Ning Wangshu Herbal Lore",
     "使用说明": null
   },
   "skill_44_name": {
-    "简体中文": "宁望舒·疾矢终章",
-    "英语": "Ning Wangshu Volley 4",
+    "简体中文": "宁望舒·济世光",
+    "英语": "Ning Wangshu Mercy Light",
     "使用说明": null
   },
   "hero_11_name": {
@@ -1422,23 +1422,23 @@ rows: {
     "使用说明": null
   },
   "skill_45_name": {
-    "简体中文": "江听雪·引星式",
-    "英语": "Jiang Tingxue Starcall 1",
+    "简体中文": "江听雪·引星术",
+    "英语": "Jiang Tingxue Starcall",
     "使用说明": null
   },
   "skill_46_name": {
-    "简体中文": "江听雪·破阵诀",
-    "英语": "Jiang Tingxue Strike 2",
+    "简体中文": "江听雪·星缚",
+    "英语": "Jiang Tingxue Starbind",
     "使用说明": null
   },
   "skill_47_name": {
-    "简体中文": "江听雪·疾矢势",
-    "英语": "Jiang Tingxue Volley 3",
+    "简体中文": "江听雪·聚星",
+    "英语": "Jiang Tingxue Star Focus",
     "使用说明": null
   },
   "skill_48_name": {
-    "简体中文": "江听雪·回春终章",
-    "英语": "Jiang Tingxue Renewal 4",
+    "简体中文": "江听雪·陨星",
+    "英语": "Jiang Tingxue Meteor",
     "使用说明": null
   },
   "hero_12_name": {
@@ -1707,8 +1707,8 @@ rows: {
     "使用说明": null
   },
   "quest_02_goal": {
-    "简体中文": "前往青岚村的溪桥，收集2份锻造材料。",
-    "英语": "Visit route 1 in Qinglan Village and collect 2 crafting materials.",
+    "简体中文": "前往青岚村的溪桥，收集2份青岚村青藤·初行。",
+    "英语": "Visit route 1 in Qinglan Village and collect 2 Qinglan Village Crafting Material 1.",
     "使用说明": null
   },
   "quest_03_name": {
@@ -1727,8 +1727,8 @@ rows: {
     "使用说明": null
   },
   "quest_04_goal": {
-    "简体中文": "前往青岚村的竹林，收集2份锻造材料。",
-    "英语": "Visit route 2 in Qinglan Village and collect 2 crafting materials.",
+    "简体中文": "前往青岚村的竹林，收集2份青岚村青藤·初行。",
+    "英语": "Visit route 2 in Qinglan Village and collect 2 Qinglan Village Crafting Material 1.",
     "使用说明": null
   },
   "quest_05_name": {
@@ -1747,8 +1747,8 @@ rows: {
     "使用说明": null
   },
   "quest_06_goal": {
-    "简体中文": "前往青岚村的旧井，收集2份锻造材料。",
-    "英语": "Visit route 3 in Qinglan Village and collect 2 crafting materials.",
+    "简体中文": "前往青岚村的旧井，收集2份青岚村铜砂·砥砺。",
+    "英语": "Visit route 3 in Qinglan Village and collect 2 Qinglan Village Crafting Material 2.",
     "使用说明": null
   },
   "quest_07_name": {
@@ -1767,8 +1767,8 @@ rows: {
     "使用说明": null
   },
   "quest_08_goal": {
-    "简体中文": "前往青岚村的南坡，收集2份锻造材料。",
-    "英语": "Visit route 4 in Qinglan Village and collect 2 crafting materials.",
+    "简体中文": "前往青岚村的南坡，收集2份青岚村铜砂·砥砺。",
+    "英语": "Visit route 4 in Qinglan Village and collect 2 Qinglan Village Crafting Material 2.",
     "使用说明": null
   },
   "quest_09_name": {
@@ -1787,8 +1787,8 @@ rows: {
     "使用说明": null
   },
   "quest_10_goal": {
-    "简体中文": "前往青岚村的石渡，收集2份锻造材料。",
-    "英语": "Visit route 5 in Qinglan Village and collect 2 crafting materials.",
+    "简体中文": "前往青岚村的石渡，收集2份青岚村星铁·精制。",
+    "英语": "Visit route 5 in Qinglan Village and collect 2 Qinglan Village Crafting Material 3.",
     "使用说明": null
   },
   "quest_11_name": {
@@ -1807,8 +1807,8 @@ rows: {
     "使用说明": null
   },
   "quest_12_goal": {
-    "简体中文": "前往青岚村的古庙，收集2份锻造材料。",
-    "英语": "Visit route 6 in Qinglan Village and collect 2 crafting materials.",
+    "简体中文": "前往青岚村的古庙，收集2份青岚村星铁·精制。",
+    "英语": "Visit route 6 in Qinglan Village and collect 2 Qinglan Village Crafting Material 3.",
     "使用说明": null
   },
   "quest_13_name": {
@@ -1827,8 +1827,8 @@ rows: {
     "使用说明": null
   },
   "quest_14_goal": {
-    "简体中文": "前往青岚村的风谷，收集2份锻造材料。",
-    "英语": "Visit route 7 in Qinglan Village and collect 2 crafting materials.",
+    "简体中文": "前往青岚村的风谷，收集2份青岚村霜晶·传承。",
+    "英语": "Visit route 7 in Qinglan Village and collect 2 Qinglan Village Crafting Material 4.",
     "使用说明": null
   },
   "quest_15_name": {
@@ -1847,8 +1847,8 @@ rows: {
     "使用说明": null
   },
   "quest_16_goal": {
-    "简体中文": "前往青岚村的村口夜袭，收集2份锻造材料。",
-    "英语": "Visit route 8 in Qinglan Village and collect 2 crafting materials.",
+    "简体中文": "前往青岚村的村口夜袭，收集2份青岚村霜晶·传承。",
+    "英语": "Visit route 8 in Qinglan Village and collect 2 Qinglan Village Crafting Material 4.",
     "使用说明": null
   },
   "quest_17_name": {
@@ -1867,8 +1867,8 @@ rows: {
     "使用说明": null
   },
   "quest_18_goal": {
-    "简体中文": "前往赤砂遗迹的沙门，收集2份锻造材料。",
-    "英语": "Visit route 1 in Red Sand Ruins and collect 2 crafting materials.",
+    "简体中文": "前往赤砂遗迹的沙门，收集2份赤砂遗迹青藤·初行。",
+    "英语": "Visit route 1 in Red Sand Ruins and collect 2 Red Sand Ruins Crafting Material 1.",
     "使用说明": null
   },
   "quest_19_name": {
@@ -1887,8 +1887,8 @@ rows: {
     "使用说明": null
   },
   "quest_20_goal": {
-    "简体中文": "前往赤砂遗迹的断塔，收集2份锻造材料。",
-    "英语": "Visit route 2 in Red Sand Ruins and collect 2 crafting materials.",
+    "简体中文": "前往赤砂遗迹的断塔，收集2份赤砂遗迹青藤·初行。",
+    "英语": "Visit route 2 in Red Sand Ruins and collect 2 Red Sand Ruins Crafting Material 1.",
     "使用说明": null
   },
   "quest_21_name": {
@@ -1907,8 +1907,8 @@ rows: {
     "使用说明": null
   },
   "quest_22_goal": {
-    "简体中文": "前往赤砂遗迹的赤井，收集2份锻造材料。",
-    "英语": "Visit route 3 in Red Sand Ruins and collect 2 crafting materials.",
+    "简体中文": "前往赤砂遗迹的赤井，收集2份赤砂遗迹铜砂·砥砺。",
+    "英语": "Visit route 3 in Red Sand Ruins and collect 2 Red Sand Ruins Crafting Material 2.",
     "使用说明": null
   },
   "quest_23_name": {
@@ -1927,8 +1927,8 @@ rows: {
     "使用说明": null
   },
   "quest_24_goal": {
-    "简体中文": "前往赤砂遗迹的盐道，收集2份锻造材料。",
-    "英语": "Visit route 4 in Red Sand Ruins and collect 2 crafting materials.",
+    "简体中文": "前往赤砂遗迹的盐道，收集2份赤砂遗迹铜砂·砥砺。",
+    "英语": "Visit route 4 in Red Sand Ruins and collect 2 Red Sand Ruins Crafting Material 2.",
     "使用说明": null
   },
   "quest_25_name": {
@@ -1947,8 +1947,8 @@ rows: {
     "使用说明": null
   },
   "quest_26_goal": {
-    "简体中文": "前往赤砂遗迹的炉心，收集2份锻造材料。",
-    "英语": "Visit route 5 in Red Sand Ruins and collect 2 crafting materials.",
+    "简体中文": "前往赤砂遗迹的炉心，收集2份赤砂遗迹星铁·精制。",
+    "英语": "Visit route 5 in Red Sand Ruins and collect 2 Red Sand Ruins Crafting Material 3.",
     "使用说明": null
   },
   "quest_27_name": {
@@ -1967,8 +1967,8 @@ rows: {
     "使用说明": null
   },
   "quest_28_goal": {
-    "简体中文": "前往赤砂遗迹的日晷，收集2份锻造材料。",
-    "英语": "Visit route 6 in Red Sand Ruins and collect 2 crafting materials.",
+    "简体中文": "前往赤砂遗迹的日晷，收集2份赤砂遗迹星铁·精制。",
+    "英语": "Visit route 6 in Red Sand Ruins and collect 2 Red Sand Ruins Crafting Material 3.",
     "使用说明": null
   },
   "quest_29_name": {
@@ -1987,8 +1987,8 @@ rows: {
     "使用说明": null
   },
   "quest_30_goal": {
-    "简体中文": "前往赤砂遗迹的地宫，收集2份锻造材料。",
-    "英语": "Visit route 7 in Red Sand Ruins and collect 2 crafting materials.",
+    "简体中文": "前往赤砂遗迹的地宫，收集2份赤砂遗迹霜晶·传承。",
+    "英语": "Visit route 7 in Red Sand Ruins and collect 2 Red Sand Ruins Crafting Material 4.",
     "使用说明": null
   },
   "quest_31_name": {
@@ -2007,8 +2007,8 @@ rows: {
     "使用说明": null
   },
   "quest_32_goal": {
-    "简体中文": "前往赤砂遗迹的遗迹守卫，收集2份锻造材料。",
-    "英语": "Visit route 8 in Red Sand Ruins and collect 2 crafting materials.",
+    "简体中文": "前往赤砂遗迹的遗迹守卫，收集2份赤砂遗迹霜晶·传承。",
+    "英语": "Visit route 8 in Red Sand Ruins and collect 2 Red Sand Ruins Crafting Material 4.",
     "使用说明": null
   },
   "quest_33_name": {
@@ -2027,8 +2027,8 @@ rows: {
     "使用说明": null
   },
   "quest_34_goal": {
-    "简体中文": "前往霜月城的雪原，收集2份锻造材料。",
-    "英语": "Visit route 1 in Frostmoon City and collect 2 crafting materials.",
+    "简体中文": "前往霜月城的雪原，收集2份霜月城青藤·初行。",
+    "英语": "Visit route 1 in Frostmoon City and collect 2 Frostmoon City Crafting Material 1.",
     "使用说明": null
   },
   "quest_35_name": {
@@ -2047,8 +2047,8 @@ rows: {
     "使用说明": null
   },
   "quest_36_goal": {
-    "简体中文": "前往霜月城的冰桥，收集2份锻造材料。",
-    "英语": "Visit route 2 in Frostmoon City and collect 2 crafting materials.",
+    "简体中文": "前往霜月城的冰桥，收集2份霜月城青藤·初行。",
+    "英语": "Visit route 2 in Frostmoon City and collect 2 Frostmoon City Crafting Material 1.",
     "使用说明": null
   },
   "quest_37_name": {
@@ -2067,8 +2067,8 @@ rows: {
     "使用说明": null
   },
   "quest_38_goal": {
-    "简体中文": "前往霜月城的月港，收集2份锻造材料。",
-    "英语": "Visit route 3 in Frostmoon City and collect 2 crafting materials.",
+    "简体中文": "前往霜月城的月港，收集2份霜月城铜砂·砥砺。",
+    "英语": "Visit route 3 in Frostmoon City and collect 2 Frostmoon City Crafting Material 2.",
     "使用说明": null
   },
   "quest_39_name": {
@@ -2087,8 +2087,8 @@ rows: {
     "使用说明": null
   },
   "quest_40_goal": {
-    "简体中文": "前往霜月城的钟楼，收集2份锻造材料。",
-    "英语": "Visit route 4 in Frostmoon City and collect 2 crafting materials.",
+    "简体中文": "前往霜月城的钟楼，收集2份霜月城铜砂·砥砺。",
+    "英语": "Visit route 4 in Frostmoon City and collect 2 Frostmoon City Crafting Material 2.",
     "使用说明": null
   },
   "quest_41_name": {
@@ -2107,8 +2107,8 @@ rows: {
     "使用说明": null
   },
   "quest_42_goal": {
-    "简体中文": "前往霜月城的霜林，收集2份锻造材料。",
-    "英语": "Visit route 5 in Frostmoon City and collect 2 crafting materials.",
+    "简体中文": "前往霜月城的霜林，收集2份霜月城星铁·精制。",
+    "英语": "Visit route 5 in Frostmoon City and collect 2 Frostmoon City Crafting Material 3.",
     "使用说明": null
   },
   "quest_43_name": {
@@ -2127,8 +2127,8 @@ rows: {
     "使用说明": null
   },
   "quest_44_goal": {
-    "简体中文": "前往霜月城的星井，收集2份锻造材料。",
-    "英语": "Visit route 6 in Frostmoon City and collect 2 crafting materials.",
+    "简体中文": "前往霜月城的星井，收集2份霜月城星铁·精制。",
+    "英语": "Visit route 6 in Frostmoon City and collect 2 Frostmoon City Crafting Material 3.",
     "使用说明": null
   },
   "quest_45_name": {
@@ -2147,8 +2147,8 @@ rows: {
     "使用说明": null
   },
   "quest_46_goal": {
-    "简体中文": "前往霜月城的王庭，收集2份锻造材料。",
-    "英语": "Visit route 7 in Frostmoon City and collect 2 crafting materials.",
+    "简体中文": "前往霜月城的王庭，收集2份霜月城霜晶·传承。",
+    "英语": "Visit route 7 in Frostmoon City and collect 2 Frostmoon City Crafting Material 4.",
     "使用说明": null
   },
   "quest_47_name": {
@@ -2167,8 +2167,8 @@ rows: {
     "使用说明": null
   },
   "quest_48_goal": {
-    "简体中文": "前往霜月城的月城终战，收集2份锻造材料。",
-    "英语": "Visit route 8 in Frostmoon City and collect 2 crafting materials.",
+    "简体中文": "前往霜月城的月城终战，收集2份霜月城霜晶·传承。",
+    "英语": "Visit route 8 in Frostmoon City and collect 2 Frostmoon City Crafting Material 4.",
     "使用说明": null
   },
   "recipe_01_name": {
