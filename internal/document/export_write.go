@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"cuelang.org/go/cue/ast"
-	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/parser"
+	"datapack/internal/cueformat"
 )
 
 // SetTableExports updates the known format entries under _export while
@@ -50,7 +50,7 @@ func SetTableExports(path string, exports map[string]ExportSettings) (Table, err
 		}
 		exportStruct.Elts = append(exportStruct.Elts, &ast.Field{Label: ast.NewIdent(id), Value: value})
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format export settings: %w", err)
 	}

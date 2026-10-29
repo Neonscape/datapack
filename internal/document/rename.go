@@ -9,9 +9,9 @@ import (
 	"strconv"
 
 	"cuelang.org/go/cue/ast"
-	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/parser"
 	"cuelang.org/go/cue/token"
+	"datapack/internal/cueformat"
 )
 
 // RowReference identifies a scalar or array foreign-key value that must track
@@ -78,7 +78,7 @@ func RenameRow(path, oldID, newID string, references []RowReference) (Table, err
 	candidates := map[string][]byte{}
 	paths := make([]string, 0, len(files))
 	for filePath, file := range files {
-		candidate, err := format.Node(file)
+		candidate, err := cueformat.Node(file)
 		if err != nil {
 			return Table{}, fmt.Errorf("format updated table: %w", err)
 		}

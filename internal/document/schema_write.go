@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"cuelang.org/go/cue/ast"
-	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/parser"
 	"cuelang.org/go/cue/token"
+	"datapack/internal/cueformat"
 )
 
 // SchemaDefinitionUpdate carries the editable metadata and expression of one
@@ -151,7 +151,7 @@ func CreatePublicSchemaDefinition(path, name string, update SchemaDefinitionUpda
 		return PublicSchema{}, err
 	}
 	pruneUnusedImports(file)
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return PublicSchema{}, fmt.Errorf("format updated schema: %w", err)
 	}
@@ -175,7 +175,7 @@ func SetPublicSchemaDefinition(path, name string, update SchemaDefinitionUpdate)
 		return PublicSchema{}, err
 	}
 	pruneUnusedImports(file)
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return PublicSchema{}, fmt.Errorf("format updated schema: %w", err)
 	}
@@ -211,7 +211,7 @@ func DeletePublicSchemaDefinition(path, name string) (PublicSchema, error) {
 		return PublicSchema{}, fmt.Errorf("Schema definition %q is not registered in _schema.definitions", name)
 	}
 	pruneUnusedImports(file)
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return PublicSchema{}, fmt.Errorf("format updated schema: %w", err)
 	}
@@ -355,7 +355,7 @@ func CreateLocalSchemaDefinition(path, name string, update SchemaDefinitionUpdat
 		return Table{}, err
 	}
 	pruneUnusedImports(file)
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -379,7 +379,7 @@ func SetLocalSchemaDefinition(path, name string, update SchemaDefinitionUpdate) 
 		return Table{}, err
 	}
 	pruneUnusedImports(file)
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -406,7 +406,7 @@ func DeleteLocalSchemaDefinition(path, name string) (Table, error) {
 		}
 	}
 	pruneUnusedImports(file)
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -480,7 +480,7 @@ func editSchemaSourceFiles(paths []string, mutate func(map[string]*ast.File) err
 	candidates := map[string][]byte{}
 	ordered := make([]string, 0, len(files))
 	for path, file := range files {
-		candidate, err := format.Node(file)
+		candidate, err := cueformat.Node(file)
 		if err != nil {
 			return fmt.Errorf("format schema source: %w", err)
 		}
@@ -613,7 +613,7 @@ func EnsureImport(path, importPath string) error {
 	}
 	importDecl := &ast.ImportDecl{Specs: []*ast.ImportSpec{{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)}}}}
 	file.Decls = append(file.Decls[:insertAt], append([]ast.Decl{importDecl}, file.Decls[insertAt:]...)...)
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return fmt.Errorf("format source with import: %w", err)
 	}

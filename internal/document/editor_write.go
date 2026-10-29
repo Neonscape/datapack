@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"cuelang.org/go/cue/ast"
-	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/parser"
+	"datapack/internal/cueformat"
 )
 
 func SetColumnWidth(path, column string, width int) (Table, error) {
@@ -62,7 +62,7 @@ func SetColumnWidth(path, column string, width int) (Table, error) {
 	} else {
 		metadata.Elts = append(metadata.Elts, &ast.Field{Label: ast.NewIdent("width"), Value: widthValue})
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format column width: %w", err)
 	}
@@ -121,7 +121,7 @@ func SetColumnDisplayName(path, column, displayName string) (Table, error) {
 	if len(orderedStructFields(columnsStruct)) == 0 {
 		removeNamedField(editorStruct, "columns")
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format column display name: %w", err)
 	}

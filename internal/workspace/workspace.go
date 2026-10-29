@@ -15,11 +15,11 @@ import (
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/ast"
 	"cuelang.org/go/cue/cuecontext"
-	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/load"
 	"cuelang.org/go/cue/parser"
 	"cuelang.org/go/cue/token"
 	"datapack/internal/compiler"
+	"datapack/internal/cueformat"
 	"datapack/internal/document"
 	"datapack/internal/exporters"
 	"datapack/internal/foreignkey"
@@ -1339,7 +1339,7 @@ func (s *Service) normalizeSchemaReferences(path, expression string) (string, er
 	if err != nil {
 		return "", err
 	}
-	formatted, err := format.Node(rewritten)
+	formatted, err := cueformat.Node(rewritten)
 	if err != nil {
 		return "", fmt.Errorf("format Schema expression: %w", err)
 	}
