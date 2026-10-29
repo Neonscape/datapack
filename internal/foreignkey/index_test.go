@@ -14,6 +14,7 @@ func TestBuildIndexesScalarAndArrayReferences(t *testing.T) {
 		},
 		{
 			Path: "item.cue", Namespace: "rpg", Name: "item",
+			Columns: []document.Column{{Name: "effectID"}, {Name: "effectIDs"}},
 			ForeignKeys: []document.ForeignKey{
 				{Column: "effectID", Table: "rpg.effect"},
 				{Column: "effectIDs", Table: "rpg.effect"},
@@ -28,7 +29,7 @@ func TestBuildIndexesScalarAndArrayReferences(t *testing.T) {
 		},
 	}
 
-	index := Build(tables)
+	index := BuildResolved(tables, ResolvedRows{"item.cue": {"sword": {"effectID": "burn", "effectIDs": []any{"freeze", "burn"}}}})
 	if len(index.Diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v", index.Diagnostics)
 	}
@@ -38,16 +39,17 @@ func TestBuildIndexesScalarAndArrayReferences(t *testing.T) {
 }
 
 func TestBuildReportsMissingForeignKeyTarget(t *testing.T) {
-	index := Build([]document.Table{{
+	index := BuildResolved([]document.Table{{
 		Path:        "item.cue",
 		Namespace:   "rpg",
 		Name:        "item",
+		Columns:     []document.Column{{Name: "effectID"}},
 		ForeignKeys: []document.ForeignKey{{Column: "effectID", Table: "rpg.effect"}},
 		Rows: []document.Row{{
 			ID:     "sword",
 			Values: map[string]document.Cell{"effectID": {Expression: `"missing"`}},
 		}},
-	}})
+	}}, ResolvedRows{"item.cue": {"sword": {"effectID": "missing"}}})
 	if len(index.Diagnostics) != 1 {
 		t.Fatalf("diagnostics = %#v", index.Diagnostics)
 	}

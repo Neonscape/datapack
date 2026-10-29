@@ -379,9 +379,7 @@ func (s *Service) navigatePrimaryKey(request navigation.Request) (navigation.Tar
 		return navigation.Target{}, err
 	}
 	name := logicalTableName(table)
-	var tables []document.Table
-	collectTables(s.current.Tree.Root, &tables)
-	usages := foreignkey.Build(tables).Usages[foreignkey.Target{Table: name, RowID: request.RowID}]
+	usages := buildForeignKeyIndex(s.current.Tree).Usages[foreignkey.Target{Table: name, RowID: request.RowID}]
 	if len(usages) == 0 {
 		return navigation.Target{}, s.userError("navigation.noReferences", name, request.RowID)
 	}
@@ -734,8 +732,29 @@ func buildSchemaIndex(tree projecttree.Tree) schemaregistry.Index {
 
 func buildForeignKeyIndex(tree projecttree.Tree) foreignkey.Index {
 	var tables []document.Table
-	collectTables(tree.Root, &tables)
-	return foreignkey.Build(tables)
+	var diagnostics []foreignkey.Diagnostic
+	var collect func(projecttree.Node)
+	collect = func(node projecttree.Node) {
+		switch node.Kind {
+		case projecttree.NodeDamaged:
+			diagnostics = append(diagnostics, foreignkey.Diagnostic{Path: node.Path, Message: "cannot resolve references from damaged source"})
+		case projecttree.NodeTable:
+			table, err := document.LoadTable(node.Path)
+			if err != nil {
+				diagnostics = append(diagnostics, foreignkey.Diagnostic{Path: node.Path, Message: "cannot load reference source: " + err.Error()})
+			} else {
+				tables = append(tables, table)
+			}
+		}
+		for _, child := range node.Children {
+			collect(child)
+		}
+	}
+	collect(tree.Root)
+	index := foreignkey.Build(tables)
+	index.Diagnostics = append(diagnostics, index.Diagnostics...)
+	index.Incomplete = index.Incomplete || len(diagnostics) > 0
+	return index
 }
 
 func buildView(project Project, settings EditorSettings, tree projecttree.Tree) View {
@@ -2149,7 +2168,11 @@ func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
 	if err != nil {
 		return RowDeleteResult{}, fmt.Errorf("load table: %w", err)
 	}
-	if usage := foreignKeyUsage(s.current.Tree, table, delete.RowID); usage != nil {
+	usage, indexErr := foreignKeyUsage(s.current.Tree, table, delete.RowID)
+	if indexErr != nil {
+		return RowDeleteResult{}, indexErr
+	}
+	if usage != nil {
 		return RowDeleteResult{}, s.userError("workspace.rowReferenced", delete.RowID, usage.Table, usage.RowID, usage.Column)
 	}
 	table, view, err := s.edit(delete.Path, func() (document.Table, error) {
@@ -2174,15 +2197,20 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 	if err != nil {
 		return RowRenameResult{}, fmt.Errorf("load table: %w", err)
 	}
-	var tables []document.Table
-	collectTables(s.current.Tree.Root, &tables)
 	targetName := target.Name
 	if target.Namespace != "" {
 		targetName = target.Namespace + "." + target.Name
 	}
-	usages := foreignkey.Build(tables).Usages[foreignkey.Target{Table: targetName, RowID: rename.OldID}]
+	index := buildForeignKeyIndex(s.current.Tree)
+	if index.Incomplete {
+		return RowRenameResult{}, fmt.Errorf("cannot rename row while foreign key values or declarations are unresolved")
+	}
+	usages := index.Usages[foreignkey.Target{Table: targetName, RowID: rename.OldID}]
 	references := make([]document.RowReference, 0, len(usages))
 	for _, usage := range usages {
+		if usage.Source != foreignkey.SourceLiteral {
+			return RowRenameResult{}, fmt.Errorf("cannot rename row %q: %s.%s.%s is a %s reference; schema/default rewriting is not supported", rename.OldID, usage.Table, usage.RowID, usage.Column, usage.Source)
+		}
 		references = append(references, document.RowReference{Path: usage.Path, RowID: usage.RowID, Column: usage.Column, Index: usage.Index, Array: usage.Array})
 	}
 	paths := []string{rename.Path}
@@ -2414,18 +2442,20 @@ func (s *Service) MoveColumn(move ColumnMove) (ColumnMoveResult, error) {
 	return ColumnMoveResult{Table: table, Workspace: view}, nil
 }
 
-func foreignKeyUsage(tree projecttree.Tree, target document.Table, rowID string) *foreignkey.Usage {
-	var tables []document.Table
-	collectTables(tree.Root, &tables)
+func foreignKeyUsage(tree projecttree.Tree, target document.Table, rowID string) (*foreignkey.Usage, error) {
 	targetName := target.Name
 	if target.Namespace != "" {
 		targetName = target.Namespace + "." + target.Name
 	}
-	usages := foreignkey.Build(tables).Usages[foreignkey.Target{Table: targetName, RowID: rowID}]
-	if len(usages) == 0 {
-		return nil
+	index := buildForeignKeyIndex(tree)
+	if index.Incomplete {
+		return nil, fmt.Errorf("cannot delete row while foreign key values or declarations are unresolved")
 	}
-	return &usages[0]
+	usages := index.Usages[foreignkey.Target{Table: targetName, RowID: rowID}]
+	if len(usages) == 0 {
+		return nil, nil
+	}
+	return &usages[0], nil
 }
 
 func collectTables(node projecttree.Node, tables *[]document.Table) {

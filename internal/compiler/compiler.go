@@ -68,15 +68,20 @@ func CompileAll(publicSchemas []document.PublicSchema, tables []document.Table) 
 	for _, diagnostic := range registry.Diagnostics {
 		result.Diagnostics = append(result.Diagnostics, Diagnostic{Path: diagnostic.Path, Table: diagnostic.Table, Field: diagnostic.Field, Key: diagnostic.Key, Args: diagnostic.Args, Message: diagnostic.Message})
 	}
-	fk := foreignkey.Build(tables)
-	for _, diagnostic := range fk.Diagnostics {
-		result.Diagnostics = append(result.Diagnostics, Diagnostic{Path: diagnostic.Path, Table: diagnostic.Table, RowID: diagnostic.RowID, Column: diagnostic.Column, Key: diagnostic.Key, Args: diagnostic.Args, Message: diagnostic.Message})
-	}
 	compiled := make([]Table, 0, len(tables))
+	resolved := foreignkey.ResolvedRows{}
 	for _, table := range tables {
 		compiledTable, diagnostics := compileTable(table)
 		result.Diagnostics = append(result.Diagnostics, diagnostics...)
 		compiled = append(compiled, compiledTable)
+		resolved[table.Path] = map[string]map[string]any{}
+		for _, row := range compiledTable.Rows {
+			resolved[table.Path][row.ID] = row.Values
+		}
+	}
+	fk := foreignkey.BuildResolved(tables, resolved)
+	for _, diagnostic := range fk.Diagnostics {
+		result.Diagnostics = append(result.Diagnostics, Diagnostic{Path: diagnostic.Path, Table: diagnostic.Table, RowID: diagnostic.RowID, Column: diagnostic.Column, Key: diagnostic.Key, Args: diagnostic.Args, Message: diagnostic.Message})
 	}
 	if len(result.Diagnostics) > 0 {
 		return result
@@ -118,7 +123,7 @@ func compileTable(table document.Table) (Table, []Diagnostic) {
 // validateRows unifies the evaluated row values with the table Schema and
 // decodes the final concrete values, including defaults.
 func validateRows(table document.Table, evaluated map[string]map[string]any) (map[string]map[string]any, []Diagnostic) {
-	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path)})
+	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path), Package: table.Package})
 	diagnostics := []Diagnostic{}
 	if len(instances) != 1 {
 		count := strconv.Itoa(len(instances))
@@ -131,6 +136,17 @@ func validateRows(table document.Table, evaluated map[string]map[string]any) (ma
 	}
 	rowSchema := packageValue.LookupPath(cue.MakePath(cue.Def("Row")))
 	primaryKey := packageValue.LookupPath(cue.MakePath(cue.Def("PrimaryKey")))
+	if !primaryKey.Exists() || primaryKey.IncompleteKind()&^cue.NullKind != cue.StringKind {
+		diagnostics = append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Field: "#PrimaryKey", Message: "primary key must be a string schema"})
+	}
+	for _, key := range table.ForeignKeys {
+		field := rowSchema.LookupPath(cue.MakePath(cue.Str(key.Column)))
+		if field.Exists() {
+			if err := foreignkey.ValidateColumnSchema(field); err != nil {
+				diagnostics = append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Column: key.Column, Message: err.Error()})
+			}
+		}
+	}
 	finalRows := make(map[string]map[string]any, len(table.Rows))
 	for _, row := range table.Rows {
 		base := len(diagnostics)
