@@ -56,8 +56,8 @@ type Service struct {
 	mu               sync.RWMutex
 	configRoot       string
 	current          *View
-	undoStack        []map[string][]byte
-	redoStack        []map[string][]byte
+	undoStack        []historyEntry
+	redoStack        []historyEntry
 	logger           *logging.Logger
 	revision         int
 	compiledRevision int
@@ -1702,7 +1702,7 @@ func (s *Service) renameTable(rename TableRename, ops tableRenameOps) (result Ta
 		return TableRenameResult{}, err
 	}
 	// Publish history only after every filesystem operation has succeeded.
-	s.recordEdit(snapshot)
+	s.recordHistory(historyEntry{Files: snapshot, Moves: reverseRenameMoves(transaction.moves)})
 	view.CanUndo, view.CanRedo = true, false
 	s.current = &view
 	s.log(logging.Info, "table renamed", map[string]any{"path": rename.Path, "old": oldName, "new": newName})
@@ -1967,7 +1967,7 @@ func (s *Service) edit(path string, operation func() (document.Table, error)) (d
 	return table, view, nil
 }
 
-func (s *Service) restoreHistory(undo bool) (HistoryResult, error) {
+func (s *Service) restoreHistory(undo bool) (result HistoryResult, err error) {
 	if s.current == nil {
 		return HistoryResult{}, s.userError("workspace.noProject")
 	}
@@ -1983,16 +1983,45 @@ func (s *Service) restoreHistory(undo bool) (HistoryResult, error) {
 		return HistoryResult{}, s.userError("workspace.nothingToRedo")
 	}
 	snapshot := (*stack)[len(*stack)-1]
-	*stack = (*stack)[:len(*stack)-1]
-	current := s.snapshotFiles(snapshotPaths(snapshot)...)
-	if err := s.restoreSnapshot(snapshot); err != nil {
+	current, err := snapshotRenameFiles(snapshotPaths(snapshot.Files)...)
+	if err != nil {
+		return HistoryResult{}, err
+	}
+	transaction, err := newTableRenameTransaction(current, os.Rename)
+	if err != nil {
+		return HistoryResult{}, err
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, transaction.rollback())
+		}
+	}()
+	for _, move := range snapshot.Moves {
+		// os.Rename may replace an existing file or empty directory. History
+		// must never overwrite content created since the original operation.
+		if _, inspectErr := os.Lstat(move.to); inspectErr == nil {
+			return HistoryResult{}, fmt.Errorf("history move destination already exists: %s", move.to)
+		} else if !os.IsNotExist(inspectErr) {
+			return HistoryResult{}, fmt.Errorf("inspect history destination: %w", inspectErr)
+		}
+		if err := os.MkdirAll(filepath.Dir(move.to), 0755); err != nil {
+			return HistoryResult{}, fmt.Errorf("create history move parent: %w", err)
+		}
+		if err := transaction.move(move.from, move.to); err != nil {
+			return HistoryResult{}, fmt.Errorf("restore history move: %w", err)
+		}
+	}
+	if err := s.restoreSnapshot(snapshot.Files); err != nil {
 		return HistoryResult{}, err
 	}
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return HistoryResult{}, err
 	}
-	*opposite = append(*opposite, current)
+	// Consume history only when both filesystem restoration and refresh have
+	// succeeded. Failure rolls back moves before restoring the previous bytes.
+	*stack = (*stack)[:len(*stack)-1]
+	*opposite = append(*opposite, historyEntry{Files: current, Moves: reverseRenameMoves(snapshot.Moves)})
 	view.CanUndo = len(s.undoStack) > 0
 	view.CanRedo = len(s.redoStack) > 0
 	s.current = &view
@@ -2017,7 +2046,11 @@ func (s *Service) snapshotFiles(paths ...string) map[string][]byte {
 }
 
 func (s *Service) recordEdit(snapshot map[string][]byte) {
-	s.undoStack = append(s.undoStack, snapshot)
+	s.recordHistory(historyEntry{Files: snapshot})
+}
+
+func (s *Service) recordHistory(entry historyEntry) {
+	s.undoStack = append(s.undoStack, entry)
 	s.redoStack = nil
 }
 
@@ -2031,30 +2064,26 @@ func snapshotPaths(snapshot map[string][]byte) []string {
 }
 
 func (s *Service) restoreSnapshot(snapshot map[string][]byte) error {
-	for path, content := range snapshot {
-		if content == nil {
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("remove restored file: %w", err)
-			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return fmt.Errorf("create restored directory: %w", err)
-		}
-		if err := writeFileAtomic(path, content); err != nil {
-			return fmt.Errorf("restore source: %w", err)
-		}
-	}
-	return nil
+	return restoreSnapshotWithOps(snapshot, snapshotRestoreOps{write: writeFileAtomic, remove: os.Remove, mkdirAll: os.MkdirAll})
 }
 
 func writeFileAtomic(path string, content []byte) error {
+	mode := os.FileMode(0600)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	temporary, err := os.CreateTemp(filepath.Dir(path), ".datapack-restore-*")
 	if err != nil {
 		return err
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(mode); err != nil {
+		temporary.Close()
+		return err
+	}
 	if _, err := temporary.Write(content); err != nil {
 		temporary.Close()
 		return err
