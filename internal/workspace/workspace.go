@@ -1095,37 +1095,37 @@ func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaE
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
-	snapshot := s.snapshotFiles(create.Path)
 	if scope == "local" {
 		normalized, err := s.normalizeSchemaReferences(create.Path, create.SchemaExpression)
 		if err != nil {
 			return SchemaEditResult{}, err
 		}
 		update.SchemaExpression = normalized
-		if err := s.ensureSchemaImports(create.Path, normalized, ""); err != nil {
-			return SchemaEditResult{}, err
-		}
-	} else if err := s.ensureSchemaImports(create.Path, create.SchemaExpression, s.currentSchemaPackage(create.Path)); err != nil {
-		return SchemaEditResult{}, err
 	}
-	var result SchemaEditResult
+	excludePackage := ""
 	if scope == "public" {
-		schema, err := document.CreatePublicSchemaDefinition(create.Path, create.Name, update)
-		if err != nil {
-			s.log(logging.Error, "create schema definition failed", map[string]any{"path": create.Path, "name": create.Name, "error": err.Error()})
-			return SchemaEditResult{}, err
-		}
-		result.Schema = schema
-	} else {
-		table, err := document.CreateLocalSchemaDefinition(create.Path, create.Name, update)
-		if err != nil {
-			s.log(logging.Error, "create local schema definition failed", map[string]any{"path": create.Path, "name": create.Name, "error": err.Error()})
-			return SchemaEditResult{}, err
-		}
-		result.Table = table
+		excludePackage = s.currentSchemaPackage(create.Path)
 	}
-	s.recordEdit(snapshot)
-	view, err := s.refreshAfterEdit()
+	result, view, err := editSource(s, create.Path, func() (SchemaEditResult, error) {
+		if err := s.ensureSchemaImports(create.Path, update.SchemaExpression, excludePackage); err != nil {
+			return SchemaEditResult{}, err
+		}
+		if scope == "public" {
+			schema, err := document.CreatePublicSchemaDefinition(create.Path, create.Name, update)
+			if err != nil {
+				s.log(logging.Error, "create schema definition failed", map[string]any{"path": create.Path, "name": create.Name, "error": err.Error()})
+				return SchemaEditResult{}, err
+			}
+			return SchemaEditResult{Schema: schema}, nil
+		} else {
+			table, err := document.CreateLocalSchemaDefinition(create.Path, create.Name, update)
+			if err != nil {
+				s.log(logging.Error, "create local schema definition failed", map[string]any{"path": create.Path, "name": create.Name, "error": err.Error()})
+				return SchemaEditResult{}, err
+			}
+			return SchemaEditResult{Table: table}, nil
+		}
+	})
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
@@ -1149,37 +1149,37 @@ func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
-	snapshot := s.snapshotFiles(set.Path)
 	if scope == "local" {
 		normalized, err := s.normalizeSchemaReferences(set.Path, set.SchemaExpression)
 		if err != nil {
 			return SchemaEditResult{}, err
 		}
 		update.SchemaExpression = normalized
-		if err := s.ensureSchemaImports(set.Path, normalized, ""); err != nil {
-			return SchemaEditResult{}, err
-		}
-	} else if err := s.ensureSchemaImports(set.Path, set.SchemaExpression, s.currentSchemaPackage(set.Path)); err != nil {
-		return SchemaEditResult{}, err
 	}
-	var result SchemaEditResult
+	excludePackage := ""
 	if scope == "public" {
-		schema, err := document.SetPublicSchemaDefinition(set.Path, set.Name, update)
-		if err != nil {
-			s.log(logging.Error, "set schema definition failed", map[string]any{"path": set.Path, "name": set.Name, "error": err.Error()})
-			return SchemaEditResult{}, err
-		}
-		result.Schema = schema
-	} else {
-		table, err := document.SetLocalSchemaDefinition(set.Path, set.Name, update)
-		if err != nil {
-			s.log(logging.Error, "set local schema definition failed", map[string]any{"path": set.Path, "name": set.Name, "error": err.Error()})
-			return SchemaEditResult{}, err
-		}
-		result.Table = table
+		excludePackage = s.currentSchemaPackage(set.Path)
 	}
-	s.recordEdit(snapshot)
-	view, err := s.refreshAfterEdit()
+	result, view, err := editSource(s, set.Path, func() (SchemaEditResult, error) {
+		if err := s.ensureSchemaImports(set.Path, update.SchemaExpression, excludePackage); err != nil {
+			return SchemaEditResult{}, err
+		}
+		if scope == "public" {
+			schema, err := document.SetPublicSchemaDefinition(set.Path, set.Name, update)
+			if err != nil {
+				s.log(logging.Error, "set schema definition failed", map[string]any{"path": set.Path, "name": set.Name, "error": err.Error()})
+				return SchemaEditResult{}, err
+			}
+			return SchemaEditResult{Schema: schema}, nil
+		} else {
+			table, err := document.SetLocalSchemaDefinition(set.Path, set.Name, update)
+			if err != nil {
+				s.log(logging.Error, "set local schema definition failed", map[string]any{"path": set.Path, "name": set.Name, "error": err.Error()})
+				return SchemaEditResult{}, err
+			}
+			return SchemaEditResult{Table: table}, nil
+		}
+	})
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
@@ -1946,25 +1946,7 @@ func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
 }
 
 func (s *Service) edit(path string, operation func() (document.Table, error)) (document.Table, View, error) {
-	started := time.Now()
-	before, err := os.ReadFile(path)
-	if err != nil {
-		s.log(logging.Error, "table edit failed", map[string]any{"path": path, "error": err.Error()})
-		return document.Table{}, View{}, fmt.Errorf("record edit source: %w", err)
-	}
-	table, err := operation()
-	if err != nil {
-		s.log(logging.Error, "table edit failed", map[string]any{"path": path, "error": err.Error()})
-		return document.Table{}, View{}, err
-	}
-	s.recordEdit(map[string][]byte{path: before})
-	view, err := s.refreshAfterEdit()
-	if err != nil {
-		s.log(logging.Error, "workspace refresh failed after edit", map[string]any{"path": path, "error": err.Error()})
-		return document.Table{}, View{}, err
-	}
-	s.log(logging.Info, "table edit completed", map[string]any{"path": path, "duration_ms": time.Since(started).Milliseconds()})
-	return table, view, nil
+	return editSource(s, path, operation)
 }
 
 func (s *Service) restoreHistory(undo bool) (HistoryResult, error) {
@@ -2351,10 +2333,10 @@ func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 	if err != nil {
 		return ColumnAddResult{}, err
 	}
-	if err := s.ensureSchemaImports(add.Path, expression, ""); err != nil {
-		return ColumnAddResult{}, err
-	}
 	table, view, err := s.edit(add.Path, func() (document.Table, error) {
+		if err := s.ensureSchemaImports(add.Path, expression, ""); err != nil {
+			return document.Table{}, err
+		}
 		return document.AddColumn(add.Path, add.Name, expression, add.InitialExpression, position)
 	})
 	if err != nil {
@@ -2376,10 +2358,10 @@ func (s *Service) SetColumnSchema(set ColumnSchemaSet) (ColumnSchemaSetResult, e
 	if err != nil {
 		return ColumnSchemaSetResult{}, err
 	}
-	if err := s.ensureSchemaImports(set.Path, expression, ""); err != nil {
-		return ColumnSchemaSetResult{}, err
-	}
 	table, view, err := s.edit(set.Path, func() (document.Table, error) {
+		if err := s.ensureSchemaImports(set.Path, expression, ""); err != nil {
+			return document.Table{}, err
+		}
 		return document.SetColumnSchema(set.Path, set.Name, expression)
 	})
 	if err != nil {
