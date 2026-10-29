@@ -1,6 +1,7 @@
 package document
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -174,36 +175,43 @@ func validateCandidate(path string, source []byte) (Table, error) {
 	return table, nil
 }
 
-func replaceAll(paths []string, candidates, originals map[string][]byte) error {
+func replaceAll(paths []string, candidates, originals map[string][]byte) (err error) {
 	temporary := map[string]string{}
+	defer func() {
+		for _, path := range temporary {
+			if cleanupErr := os.Remove(path); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
+				err = errors.Join(err, fmt.Errorf("remove staged rename source %q: %w", path, cleanupErr))
+			}
+		}
+	}()
 	for _, path := range paths {
 		file, err := os.CreateTemp(filepath.Dir(path), ".datapack-rename-*.cue")
 		if err != nil {
 			return fmt.Errorf("stage renamed table: %w", err)
 		}
+		temporary[path] = file.Name()
 		if _, err := file.Write(candidates[path]); err != nil {
 			file.Close()
-			os.Remove(file.Name())
 			return fmt.Errorf("write renamed table: %w", err)
 		}
 		if err := file.Sync(); err != nil {
 			file.Close()
-			os.Remove(file.Name())
 			return fmt.Errorf("sync renamed table: %w", err)
 		}
 		if err := file.Close(); err != nil {
-			os.Remove(file.Name())
 			return fmt.Errorf("close renamed table: %w", err)
 		}
-		temporary[path] = file.Name()
 	}
 	committed := []string{}
 	for _, path := range paths {
 		if err := os.Rename(temporary[path], path); err != nil {
+			failures := []error{fmt.Errorf("replace renamed table: %w", err)}
 			for _, committedPath := range committed {
-				_ = os.WriteFile(committedPath, originals[committedPath], 0o644)
+				if restoreErr := os.WriteFile(committedPath, originals[committedPath], 0o644); restoreErr != nil {
+					failures = append(failures, fmt.Errorf("restore renamed table %q: %w", committedPath, restoreErr))
+				}
 			}
-			return fmt.Errorf("replace renamed table: %w", err)
+			return errors.Join(failures...)
 		}
 		committed = append(committed, path)
 	}

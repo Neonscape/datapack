@@ -25,7 +25,7 @@ const enumRenderer: CustomRenderer<EnumCell> = {
     </select>, disablePadding: true}),
 };
 
-export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, onSetColumnWidth, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveComment, onSaveExportSettings, onNavigate, onOpenSchemaReference, focusTarget, onFocusDone}: { table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onSetColumnDisplayName: (column: string) => void; onSetColumnWidth: (column: string, width: number) => Promise<void>; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveComment: (rowID: string, column: string, comment: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; onOpenSchemaReference: (reference: string) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
+export function TableGrid({active, table, formats, onAddColumn, onSetColumnDisplayName, onSetColumnWidth, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveComment, onSaveExportSettings, onNavigate, onOpenSchemaReference, focusTarget, onFocusDone}: { active: boolean; table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onSetColumnDisplayName: (column: string) => void; onSetColumnWidth: (column: string, width: number) => Promise<void>; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveComment: (rowID: string, column: string, comment: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; onOpenSchemaReference: (reference: string) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
     const {t} = useTranslation();
     const {grid, dataGridTheme} = useTheme();
     const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
@@ -332,8 +332,13 @@ export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, 
         return {x, y, width, height};
     };
     useEffect(() => {
+        const element = gridRef.current;
+        // Inactive tabs stay mounted to preserve their selections, but never own the clipboard.
+        if (!active || !element) return;
         const clipboard = (event: ClipboardEvent) => {
-            if ((event.target as Element | null)?.closest("textarea, input, select")) return;
+            if (event.defaultPrevented || !element.contains(document.activeElement)) return;
+            const target = event.target;
+            if (!(target instanceof Element) || target.closest("textarea, input, select") || (target instanceof HTMLElement && target.isContentEditable)) return;
             const range = selectedRange();
             if (!range) return;
             if (event.type === "copy") {
@@ -352,13 +357,13 @@ export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, 
                 void onPaste(range.y, range.x, text);
             }
         };
-        document.addEventListener("copy", clipboard);
-        document.addEventListener("paste", clipboard);
+        element.addEventListener("copy", clipboard);
+        element.addEventListener("paste", clipboard);
         return () => {
-            document.removeEventListener("copy", clipboard);
-            document.removeEventListener("paste", clipboard);
+            element.removeEventListener("copy", clipboard);
+            element.removeEventListener("paste", clipboard);
         };
-    }, [gridSelection, table, onPaste]);
+    }, [active, gridSelection, table, onPaste]);
     return <div className="table-document" data-inline-editor={inlineEditor || foreignKeyEditor || arrayEditor || structEditor ? "open" : "closed"}>
         <div className="table-document-header">
             <div>
@@ -433,6 +438,8 @@ export function TableGrid({table, formats, onAddColumn, onSetColumnDisplayName, 
                 smoothScrollX
                 smoothScrollY
                 onCellEdited={editCell}
+                // Avoid Glide's competing window paste for ranges; retain its ID/draft-cell fallback.
+                keybindings={{paste: active && selectedRange() === null}}
                 customRenderers={[enumRenderer]}
                 gridSelection={gridSelection}
                 onGridSelectionChange={(selection) => {
