@@ -520,7 +520,7 @@ func TestRenameColumnUpdatesValuesAndMetadata(t *testing.T) {
 #PrimaryKey: string
 #Row: {effectID: string}
 rows: {sword: {effectID: "burn"}}
-_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table: "rpg.effect"}}, formulas: {effectID: "ignored"}}
+_tool: {table: {namespace: "rpg", name: "item"}, foreignKeys: {effectID: {table: "rpg.effect"}}, formulas: {}}
 _export: {csv: {enabled: true, columns: ["id", "effectID"]}}`)
 
 	table, err := RenameColumn(path, "effectID", "effectKey")
@@ -532,6 +532,29 @@ _export: {csv: {enabled: true, columns: ["id", "effectID"]}}`)
 	}
 	if table.ForeignKeys[0].Column != "effectKey" || table.CSVExport.Columns[1] != "effectKey" {
 		t.Fatalf("metadata = %#v", table)
+	}
+}
+
+func TestRenameColumnRejectsMalformedFormulaMetadataWithoutWrites(t *testing.T) {
+	for _, formulas := range []string{`1`, `{effectID:"ignored"}`, `{one:{price:123}}`} {
+		t.Run(formulas, func(t *testing.T) {
+			path := writeSource(t, "item.cue", `package item
+#PrimaryKey:string
+#Row:{price:int}
+rows:{one:{price:10}}
+_tool:{table:{namespace:"rpg",name:"item"},formulas:`+formulas+`}`)
+			before, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := RenameColumn(path, "price", "cost"); err == nil {
+				t.Fatal("invalid formulas accepted by document rename")
+			}
+			after, err := os.ReadFile(path)
+			if err != nil || string(before) != string(after) {
+				t.Fatal("failed rename changed original source")
+			}
+		})
 	}
 }
 
