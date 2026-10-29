@@ -177,16 +177,27 @@ func Evaluate(table document.Table) Result {
 				fail(entry, fmt.Sprintf("formula input %s.%s failed", dependency.RowID, dependency.Column))
 				return false
 			}
+			if _, present := result.Rows[dependency.RowID][dependency.Column]; !present {
+				fail(entry, fmt.Sprintf("formula input %s.%s is missing", dependency.RowID, dependency.Column))
+				return false
+			}
 		}
-		options := []expr.Option{expr.Env(environment(table, result.Rows, ref.RowID)), expr.AllowUndefinedVariables()}
+		options := []expr.Option{expr.Env(map[string]any{})}
 		options = append(options, deterministicFunctions()...)
-		options = append(options, expr.Function(cellFunction, func(params ...any) (any, error) { return result.Rows[params[0].(string)][params[1].(string)], nil }, func(row, column string) any { return nil }))
+		options = append(options, expr.Function(entry.analysis.cellFunction, func(params ...any) (any, error) {
+			row, column := params[0].(string), params[1].(string)
+			value, present := result.Rows[row][column]
+			if !present {
+				return nil, fmt.Errorf("formula input %s.%s is missing", row, column)
+			}
+			return value, nil
+		}, func(row, column string) any { return nil }))
 		program, err := expr.Compile(entry.analysis.expression, options...)
 		if err != nil {
 			fail(entry, err.Error())
 			return false
 		}
-		value, err := expr.Run(program, environment(table, result.Rows, ref.RowID))
+		value, err := expr.Run(program, map[string]any{})
 		if err != nil {
 			fail(entry, "evaluate formula: "+err.Error())
 			return false
@@ -360,12 +371,4 @@ func applyDefaults(table document.Table, rows map[string]map[string]any, blocked
 
 func (result *Result) add(formula document.Formula, message string) {
 	result.Diagnostics = append(result.Diagnostics, Diagnostic{RowID: formula.RowID, Column: formula.Column, Message: message})
-}
-
-func environment(table document.Table, rows map[string]map[string]any, rowID string) map[string]any {
-	environment := map[string]any{}
-	for column, value := range rows[rowID] {
-		environment[column] = value
-	}
-	return environment
 }

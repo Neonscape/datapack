@@ -9,13 +9,25 @@ import (
 	"github.com/expr-lang/expr/parser"
 )
 
-// Qualified cells compile to a private callback instead of sharing namespace
-// roots with bare column names in expr's environment. Source cannot call it.
+// All cells compile to a private callback, leaving expr's environment empty.
+// Its name is fresh for each expression so local bindings cannot shadow it.
 const cellFunction = "__datapack_cell"
 
 type formulaAnalysis struct {
-	expression string
-	references []Reference
+	expression   string
+	references   []Reference
+	cellFunction string
+}
+
+type expressionNames map[string]bool
+
+func (names expressionNames) Visit(node *ast.Node) {
+	switch n := (*node).(type) {
+	case *ast.IdentifierNode:
+		names[n.Value] = true
+	case *ast.VariableDeclaratorNode:
+		names[n.Name] = true
+	}
 }
 
 // References discovers static cell inputs in source order, respecting lexical
@@ -26,15 +38,16 @@ func References(table document.Table, f document.Formula) []Reference {
 }
 
 type referenceAnalysis struct {
-	table       document.Table
-	formula     document.Formula
-	validate    bool
-	columns     map[string]bool
-	foreignKeys map[string]bool
-	rows        map[string]bool
-	seen        map[Reference]bool
-	references  []Reference
-	prefix      []string
+	table        document.Table
+	formula      document.Formula
+	validate     bool
+	columns      map[string]bool
+	foreignKeys  map[string]bool
+	rows         map[string]bool
+	seen         map[Reference]bool
+	references   []Reference
+	prefix       []string
+	cellFunction string
 }
 
 func analyzeFormula(table document.Table, f document.Formula, validate bool) (formulaAnalysis, error) {
@@ -43,6 +56,12 @@ func analyzeFormula(table document.Table, f document.Formula, validate bool) (fo
 		return formulaAnalysis{}, err
 	}
 	a := referenceAnalysis{table: table, formula: f, validate: validate, columns: map[string]bool{}, foreignKeys: map[string]bool{}, rows: map[string]bool{}, seen: map[Reference]bool{}}
+	names := expressionNames{}
+	ast.Walk(&tree.Node, names)
+	a.cellFunction = cellFunction
+	for names[a.cellFunction] {
+		a.cellFunction += "_"
+	}
 	for _, c := range table.Columns {
 		a.columns[c.Name] = true
 	}
@@ -59,7 +78,7 @@ func analyzeFormula(table document.Table, f document.Formula, validate bool) (fo
 		a.prefix = append(a.prefix, table.Name)
 	}
 	err = a.walk(&tree.Node, map[string]bool{})
-	result := formulaAnalysis{references: a.references}
+	result := formulaAnalysis{references: a.references, cellFunction: a.cellFunction}
 	if err == nil {
 		result.expression = tree.Node.String()
 	}
@@ -100,7 +119,11 @@ func (a *referenceAnalysis) walk(node *ast.Node, locals map[string]bool) error {
 		if !a.columns[n.Value] {
 			return fmt.Errorf("unknown formula input %q; dynamic environment access is not supported", n.Value)
 		}
-		return a.add(a.formula.RowID, n.Value)
+		if err := a.add(a.formula.RowID, n.Value); err != nil {
+			return err
+		}
+		*node = a.cell(a.formula.RowID, n.Value)
+		return nil
 	case *ast.NilNode, *ast.IntegerNode, *ast.FloatNode, *ast.BoolNode, *ast.StringNode, *ast.ConstantNode:
 		return nil
 	case *ast.UnaryNode:
@@ -115,12 +138,7 @@ func (a *referenceAnalysis) walk(node *ast.Node, locals map[string]bool) error {
 	case *ast.MemberNode:
 		return a.member(node, n, locals)
 	case *ast.SliceNode:
-		for _, p := range []*ast.Node{&n.Node, &n.From, &n.To} {
-			if err := walk(p); err != nil {
-				return err
-			}
-		}
-		return nil
+		return fmt.Errorf("formula slices and array element references are not supported")
 	case *ast.CallNode:
 		callee, ok := n.Callee.(*ast.IdentifierNode)
 		if !ok {
@@ -196,6 +214,10 @@ func (a *referenceAnalysis) walk(node *ast.Node, locals map[string]bool) error {
 	}
 }
 
+func (a *referenceAnalysis) cell(row, column string) ast.Node {
+	return &ast.CallNode{Callee: &ast.IdentifierNode{Value: a.cellFunction}, Arguments: []ast.Node{&ast.StringNode{Value: row}, &ast.StringNode{Value: column}}}
+}
+
 func memberChain(node ast.Node) (ast.Node, []*ast.MemberNode) {
 	if m, ok := node.(*ast.MemberNode); ok {
 		root, chain := memberChain(m.Node)
@@ -225,7 +247,7 @@ func (a *referenceAnalysis) member(node *ast.Node, member *ast.MemberNode, local
 			if err := a.add(row.Value, column.Value); err != nil {
 				return err
 			}
-			var replacement ast.Node = &ast.CallNode{Callee: &ast.IdentifierNode{Value: cellFunction}, Arguments: []ast.Node{&ast.StringNode{Value: row.Value}, &ast.StringNode{Value: column.Value}}}
+			replacement := a.cell(row.Value, column.Value)
 			for _, tail := range chain[len(a.prefix)+1:] {
 				if _, ok := tail.Property.(*ast.StringNode); !ok {
 					return fmt.Errorf("formula references require static field names; array element references are not supported")
@@ -244,10 +266,8 @@ func (a *referenceAnalysis) member(node *ast.Node, member *ast.MemberNode, local
 	if identifier && !locals[id.Value] && !a.columns[id.Value] {
 		return fmt.Errorf("formula reference %q must target the current table using static names", member.String())
 	}
-	if identifier {
-		if _, ok := member.Property.(*ast.StringNode); !ok {
-			return fmt.Errorf("formula references require static field names; dynamic and array element references are not supported")
-		}
+	if _, ok := member.Property.(*ast.StringNode); !ok {
+		return fmt.Errorf("formula references require static field names; dynamic and array element references are not supported")
 	}
 	if err := a.walk(&member.Node, locals); err != nil {
 		return err

@@ -63,15 +63,24 @@ func TestSafetyFailedFormulasNeverLeaveDefaultResults(t *testing.T) {
 		{"cross row cycle", `{one: {}, two: {}}`, `{one: {a: "rpg.item.two.a + 1"}, two: {a: "rpg.item.one.a + 1"}}`},
 		{"parse failure", `{one: {}}`, `{one: {a: "b == nil ? 9 : b + 1", b: "("}}`},
 		{"unknown function", `{one: {}}`, `{one: {a: "b == nil ? 9 : b + 1", b: "unknown(1)"}}`},
-		{"runtime failure", `{one: {}}`, `{one: {a: "b == nil ? 9 : b + 1", b: "[1][8]"}}`},
+		{"runtime failure", `{one: {}}`, `{one: {a: "b == nil ? 9 : b + 1", b: "len(c)"}}`},
 		{"infinite result", `{one: {}}`, `{one: {a: "b == nil ? 9 : b + 1", b: "1 / 0"}}`},
 		{"fixed value conflict", `{one: {b: 3}}`, `{one: {a: "b + 1", b: "10"}}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			table := safetyTable(t, "rpg", `{a: *0 | int, b: *0 | int}`, tc.rows, tc.formulas)
+			table := safetyTable(t, "rpg", `{a: *0 | int, b: *0 | int, c: *0 | int}`, tc.rows, tc.formulas)
 			result := Evaluate(table)
 			if len(result.Diagnostics) == 0 {
 				t.Fatalf("invalid formulas have no diagnostics: %#v", result)
+			}
+			if tc.name == "runtime failure" {
+				found := false
+				for _, diagnostic := range result.Diagnostics {
+					found = found || strings.Contains(diagnostic.Message, "evaluate formula:") && strings.Contains(diagnostic.Message, "len expects")
+				}
+				if !found {
+					t.Fatalf("runtime error was not exercised: %#v", result.Diagnostics)
+				}
 			}
 			for _, f := range table.Formulas {
 				if value, ok := result.Rows[f.RowID][f.Column]; ok {
