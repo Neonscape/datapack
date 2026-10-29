@@ -1714,58 +1714,7 @@ func (s *Service) renameTable(rename TableRename, ops tableRenameOps) (result Ta
 func (s *Service) DeleteTable(delete TableDelete) (TableDeleteResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.current == nil {
-		return TableDeleteResult{}, s.userError("workspace.noProject")
-	}
-	if !containsTable(s.current.Tree.Root, delete.Path) {
-		return TableDeleteResult{}, s.userError("workspace.tableNotInProject", delete.Path)
-	}
-	source, err := document.LoadTable(delete.Path)
-	if err != nil {
-		return TableDeleteResult{}, err
-	}
-	name := logicalTableName(source)
-	var tables []document.Table
-	collectTables(s.current.Tree.Root, &tables)
-	referencedBy := []string{}
-	for _, table := range tables {
-		if table.Path == delete.Path {
-			continue
-		}
-		for _, key := range table.ForeignKeys {
-			if key.Table == name {
-				referencedBy = append(referencedBy, logicalTableName(table)+"."+key.Column)
-			}
-		}
-	}
-	if len(referencedBy) > 0 {
-		err := s.userError("workspace.tableReferenced", name, strings.Join(referencedBy, ", "))
-		s.log(logging.Warn, "table delete blocked", map[string]any{"path": delete.Path, "error": err.Error()})
-		return TableDeleteResult{}, err
-	}
-	paths := []string{delete.Path}
-	if s.current.Project.Config.Export.Tables != nil {
-		paths = append(paths, s.current.Project.Path)
-	}
-	snapshot := s.snapshotFiles(paths...)
-	if err := os.RemoveAll(filepath.Dir(delete.Path)); err != nil {
-		return TableDeleteResult{}, fmt.Errorf("delete table source: %w", err)
-	}
-	project := s.current.Project
-	if removeExportTableSelection(&project.Config, name) {
-		if err := SaveProject(project); err != nil {
-			_ = s.restoreSnapshot(snapshot)
-			return TableDeleteResult{}, err
-		}
-		s.current.Project = project
-	}
-	s.recordEdit(snapshot)
-	view, err := s.refreshAfterEdit()
-	if err != nil {
-		return TableDeleteResult{}, err
-	}
-	s.log(logging.Info, "table deleted", map[string]any{"path": delete.Path, "name": name})
-	return TableDeleteResult{Workspace: view}, nil
+	return s.deleteTable(delete, tableDeleteOps{rename: os.Rename, saveProject: SaveProject})
 }
 
 // CreateSchemaFile creates an empty public Schema package for a namespace.
@@ -1978,6 +1927,20 @@ func (s *Service) restoreHistory(undo bool) (result HistoryResult, err error) {
 			err = errors.Join(err, transaction.rollback())
 		}
 	}()
+	var directory *directoryTransaction
+	if snapshot.Directory != nil {
+		directory, err = changeDirectory(s.current.Project, snapshot.Directory, os.Rename)
+		if err != nil {
+			return HistoryResult{}, err
+		}
+		defer func() {
+			if err != nil {
+				err = errors.Join(err, directory.rollback())
+			} else if cleanupErr := directory.cleanup(); cleanupErr != nil {
+				s.log(logging.Warn, "history staging cleanup failed", map[string]any{"error": cleanupErr.Error()})
+			}
+		}()
+	}
 	for _, move := range snapshot.Moves {
 		// os.Rename may replace an existing file or empty directory. History
 		// must never overwrite content created since the original operation.
@@ -2003,7 +1966,7 @@ func (s *Service) restoreHistory(undo bool) (result HistoryResult, err error) {
 	// Consume history only when both filesystem restoration and refresh have
 	// succeeded. Failure rolls back moves before restoring the previous bytes.
 	*stack = (*stack)[:len(*stack)-1]
-	*opposite = append(*opposite, historyEntry{Files: current, Moves: reverseRenameMoves(snapshot.Moves)})
+	*opposite = append(*opposite, historyEntry{Files: current, Moves: reverseRenameMoves(snapshot.Moves), Directory: snapshot.Directory.inverse()})
 	view.CanUndo = len(s.undoStack) > 0
 	view.CanRedo = len(s.redoStack) > 0
 	s.current = &view

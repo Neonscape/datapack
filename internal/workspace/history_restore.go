@@ -11,8 +11,9 @@ import (
 // positions without copying or discarding unrelated sidecars. This is process
 // local compensating history, not a crash or external-concurrency transaction.
 type historyEntry struct {
-	Files map[string][]byte
-	Moves []renameMove
+	Files     map[string][]byte
+	Moves     []renameMove
+	Directory *directoryHistory
 }
 
 func reverseRenameMoves(moves []renameMove) []renameMove {
