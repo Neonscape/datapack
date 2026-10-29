@@ -25,7 +25,7 @@ func defaultTableRenameOps() tableRenameOps {
 	}
 }
 
-// Unlike the legacy history snapshot helper, a rename must not mistake an
+// Unlike the legacy snapshot helper, history and rename must not mistake an
 // unreadable existing file for a missing file and later remove it on rollback.
 func snapshotRenameFiles(paths ...string) (map[string][]byte, error) {
 	snapshot := map[string][]byte{}
@@ -36,6 +36,13 @@ func snapshotRenameFiles(paths ...string) (map[string][]byte, error) {
 		content, err := os.ReadFile(path)
 		if err != nil && !os.IsNotExist(err) {
 			return nil, fmt.Errorf("snapshot rename source %q: %w", path, err)
+		}
+		if os.IsNotExist(err) {
+			if _, inspectErr := os.Lstat(path); inspectErr == nil {
+				return nil, fmt.Errorf("snapshot source %q exists but cannot be read: %w", path, err)
+			} else if !os.IsNotExist(inspectErr) {
+				return nil, fmt.Errorf("inspect snapshot source %q: %w", path, inspectErr)
+			}
 		}
 		snapshot[path] = content
 	}
