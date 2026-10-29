@@ -333,7 +333,7 @@ func loadRowSchema(table document.Table) cue.Value {
 	if table.Path == "" {
 		return cue.Value{}
 	}
-	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path)})
+	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path), Package: table.Package})
 	if len(instances) != 1 {
 		return cue.Value{}
 	}
@@ -354,7 +354,14 @@ func applyDefaults(table document.Table, rows map[string]map[string]any, blocked
 			if blocked[Reference{RowID: rowID, Column: column.Name}] {
 				continue
 			}
-			if _, exists := row[column.Name]; exists {
+			// Foreign-key null means missing: its concrete default takes
+			// precedence, as specified by the foreign-key data contract.
+			value, exists := row[column.Name]
+			foreignKey := false
+			for _, key := range table.ForeignKeys {
+				foreignKey = foreignKey || key.Column == column.Name
+			}
+			if exists && (value != nil || !foreignKey) {
 				continue
 			}
 			defaultValue, hasDefault := rowSchema.LookupPath(cue.MakePath(cue.Str(column.Name))).Default()
