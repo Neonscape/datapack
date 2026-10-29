@@ -825,6 +825,11 @@ func (s *Service) NormalizeProjectExportDirectory(path string) (string, error) {
 	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("selected export directory is outside the project")
 	}
+	project := s.current.Project
+	project.Config.Export.Directory = relative
+	if _, err := exportDirectory(project); err != nil {
+		return "", err
+	}
 	return filepath.ToSlash(relative), nil
 }
 
@@ -2183,15 +2188,15 @@ func (s *Service) Export() (ExportResult, error) {
 		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
 		return ExportResult{}, err
 	}
+	destination, err := exportDirectory(s.current.Project)
+	if err != nil {
+		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
+		return ExportResult{}, err
+	}
 	compiled := s.compile()
 	if len(compiled.Diagnostics) > 0 {
 		err := s.userError("workspace.exportBlocked", len(compiled.Diagnostics), compiled.Diagnostics[0].Message)
 		s.log(logging.Warn, "export blocked", map[string]any{"error": err.Error()})
-		return ExportResult{}, err
-	}
-	destination, err := exportDirectory(s.current.Project)
-	if err != nil {
-		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
 		return ExportResult{}, err
 	}
 	compiled.Package = filterExportPackage(compiled.Package, s.current.Project.Config.Export.Tables)
@@ -2378,15 +2383,6 @@ func (s *Service) MoveColumn(move ColumnMove) (ColumnMoveResult, error) {
 		return ColumnMoveResult{}, err
 	}
 	return ColumnMoveResult{Table: table, Workspace: view}, nil
-}
-
-func exportDirectory(project Project) (string, error) {
-	destination := filepath.Clean(filepath.Join(project.Root, project.Config.Export.Directory))
-	relative, err := filepath.Rel(project.Root, destination)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("export directory %q escapes the project directory", project.Config.Export.Directory)
-	}
-	return destination, nil
 }
 
 func foreignKeyUsage(tree projecttree.Tree, target document.Table, rowID string) *foreignkey.Usage {
