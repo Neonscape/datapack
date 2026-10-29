@@ -19,6 +19,8 @@ func TestCompileForeignKeysUseFinalDefaultAndNullValues(t *testing.T) {
 	}{
 		{"scalar default", `*"burn" | string`, `{}`, "burn", false},
 		{"array default", `*["burn","burn"] | [...string]`, `{}`, []any{"burn", "burn"}, false},
+		{"nullable array default", `*[null,"burn"] | [...(null|string)]`, `{}`, []any{nil, "burn"}, false},
+		{"nullable array literal", `[...(null|string)]`, `{target:[null,"burn"]}`, []any{nil, "burn"}, false},
 		{"actual null", `null | string`, `{target:null}`, nil, false},
 		{"null default", `*"burn" | null | string`, `{target:null}`, "burn", false},
 		{"missing target default", `*"missing" | string`, `{}`, nil, true},

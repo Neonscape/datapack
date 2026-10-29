@@ -118,7 +118,8 @@ func BuildResolved(tables []document.Table, resolved ResolvedRows) Index {
 					continue
 				}
 				source := referenceSource(row.Values[key.Column].Expression, values, array)
-				for position, value := range values {
+				for _, reference := range values {
+					value, position := reference.ID, reference.Index
 					usage := Usage{Path: table.Path, Table: name, RowID: row.ID, Column: key.Column, Index: position, Array: array, Source: source}
 					target := Target{Table: key.Table, RowID: value}
 					index.Usages[target] = append(index.Usages[target], usage)
@@ -151,20 +152,28 @@ func BuildResolved(tables []document.Table, resolved ResolvedRows) Index {
 	return index
 }
 
-func resolvedReferences(value any) ([]string, bool, error) {
+type referenceValue struct {
+	ID    string
+	Index int
+}
+
+func resolvedReferences(value any) ([]referenceValue, bool, error) {
 	switch v := value.(type) {
 	case nil:
 		return nil, false, nil
 	case string:
-		return []string{v}, false, nil
+		return []referenceValue{{ID: v}}, false, nil
 	case []any:
-		values := make([]string, len(v))
+		values := make([]referenceValue, 0, len(v))
 		for i, item := range v {
+			if item == nil {
+				continue
+			}
 			text, ok := item.(string)
 			if !ok {
 				return nil, true, fmt.Errorf("foreign key list item %d must be a string", i)
 			}
-			values[i] = text
+			values = append(values, referenceValue{ID: text, Index: i})
 		}
 		return values, true, nil
 	default:
@@ -172,12 +181,12 @@ func resolvedReferences(value any) ([]string, bool, error) {
 	}
 }
 
-func referenceSource(expression string, values []string, array bool) string {
+func referenceSource(expression string, values []referenceValue, array bool) string {
 	if expression == "" || expression == "null" {
 		return SourceDefault
 	}
-	literals, err := referenceValues(expression)
-	if err != nil || isListExpression(expression) != array || len(literals) != len(values) {
+	literals, literalArray, err := literalReferences(expression)
+	if err != nil || literalArray != array || len(literals) != len(values) {
 		return SourceDerived
 	}
 	for i, value := range values {
@@ -188,39 +197,30 @@ func referenceSource(expression string, values []string, array bool) string {
 	return SourceLiteral
 }
 
-func isListExpression(expression string) bool {
+func literalReferences(expression string) ([]referenceValue, bool, error) {
 	value, err := parser.ParseExpr("foreign-key.cue", expression)
 	if err != nil {
-		return false
-	}
-	_, ok := value.(*ast.ListLit)
-	return ok
-}
-
-func referenceValues(expression string) ([]string, error) {
-	if expression == "" {
-		return nil, nil
-	}
-	value, err := parser.ParseExpr("foreign-key.cue", expression)
-	if err != nil {
-		return nil, fmt.Errorf("parse foreign key value: %w", err)
+		return nil, false, fmt.Errorf("parse foreign key value: %w", err)
 	}
 	if stringValue, ok := stringValue(value); ok {
-		return []string{stringValue}, nil
+		return []referenceValue{{ID: stringValue}}, false, nil
 	}
 	list, ok := value.(*ast.ListLit)
 	if !ok {
-		return nil, fmt.Errorf("foreign key value must be a string or list of strings")
+		return nil, false, fmt.Errorf("foreign key value must be a string or list of strings")
 	}
-	values := make([]string, 0, len(list.Elts))
-	for _, element := range list.Elts {
+	values := make([]referenceValue, 0, len(list.Elts))
+	for i, element := range list.Elts {
+		if literal, ok := element.(*ast.BasicLit); ok && literal.Kind == token.NULL {
+			continue
+		}
 		value, ok := stringValue(element)
 		if !ok {
-			return nil, fmt.Errorf("foreign key list must contain only strings")
+			return nil, true, fmt.Errorf("foreign key list must contain only strings or null")
 		}
-		values = append(values, value)
+		values = append(values, referenceValue{ID: value, Index: i})
 	}
-	return values, nil
+	return values, true, nil
 }
 
 func stringValue(expression ast.Expr) (string, bool) {

@@ -94,12 +94,29 @@ func TestMissingForeignKeyDeclarationsAreRejectedWithoutRows(t *testing.T) {
 }
 
 func TestInvalidForeignKeySchemasAreRejectedWithoutRows(t *testing.T) {
-	for _, schema := range []string{`{target:int}`, `{target:[...int]}`, `{target:[string,int]}`, `{target:[...(null|string)]}`} {
+	for _, schema := range []string{`{target:int}`, `{target:[...int]}`, `{target:[string,int]}`} {
 		t.Run(schema, func(t *testing.T) {
 			if index := Build(defaultTables(t, schema, `{}`)); len(index.Diagnostics) == 0 || !index.Incomplete {
 				t.Fatalf("invalid declaration accepted: %#v", index)
 			}
 		})
+	}
+}
+
+func TestNullableArrayReferencesPreserveOriginalIndices(t *testing.T) {
+	for _, row := range []string{`{one:{}}`, `{one:{target:[null,"burn",null,"missing"]}}`} {
+		index := Build(defaultTables(t, `{target: *[null,"burn",null,"missing"] | [...(null|string)]}`, row))
+		burn, missing := index.Usages[Target{Table: "rpg.effect", RowID: "burn"}], index.Usages[Target{Table: "rpg.effect", RowID: "missing"}]
+		if index.Incomplete || len(burn) != 1 || burn[0].Index != 1 || len(missing) != 1 || missing[0].Index != 3 || len(index.Diagnostics) != 1 || !strings.Contains(index.Diagnostics[0].Message, "target[3]") {
+			t.Fatalf("nullable array: %#v", index)
+		}
+		want := SourceDefault
+		if row != `{one:{}}` {
+			want = SourceLiteral
+		}
+		if burn[0].Source != want || missing[0].Source != want {
+			t.Fatal("nullable array provenance was lost")
+		}
 	}
 }
 

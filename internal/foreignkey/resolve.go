@@ -109,7 +109,8 @@ func ValidateColumnSchema(field cue.Value) error {
 		return fmt.Errorf("foreign key column must have a string or list-of-strings schema")
 	}
 	check := func(value cue.Value) error {
-		if value.IncompleteKind() != cue.StringKind {
+		kind := value.IncompleteKind() &^ cue.NullKind
+		if kind != cue.StringKind && value.IncompleteKind() != cue.NullKind {
 			return fmt.Errorf("foreign key list must have string elements")
 		}
 		return nil

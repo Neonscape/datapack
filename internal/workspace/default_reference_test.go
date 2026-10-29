@@ -155,3 +155,35 @@ _tool:{table:{namespace:"rpg",name:"item"},foreignKeys:{effectID:{table:"rpg.eff
 	}
 	assertReferenceEditRejected(t, s, target)
 }
+
+func TestNullableArrayLiteralRenameUsesOriginalIndices(t *testing.T) {
+	s, target, ref := renameFixture(t)
+	writeFile(t, ref, `package item
+#PrimaryKey:string
+#Row:{effectIDs:[...(null|string)]}
+rows:{one:{effectIDs:[null,"burn",null,"burn"]}}
+_tool:{table:{namespace:"rpg",name:"item"},foreignKeys:{effectIDs:{table:"rpg.effect"}}}`)
+	if _, err := s.OpenProject(s.current.Project.Path); err != nil {
+		t.Fatal(err)
+	}
+	before := fileTree(t, s.current.Project.Root)
+	if _, err := s.RenameRow(RowRename{Path: target, OldID: "burn", NewID: "flame"}); err != nil {
+		t.Fatal(err)
+	}
+	table, err := s.GetTable(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := table.Rows[0].Values["effectIDs"].Expression; got != `[null, "flame", null, "flame"]` {
+		t.Fatal(got)
+	}
+	after := fileTree(t, s.current.Project.Root)
+	if _, err := s.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	assertFileTree(t, s.current.Project.Root, before)
+	if _, err := s.Redo(); err != nil {
+		t.Fatal(err)
+	}
+	assertFileTree(t, s.current.Project.Root, after)
+}
