@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
-	"regexp"
 	"sort"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/load"
 	"github.com/expr-lang/expr"
-	"github.com/expr-lang/expr/ast"
-	"github.com/expr-lang/expr/parser"
 
 	"datapack/internal/document"
 	"datapack/internal/schemamodel"
@@ -36,159 +33,174 @@ type Reference struct {
 	Column string `json:"column"`
 }
 
-// References returns the cells a formula reads, in source order. Same-row
-// references carry the formula's own row ID; cross-row references carry the
-// referenced row ID.
-func References(table document.Table, formula document.Formula) []Reference {
-	tree, err := parser.Parse(formula.Expression)
-	if err != nil {
-		return nil
-	}
-	columns := map[string]bool{}
-	for _, column := range table.Columns {
-		columns[column.Name] = true
-	}
-	collector := referenceCollector{table: table, columns: columns, formula: formula}
-	ast.Walk(&tree.Node, &collector)
-	return collector.references
-}
-
-type referenceCollector struct {
-	table      document.Table
-	columns    map[string]bool
-	formula    document.Formula
-	references []Reference
-	seen       map[string]bool
-}
-
-func (collector *referenceCollector) add(rowID, column string) {
-	if collector.seen == nil {
-		collector.seen = map[string]bool{}
-	}
-	key := rowID + "." + column
-	if collector.seen[key] {
-		return
-	}
-	collector.seen[key] = true
-	collector.references = append(collector.references, Reference{RowID: rowID, Column: column})
-}
-
-func (collector *referenceCollector) Visit(node *ast.Node) {
-	switch value := (*node).(type) {
-	case *ast.IdentifierNode:
-		if collector.columns[value.Value] {
-			collector.add(collector.formula.RowID, value.Value)
-		}
-	case *ast.MemberNode:
-		path := memberPath(value)
-		if len(path) == 4 && path[0] == collector.table.Namespace && path[1] == collector.table.Name {
-			collector.add(path[2], path[3])
-		}
-	}
-}
-
 // Evaluate computes formulas into an in-memory result. It never changes the
 // fixed source values in document.Table.
+type evaluationState uint8
+
+const (
+	formulaPending evaluationState = iota
+	formulaVisiting
+	formulaSucceeded
+	formulaFailed
+)
+
+type formulaEntry struct {
+	formula  document.Formula
+	analysis formulaAnalysis
+	state    evaluationState
+}
+
 func Evaluate(table document.Table) Result {
 	result := Result{Rows: map[string]map[string]any{}}
-	formulaByCell := map[string]document.Formula{}
+	entries := map[Reference]*formulaEntry{}
 	columns := map[string]schemamodel.Kind{}
 	foreignKeys := map[string]bool{}
-	rowExists := map[string]bool{}
+	blocked := map[Reference]bool{}
+	rowSchema := loadRowSchema(table)
 	for _, column := range table.Columns {
-		columns[column.Name] = column.Schema.Kind
+		kind := column.Schema.Kind
+		if kind == schemamodel.KindReference && rowSchema.Exists() {
+			switch rowSchema.LookupPath(cue.MakePath(cue.Str(column.Name))).IncompleteKind() &^ cue.NullKind {
+			case cue.IntKind:
+				kind = schemamodel.KindInteger
+			case cue.NumberKind, cue.FloatKind:
+				kind = schemamodel.KindNumber
+			case cue.StringKind:
+				kind = schemamodel.KindString
+			case cue.BoolKind:
+				kind = schemamodel.KindBoolean
+			case cue.ListKind:
+				kind = schemamodel.KindArray
+			case cue.StructKind:
+				kind = schemamodel.KindStruct
+			}
+		}
+		columns[column.Name] = kind
 	}
-	for _, foreignKey := range table.ForeignKeys {
-		foreignKeys[foreignKey.Column] = true
+	for _, key := range table.ForeignKeys {
+		foreignKeys[key.Column] = true
 	}
 	for _, row := range table.Rows {
-		rowExists[row.ID] = true
+		result.Rows[row.ID] = map[string]any{}
 	}
-	for _, formula := range table.Formulas {
-		key := formula.RowID + "." + formula.Column
-		if !rowExists[formula.RowID] {
-			result.add(formula, "formula row does not exist")
+	fail := func(entry *formulaEntry, message string) {
+		if entry.state != formulaFailed {
+			result.add(entry.formula, message)
+			entry.state = formulaFailed
+		}
+	}
+	for _, f := range table.Formulas {
+		if _, ok := result.Rows[f.RowID]; !ok {
+			result.add(f, "formula row does not exist")
 			continue
 		}
-		kind, exists := columns[formula.Column]
-		if !exists {
-			result.add(formula, "formula column does not exist")
+		kind, ok := columns[f.Column]
+		if !ok {
+			result.add(f, "formula column does not exist")
 			continue
 		}
+		ref := Reference{RowID: f.RowID, Column: f.Column}
+		if entry, ok := entries[ref]; ok {
+			fail(entry, "duplicate formula for cell")
+			continue
+		}
+		entry := &formulaEntry{formula: f}
+		entries[ref] = entry
+		blocked[ref] = true
 		if kind == schemamodel.KindArray || kind == schemamodel.KindStruct {
-			result.add(formula, "formulas only support scalar or enum columns")
-			continue
+			fail(entry, "formulas only support scalar or enum columns")
 		}
-		if foreignKeys[formula.Column] {
-			result.add(formula, "foreign key columns cannot have formulas")
-			continue
+		if foreignKeys[f.Column] {
+			fail(entry, "foreign key columns cannot have formulas")
 		}
-		formulaByCell[key] = formula
 	}
 	for _, row := range table.Rows {
-		values := map[string]any{}
 		for column, cell := range row.Values {
-			if _, exists := formulaByCell[row.ID+"."+column]; exists {
-				result.Diagnostics = append(result.Diagnostics, Diagnostic{RowID: row.ID, Column: column, Message: "formula and fixed value cannot coexist"})
+			ref := Reference{RowID: row.ID, Column: column}
+			if entry, ok := entries[ref]; ok {
+				fail(entry, "formula and fixed value cannot coexist")
 				continue
 			}
 			value := cuecontext.New().CompileString(cell.Expression)
 			var decoded any
 			if err := value.Decode(&decoded); err != nil {
 				result.Diagnostics = append(result.Diagnostics, Diagnostic{RowID: row.ID, Column: column, Message: err.Error()})
+				blocked[ref] = true
 				continue
 			}
-			values[column] = normalizeValueForColumn(decoded, columns[column])
+			result.Rows[row.ID][column] = normalizeValueForColumn(decoded, columns[column])
 		}
-		result.Rows[row.ID] = values
 	}
-	applyDefaults(table, result.Rows)
-
-	pending := formulaByCell
-	for len(pending) > 0 {
-		progress := false
-		for _, key := range sortedFormulaKeys(pending) {
-			formula := pending[key]
-			kind := columns[formula.Column]
-			if err := validateReferences(table, formula, foreignKeys); err != nil {
-				result.add(formula, err.Error())
-				delete(pending, key)
-				continue
-			}
-			if name := unknownFunction(formula.Expression); name != "" {
-				result.add(formula, fmt.Sprintf("unknown formula function %q", name))
-				delete(pending, key)
-				continue
-			}
-			options := []expr.Option{expr.Env(environment(table, result.Rows, formula.RowID)), expr.AllowUndefinedVariables()}
-			options = append(options, deterministicFunctions()...)
-			program, err := expr.Compile(formula.Expression, options...)
-			if err != nil {
-				result.add(formula, err.Error())
-				delete(pending, key)
-				continue
-			}
-			value, err := expr.Run(program, environment(table, result.Rows, formula.RowID))
-			if err != nil {
-				continue // A formula dependency may be evaluated in a later pass.
-			}
-			if err := validateFiniteFormulaValue(value); err != nil {
-				result.add(formula, err.Error())
-				delete(pending, key)
-				continue
-			}
-			value = normalizeValueForColumn(value, kind)
-			result.Rows[formula.RowID][formula.Column] = value
-			delete(pending, key)
-			progress = true
+	applyDefaults(table, result.Rows, blocked, rowSchema, columns)
+	keys := make([]Reference, 0, len(entries))
+	for ref := range entries {
+		keys = append(keys, ref)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].RowID == keys[j].RowID {
+			return keys[i].Column < keys[j].Column
 		}
-		if progress {
+		return keys[i].RowID < keys[j].RowID
+	})
+	for _, ref := range keys {
+		entry := entries[ref]
+		if entry.state == formulaFailed {
 			continue
 		}
-		for _, key := range sortedFormulaKeys(pending) {
-			result.add(pending[key], "formula has a circular or missing dependency")
+		analysis, err := analyzeFormula(table, entry.formula, true)
+		if err != nil {
+			fail(entry, err.Error())
+			continue
 		}
-		break
+		entry.analysis = analysis
+	}
+	var evaluate func(Reference) bool
+	evaluate = func(ref Reference) bool {
+		entry := entries[ref]
+		switch entry.state {
+		case formulaSucceeded:
+			return true
+		case formulaFailed:
+			return false
+		case formulaVisiting:
+			fail(entry, "formula has a circular or missing dependency")
+			return false
+		}
+		entry.state = formulaVisiting
+		for _, dependency := range entry.analysis.references {
+			if _, ok := entries[dependency]; ok {
+				if !evaluate(dependency) {
+					fail(entry, fmt.Sprintf("formula dependency %s.%s failed", dependency.RowID, dependency.Column))
+					return false
+				}
+			} else if blocked[dependency] {
+				fail(entry, fmt.Sprintf("formula input %s.%s failed", dependency.RowID, dependency.Column))
+				return false
+			}
+		}
+		options := []expr.Option{expr.Env(environment(table, result.Rows, ref.RowID)), expr.AllowUndefinedVariables()}
+		options = append(options, deterministicFunctions()...)
+		options = append(options, expr.Function(cellFunction, func(params ...any) (any, error) { return result.Rows[params[0].(string)][params[1].(string)], nil }, func(row, column string) any { return nil }))
+		program, err := expr.Compile(entry.analysis.expression, options...)
+		if err != nil {
+			fail(entry, err.Error())
+			return false
+		}
+		value, err := expr.Run(program, environment(table, result.Rows, ref.RowID))
+		if err != nil {
+			fail(entry, "evaluate formula: "+err.Error())
+			return false
+		}
+		if err := validateFiniteFormulaValue(value); err != nil {
+			fail(entry, err.Error())
+			return false
+		}
+		result.Rows[ref.RowID][ref.Column] = normalizeValueForColumn(value, columns[ref.Column])
+		entry.state = formulaSucceeded
+		return true
+	}
+	for _, ref := range keys {
+		evaluate(ref)
 	}
 	return result
 }
@@ -301,35 +313,36 @@ func numericMinMax(params []any, maximum bool) (any, error) {
 	return math.Min(left, right), nil
 }
 
-var functionCallPattern = regexp.MustCompile(`\b([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
-
 var knownFunctionNames = map[string]bool{
 	"abs": true, "min": true, "max": true, "round": true, "floor": true,
 	"ceil": true, "clamp": true, "pow": true, "len": true,
 }
 
-func unknownFunction(expression string) string {
-	for _, match := range functionCallPattern.FindAllStringSubmatch(expression, -1) {
-		if !knownFunctionNames[match[1]] {
-			return match[1]
-		}
+func loadRowSchema(table document.Table) cue.Value {
+	if table.Path == "" {
+		return cue.Value{}
 	}
-	return ""
-}
-
-func applyDefaults(table document.Table, rows map[string]map[string]any) {
 	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path)})
 	if len(instances) != 1 {
-		return
+		return cue.Value{}
 	}
 	context := cuecontext.New()
 	value := context.BuildInstance(instances[0])
 	if value.Err() != nil {
+		return cue.Value{}
+	}
+	return value.LookupPath(cue.MakePath(cue.Def("Row")))
+}
+
+func applyDefaults(table document.Table, rows map[string]map[string]any, blocked map[Reference]bool, rowSchema cue.Value, kinds map[string]schemamodel.Kind) {
+	if !rowSchema.Exists() {
 		return
 	}
-	rowSchema := value.LookupPath(cue.MakePath(cue.Def("Row")))
-	for _, row := range rows {
+	for rowID, row := range rows {
 		for _, column := range table.Columns {
+			if blocked[Reference{RowID: rowID, Column: column.Name}] {
+				continue
+			}
 			if _, exists := row[column.Name]; exists {
 				continue
 			}
@@ -339,7 +352,7 @@ func applyDefaults(table document.Table, rows map[string]map[string]any) {
 			}
 			var decoded any
 			if defaultValue.Decode(&decoded) == nil {
-				row[column.Name] = decoded
+				row[column.Name] = normalizeValueForColumn(decoded, kinds[column.Name])
 			}
 		}
 	}
@@ -354,86 +367,5 @@ func environment(table document.Table, rows map[string]map[string]any, rowID str
 	for column, value := range rows[rowID] {
 		environment[column] = value
 	}
-	environment[table.Namespace] = map[string]any{table.Name: rows}
 	return environment
-}
-
-func validateReferences(table document.Table, formula document.Formula, foreignKeys map[string]bool) error {
-	tree, err := parser.Parse(formula.Expression)
-	if err != nil {
-		return err
-	}
-	var validationError error
-	ast.Walk(&tree.Node, formulaReferenceVisitor{table: table, foreignKeys: foreignKeys, err: &validationError})
-	return validationError
-}
-
-type formulaReferenceVisitor struct {
-	table       document.Table
-	foreignKeys map[string]bool
-	err         *error
-}
-
-func (visitor formulaReferenceVisitor) Visit(node *ast.Node) {
-	if *visitor.err != nil {
-		return
-	}
-	if identifier, ok := (*node).(*ast.IdentifierNode); ok && visitor.foreignKeys[identifier.Value] {
-		*visitor.err = fmt.Errorf("formulas cannot read foreign key column %q", identifier.Value)
-		return
-	}
-	member, ok := (*node).(*ast.MemberNode)
-	if !ok {
-		return
-	}
-	path := memberPath(member)
-	if len(path) == 0 {
-		return
-	}
-	if visitor.foreignKeys[path[0]] {
-		*visitor.err = fmt.Errorf("formulas cannot read foreign key column %q", path[0])
-		return
-	}
-	if len(path) < 4 {
-		return
-	}
-	if len(path) != 4 || path[0] != visitor.table.Namespace || path[1] != visitor.table.Name {
-		*visitor.err = fmt.Errorf("formula reference %q must target the current table", joinPath(path))
-	}
-}
-
-func memberPath(node ast.Node) []string {
-	switch value := node.(type) {
-	case *ast.IdentifierNode:
-		return []string{value.Value}
-	case *ast.MemberNode:
-		path := memberPath(value.Node)
-		property, ok := value.Property.(*ast.StringNode)
-		if !ok {
-			return nil
-		}
-		return append(path, property.Value)
-	default:
-		return nil
-	}
-}
-
-func joinPath(path []string) string {
-	result := ""
-	for index, value := range path {
-		if index > 0 {
-			result += "."
-		}
-		result += value
-	}
-	return result
-}
-
-func sortedFormulaKeys(formulas map[string]document.Formula) []string {
-	keys := make([]string, 0, len(formulas))
-	for key := range formulas {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
 }
