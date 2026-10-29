@@ -50,15 +50,16 @@ func LoadProject(path string) (Project, error) {
 	if err := decoder.Decode(&config); err != nil {
 		return Project{}, fmt.Errorf("decode project file: %w", err)
 	}
-	if err := validateProjectConfig(config); err != nil {
+	project := Project{Path: absPath, Root: filepath.Dir(absPath), Config: config}
+	if _, err := exportDirectory(project); err != nil {
 		return Project{}, err
 	}
-	return Project{Path: absPath, Root: filepath.Dir(absPath), Config: config}, nil
+	return project, nil
 }
 
 // SaveProject atomically persists the project configuration.
 func SaveProject(project Project) error {
-	if err := validateProjectConfig(project.Config); err != nil {
+	if _, err := exportDirectory(project); err != nil {
 		return err
 	}
 	encoded, err := json.MarshalIndent(project.Config, "", "  ")
@@ -93,6 +94,15 @@ func validateProjectConfig(config ProjectConfig) error {
 	cleanExport := filepath.Clean(config.Export.Directory)
 	if filepath.IsAbs(config.Export.Directory) || cleanExport == "." || cleanExport == ".." || strings.HasPrefix(cleanExport, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("export directory %q escapes the project directory", config.Export.Directory)
+	}
+	// Output replaces an entire directory. Keep it disjoint from source roots,
+	// including excluded files and roots that have not been created yet.
+	protected := append([]string{"cue.mod", ".git"}, config.TableRoots...)
+	protected = append(protected, config.SchemaRoots...)
+	for _, path := range protected {
+		if pathsOverlap(cleanExport, filepath.Clean(path)) {
+			return fmt.Errorf("export directory %q overlaps protected project path %q", config.Export.Directory, path)
+		}
 	}
 	if len(config.Export.Targets) == 0 {
 		return fmt.Errorf("project must declare at least one export target")
