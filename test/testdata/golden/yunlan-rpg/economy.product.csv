@@ -1,4 +1,4 @@
-id,商店ID,道具ID,标价,折扣,实售价,每日限购,上架
+id,shop_id,item_id,list_price,discount,sale_price,daily_limit,listed
 product_01_1,shop_01,item_potion_01,40,0.8,32,5,true
 product_01_2,shop_01,item_weapon_01,140,1,140,1,true
 product_02_1,shop_02,item_potion_02,60,0.8,48,5,true

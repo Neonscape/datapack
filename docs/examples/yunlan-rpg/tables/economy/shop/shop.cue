@@ -2,100 +2,100 @@ package shop
 
 import "example.com/datapack/yunlan-rpg/schema:common"
 
-#PrimaryKey: common.#资源标识
+#PrimaryKey: common.#resource_id
 
 #Row: {
-    名称文本ID: common.#资源标识
-    章节: common.#章节
-    货币: "金币"
-    开放任务ID: string | null
-    营业中: bool
+    name_text_id: common.#resource_id
+    chapter: common.#chapter
+    currency: "金币"
+    unlock_quest_id: string | null
+    is_open: bool
 }
 
 rows: {
   "shop_01": {
-    "名称文本ID": "shop_01_name",
-    "章节": "青岚村",
-    "货币": "金币",
-    "开放任务ID": null,
-    "营业中": true
+    "name_text_id": "shop_01_name",
+    "chapter": "青岚村",
+    "currency": "金币",
+    "unlock_quest_id": null,
+    "is_open": true
   },
   "shop_02": {
-    "名称文本ID": "shop_02_name",
-    "章节": "青岚村",
-    "货币": "金币",
-    "开放任务ID": "quest_05",
-    "营业中": true
+    "name_text_id": "shop_02_name",
+    "chapter": "青岚村",
+    "currency": "金币",
+    "unlock_quest_id": "quest_05",
+    "is_open": true
   },
   "shop_03": {
-    "名称文本ID": "shop_03_name",
-    "章节": "青岚村",
-    "货币": "金币",
-    "开放任务ID": "quest_09",
-    "营业中": true
+    "name_text_id": "shop_03_name",
+    "chapter": "青岚村",
+    "currency": "金币",
+    "unlock_quest_id": "quest_09",
+    "is_open": true
   },
   "shop_04": {
-    "名称文本ID": "shop_04_name",
-    "章节": "青岚村",
-    "货币": "金币",
-    "开放任务ID": "quest_13",
-    "营业中": true
+    "name_text_id": "shop_04_name",
+    "chapter": "青岚村",
+    "currency": "金币",
+    "unlock_quest_id": "quest_13",
+    "is_open": true
   },
   "shop_05": {
-    "名称文本ID": "shop_05_name",
-    "章节": "赤砂遗迹",
-    "货币": "金币",
-    "开放任务ID": "quest_17",
-    "营业中": true
+    "name_text_id": "shop_05_name",
+    "chapter": "赤砂遗迹",
+    "currency": "金币",
+    "unlock_quest_id": "quest_17",
+    "is_open": true
   },
   "shop_06": {
-    "名称文本ID": "shop_06_name",
-    "章节": "赤砂遗迹",
-    "货币": "金币",
-    "开放任务ID": "quest_21",
-    "营业中": true
+    "name_text_id": "shop_06_name",
+    "chapter": "赤砂遗迹",
+    "currency": "金币",
+    "unlock_quest_id": "quest_21",
+    "is_open": true
   },
   "shop_07": {
-    "名称文本ID": "shop_07_name",
-    "章节": "赤砂遗迹",
-    "货币": "金币",
-    "开放任务ID": "quest_25",
-    "营业中": true
+    "name_text_id": "shop_07_name",
+    "chapter": "赤砂遗迹",
+    "currency": "金币",
+    "unlock_quest_id": "quest_25",
+    "is_open": true
   },
   "shop_08": {
-    "名称文本ID": "shop_08_name",
-    "章节": "赤砂遗迹",
-    "货币": "金币",
-    "开放任务ID": "quest_29",
-    "营业中": true
+    "name_text_id": "shop_08_name",
+    "chapter": "赤砂遗迹",
+    "currency": "金币",
+    "unlock_quest_id": "quest_29",
+    "is_open": true
   },
   "shop_09": {
-    "名称文本ID": "shop_09_name",
-    "章节": "霜月城",
-    "货币": "金币",
-    "开放任务ID": "quest_33",
-    "营业中": true
+    "name_text_id": "shop_09_name",
+    "chapter": "霜月城",
+    "currency": "金币",
+    "unlock_quest_id": "quest_33",
+    "is_open": true
   },
   "shop_10": {
-    "名称文本ID": "shop_10_name",
-    "章节": "霜月城",
-    "货币": "金币",
-    "开放任务ID": "quest_37",
-    "营业中": true
+    "name_text_id": "shop_10_name",
+    "chapter": "霜月城",
+    "currency": "金币",
+    "unlock_quest_id": "quest_37",
+    "is_open": true
   },
   "shop_11": {
-    "名称文本ID": "shop_11_name",
-    "章节": "霜月城",
-    "货币": "金币",
-    "开放任务ID": "quest_41",
-    "营业中": true
+    "name_text_id": "shop_11_name",
+    "chapter": "霜月城",
+    "currency": "金币",
+    "unlock_quest_id": "quest_41",
+    "is_open": true
   },
   "shop_12": {
-    "名称文本ID": "shop_12_name",
-    "章节": "霜月城",
-    "货币": "金币",
-    "开放任务ID": "quest_45",
-    "营业中": true
+    "name_text_id": "shop_12_name",
+    "chapter": "霜月城",
+    "currency": "金币",
+    "unlock_quest_id": "quest_45",
+    "is_open": true
   }
 }
 
@@ -106,10 +106,10 @@ _tool: {
     "name": "shop"
   },
   "foreignKeys": {
-    "名称文本ID": {
+    "name_text_id": {
       "table": "localization.text"
     },
-    "开放任务ID": {
+    "unlock_quest_id": {
       "table": "quest.quest"
     }
   },
@@ -120,9 +120,26 @@ _editor: {
   "table": {
     "title": "商店：区域经营"
   },
+  "columns": {
+    "name_text_id": {
+      "title": "名称文本ID"
+    },
+    "chapter": {
+      "title": "章节"
+    },
+    "currency": {
+      "title": "货币"
+    },
+    "unlock_quest_id": {
+      "title": "解锁任务ID"
+    },
+    "is_open": {
+      "title": "营业中"
+    }
+  },
   "cellComments": {
     "shop_01": {
-      "开放任务ID": "新手药铺默认开放，其余商店在对应任务后解锁。"
+      "unlock_quest_id": "新手药铺默认开放，其余商店在对应任务后解锁。"
     }
   }
 }
@@ -130,7 +147,7 @@ _editor: {
 _export: {
   "csv": {
     "enabled": true,
-    "columns": ["id", "名称文本ID", "章节", "货币", "开放任务ID", "营业中"],
+    "columns": ["id", "name_text_id", "chapter", "currency", "unlock_quest_id", "is_open"],
     "encoding": {}
   }
 }

@@ -1,3 +1,4 @@
+// Standalone Unicode-ID support; the Yunlan example uses English field IDs.
 import {expect, test, type Page} from "@playwright/test";
 
 test.use({viewport: {width: 1600, height: 1000}});

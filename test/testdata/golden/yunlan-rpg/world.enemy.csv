@@ -1,4 +1,4 @@
-id,名称文本ID,章节,等级,生命,攻击,技能ID,掉落组ID,精英
+id,name_text_id,chapter,level,hp,attack,skill_ids,loot_group_id,elite
 enemy_01,enemy_01_name,青岚村,1,225,17,"[""skill_01""]",loot_01,false
 enemy_02,enemy_02_name,青岚村,3,270,22,"[""skill_06""]",loot_01,false
 enemy_03,enemy_03_name,青岚村,5,315,27,"[""skill_02""]",loot_02,false

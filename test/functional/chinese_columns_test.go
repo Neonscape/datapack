@@ -9,8 +9,8 @@ import (
 	"datapack/internal/workspace"
 )
 
-// Validate two small, real Chinese-column tables before expanding the learning
-// project. All edits/diagnostics/exports use the backend in a private TempDir.
+// Standalone Unicode-ID compatibility, separate from Yunlan's English IDs and
+// Chinese display names. Backend edits/diagnostics/exports use a private TempDir.
 func TestChineseColumnsCompileEditRenameDiagnoseAndExport(t *testing.T) {
 	root, project := emptyProject(t)
 	writeFile(t, filepath.Join(root, "cue.mod", "module.cue"), `module: "example.com/chinese-probe"

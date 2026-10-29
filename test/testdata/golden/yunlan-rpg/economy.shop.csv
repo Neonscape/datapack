@@ -1,4 +1,4 @@
-id,名称文本ID,章节,货币,开放任务ID,营业中
+id,name_text_id,chapter,currency,unlock_quest_id,is_open
 shop_01,shop_01_name,青岚村,金币,,true
 shop_02,shop_02_name,青岚村,金币,quest_05,true
 shop_03,shop_03_name,青岚村,金币,quest_09,true

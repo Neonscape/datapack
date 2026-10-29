@@ -2,305 +2,305 @@ package effect
 
 import "example.com/datapack/yunlan-rpg/schema:common"
 
-#PrimaryKey: common.#资源标识
+#PrimaryKey: common.#resource_id
 
 #Row: {
-    名称文本ID: common.#资源标识
-    类别: common.#效果类别
-    强度: number & common.#非负
-    持续回合: int & common.#非负
-    触发概率: common.#概率
-    策划说明: common.#必填文本
+    name_text_id: common.#resource_id
+    category: common.#effect_category
+    magnitude: number & common.#non_negative
+    duration_turns: int & common.#non_negative
+    proc_chance: common.#probability
+    designer_notes: common.#non_empty_text
 }
 
 rows: {
   "effect_01": {
-    "名称文本ID": "effect_01_name",
-    "类别": "伤害",
-    "强度": 10,
-    "持续回合": 1,
-    "触发概率": 1,
-    "策划说明": "青岚村流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_01_name",
+    "category": "伤害",
+    "magnitude": 10,
+    "duration_turns": 1,
+    "proc_chance": 1,
+    "designer_notes": "青岚村流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_02": {
-    "名称文本ID": "effect_02_name",
-    "类别": "伤害",
-    "强度": 16,
-    "持续回合": 2,
-    "触发概率": 1,
-    "策划说明": "青岚村流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_02_name",
+    "category": "伤害",
+    "magnitude": 16,
+    "duration_turns": 2,
+    "proc_chance": 1,
+    "designer_notes": "青岚村流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_03": {
-    "名称文本ID": "effect_03_name",
-    "类别": "伤害",
-    "强度": 22,
-    "持续回合": 3,
-    "触发概率": 1,
-    "策划说明": "青岚村流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_03_name",
+    "category": "伤害",
+    "magnitude": 22,
+    "duration_turns": 3,
+    "proc_chance": 1,
+    "designer_notes": "青岚村流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_04": {
-    "名称文本ID": "effect_04_name",
-    "类别": "治疗",
-    "强度": 10,
-    "持续回合": 1,
-    "触发概率": 1,
-    "策划说明": "青岚村流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_04_name",
+    "category": "治疗",
+    "magnitude": 10,
+    "duration_turns": 1,
+    "proc_chance": 1,
+    "designer_notes": "青岚村流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_05": {
-    "名称文本ID": "effect_05_name",
-    "类别": "治疗",
-    "强度": 16,
-    "持续回合": 2,
-    "触发概率": 1,
-    "策划说明": "青岚村流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_05_name",
+    "category": "治疗",
+    "magnitude": 16,
+    "duration_turns": 2,
+    "proc_chance": 1,
+    "designer_notes": "青岚村流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_06": {
-    "名称文本ID": "effect_06_name",
-    "类别": "治疗",
-    "强度": 22,
-    "持续回合": 3,
-    "触发概率": 1,
-    "策划说明": "青岚村流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_06_name",
+    "category": "治疗",
+    "magnitude": 22,
+    "duration_turns": 3,
+    "proc_chance": 1,
+    "designer_notes": "青岚村流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_07": {
-    "名称文本ID": "effect_07_name",
-    "类别": "控制",
-    "强度": 10,
-    "持续回合": 1,
-    "触发概率": 0.6,
-    "策划说明": "青岚村流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_07_name",
+    "category": "控制",
+    "magnitude": 10,
+    "duration_turns": 1,
+    "proc_chance": 0.6,
+    "designer_notes": "青岚村流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_08": {
-    "名称文本ID": "effect_08_name",
-    "类别": "控制",
-    "强度": 16,
-    "持续回合": 2,
-    "触发概率": 0.7,
-    "策划说明": "青岚村流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_08_name",
+    "category": "控制",
+    "magnitude": 16,
+    "duration_turns": 2,
+    "proc_chance": 0.7,
+    "designer_notes": "青岚村流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_09": {
-    "名称文本ID": "effect_09_name",
-    "类别": "控制",
-    "强度": 22,
-    "持续回合": 3,
-    "触发概率": 0.8,
-    "策划说明": "青岚村流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_09_name",
+    "category": "控制",
+    "magnitude": 22,
+    "duration_turns": 3,
+    "proc_chance": 0.8,
+    "designer_notes": "青岚村流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_10": {
-    "名称文本ID": "effect_10_name",
-    "类别": "增益",
-    "强度": 10,
-    "持续回合": 1,
-    "触发概率": 1,
-    "策划说明": "青岚村流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_10_name",
+    "category": "增益",
+    "magnitude": 10,
+    "duration_turns": 1,
+    "proc_chance": 1,
+    "designer_notes": "青岚村流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_11": {
-    "名称文本ID": "effect_11_name",
-    "类别": "增益",
-    "强度": 16,
-    "持续回合": 2,
-    "触发概率": 1,
-    "策划说明": "青岚村流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_11_name",
+    "category": "增益",
+    "magnitude": 16,
+    "duration_turns": 2,
+    "proc_chance": 1,
+    "designer_notes": "青岚村流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_12": {
-    "名称文本ID": "effect_12_name",
-    "类别": "增益",
-    "强度": 22,
-    "持续回合": 3,
-    "触发概率": 1,
-    "策划说明": "青岚村流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_12_name",
+    "category": "增益",
+    "magnitude": 22,
+    "duration_turns": 3,
+    "proc_chance": 1,
+    "designer_notes": "青岚村流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_13": {
-    "名称文本ID": "effect_13_name",
-    "类别": "伤害",
-    "强度": 18,
-    "持续回合": 1,
-    "触发概率": 1,
-    "策划说明": "赤砂遗迹流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_13_name",
+    "category": "伤害",
+    "magnitude": 18,
+    "duration_turns": 1,
+    "proc_chance": 1,
+    "designer_notes": "赤砂遗迹流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_14": {
-    "名称文本ID": "effect_14_name",
-    "类别": "伤害",
-    "强度": 24,
-    "持续回合": 2,
-    "触发概率": 1,
-    "策划说明": "赤砂遗迹流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_14_name",
+    "category": "伤害",
+    "magnitude": 24,
+    "duration_turns": 2,
+    "proc_chance": 1,
+    "designer_notes": "赤砂遗迹流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_15": {
-    "名称文本ID": "effect_15_name",
-    "类别": "伤害",
-    "强度": 30,
-    "持续回合": 3,
-    "触发概率": 1,
-    "策划说明": "赤砂遗迹流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_15_name",
+    "category": "伤害",
+    "magnitude": 30,
+    "duration_turns": 3,
+    "proc_chance": 1,
+    "designer_notes": "赤砂遗迹流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_16": {
-    "名称文本ID": "effect_16_name",
-    "类别": "治疗",
-    "强度": 18,
-    "持续回合": 1,
-    "触发概率": 1,
-    "策划说明": "赤砂遗迹流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_16_name",
+    "category": "治疗",
+    "magnitude": 18,
+    "duration_turns": 1,
+    "proc_chance": 1,
+    "designer_notes": "赤砂遗迹流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_17": {
-    "名称文本ID": "effect_17_name",
-    "类别": "治疗",
-    "强度": 24,
-    "持续回合": 2,
-    "触发概率": 1,
-    "策划说明": "赤砂遗迹流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_17_name",
+    "category": "治疗",
+    "magnitude": 24,
+    "duration_turns": 2,
+    "proc_chance": 1,
+    "designer_notes": "赤砂遗迹流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_18": {
-    "名称文本ID": "effect_18_name",
-    "类别": "治疗",
-    "强度": 30,
-    "持续回合": 3,
-    "触发概率": 1,
-    "策划说明": "赤砂遗迹流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_18_name",
+    "category": "治疗",
+    "magnitude": 30,
+    "duration_turns": 3,
+    "proc_chance": 1,
+    "designer_notes": "赤砂遗迹流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_19": {
-    "名称文本ID": "effect_19_name",
-    "类别": "控制",
-    "强度": 18,
-    "持续回合": 1,
-    "触发概率": 0.6,
-    "策划说明": "赤砂遗迹流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_19_name",
+    "category": "控制",
+    "magnitude": 18,
+    "duration_turns": 1,
+    "proc_chance": 0.6,
+    "designer_notes": "赤砂遗迹流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_20": {
-    "名称文本ID": "effect_20_name",
-    "类别": "控制",
-    "强度": 24,
-    "持续回合": 2,
-    "触发概率": 0.7,
-    "策划说明": "赤砂遗迹流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_20_name",
+    "category": "控制",
+    "magnitude": 24,
+    "duration_turns": 2,
+    "proc_chance": 0.7,
+    "designer_notes": "赤砂遗迹流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_21": {
-    "名称文本ID": "effect_21_name",
-    "类别": "控制",
-    "强度": 30,
-    "持续回合": 3,
-    "触发概率": 0.8,
-    "策划说明": "赤砂遗迹流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_21_name",
+    "category": "控制",
+    "magnitude": 30,
+    "duration_turns": 3,
+    "proc_chance": 0.8,
+    "designer_notes": "赤砂遗迹流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_22": {
-    "名称文本ID": "effect_22_name",
-    "类别": "增益",
-    "强度": 18,
-    "持续回合": 1,
-    "触发概率": 1,
-    "策划说明": "赤砂遗迹流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_22_name",
+    "category": "增益",
+    "magnitude": 18,
+    "duration_turns": 1,
+    "proc_chance": 1,
+    "designer_notes": "赤砂遗迹流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_23": {
-    "名称文本ID": "effect_23_name",
-    "类别": "增益",
-    "强度": 24,
-    "持续回合": 2,
-    "触发概率": 1,
-    "策划说明": "赤砂遗迹流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_23_name",
+    "category": "增益",
+    "magnitude": 24,
+    "duration_turns": 2,
+    "proc_chance": 1,
+    "designer_notes": "赤砂遗迹流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_24": {
-    "名称文本ID": "effect_24_name",
-    "类别": "增益",
-    "强度": 30,
-    "持续回合": 3,
-    "触发概率": 1,
-    "策划说明": "赤砂遗迹流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_24_name",
+    "category": "增益",
+    "magnitude": 30,
+    "duration_turns": 3,
+    "proc_chance": 1,
+    "designer_notes": "赤砂遗迹流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_25": {
-    "名称文本ID": "effect_25_name",
-    "类别": "伤害",
-    "强度": 26,
-    "持续回合": 1,
-    "触发概率": 1,
-    "策划说明": "霜月城流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_25_name",
+    "category": "伤害",
+    "magnitude": 26,
+    "duration_turns": 1,
+    "proc_chance": 1,
+    "designer_notes": "霜月城流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_26": {
-    "名称文本ID": "effect_26_name",
-    "类别": "伤害",
-    "强度": 32,
-    "持续回合": 2,
-    "触发概率": 1,
-    "策划说明": "霜月城流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_26_name",
+    "category": "伤害",
+    "magnitude": 32,
+    "duration_turns": 2,
+    "proc_chance": 1,
+    "designer_notes": "霜月城流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_27": {
-    "名称文本ID": "effect_27_name",
-    "类别": "伤害",
-    "强度": 38,
-    "持续回合": 3,
-    "触发概率": 1,
-    "策划说明": "霜月城流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_27_name",
+    "category": "伤害",
+    "magnitude": 38,
+    "duration_turns": 3,
+    "proc_chance": 1,
+    "designer_notes": "霜月城流派的伤害效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_28": {
-    "名称文本ID": "effect_28_name",
-    "类别": "治疗",
-    "强度": 26,
-    "持续回合": 1,
-    "触发概率": 1,
-    "策划说明": "霜月城流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_28_name",
+    "category": "治疗",
+    "magnitude": 26,
+    "duration_turns": 1,
+    "proc_chance": 1,
+    "designer_notes": "霜月城流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_29": {
-    "名称文本ID": "effect_29_name",
-    "类别": "治疗",
-    "强度": 32,
-    "持续回合": 2,
-    "触发概率": 1,
-    "策划说明": "霜月城流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_29_name",
+    "category": "治疗",
+    "magnitude": 32,
+    "duration_turns": 2,
+    "proc_chance": 1,
+    "designer_notes": "霜月城流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_30": {
-    "名称文本ID": "effect_30_name",
-    "类别": "治疗",
-    "强度": 38,
-    "持续回合": 3,
-    "触发概率": 1,
-    "策划说明": "霜月城流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_30_name",
+    "category": "治疗",
+    "magnitude": 38,
+    "duration_turns": 3,
+    "proc_chance": 1,
+    "designer_notes": "霜月城流派的治疗效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_31": {
-    "名称文本ID": "effect_31_name",
-    "类别": "控制",
-    "强度": 26,
-    "持续回合": 1,
-    "触发概率": 0.6,
-    "策划说明": "霜月城流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_31_name",
+    "category": "控制",
+    "magnitude": 26,
+    "duration_turns": 1,
+    "proc_chance": 0.6,
+    "designer_notes": "霜月城流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_32": {
-    "名称文本ID": "effect_32_name",
-    "类别": "控制",
-    "强度": 32,
-    "持续回合": 2,
-    "触发概率": 0.7,
-    "策划说明": "霜月城流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_32_name",
+    "category": "控制",
+    "magnitude": 32,
+    "duration_turns": 2,
+    "proc_chance": 0.7,
+    "designer_notes": "霜月城流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_33": {
-    "名称文本ID": "effect_33_name",
-    "类别": "控制",
-    "强度": 38,
-    "持续回合": 3,
-    "触发概率": 0.8,
-    "策划说明": "霜月城流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_33_name",
+    "category": "控制",
+    "magnitude": 38,
+    "duration_turns": 3,
+    "proc_chance": 0.8,
+    "designer_notes": "霜月城流派的控制效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_34": {
-    "名称文本ID": "effect_34_name",
-    "类别": "增益",
-    "强度": 26,
-    "持续回合": 1,
-    "触发概率": 1,
-    "策划说明": "霜月城流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_34_name",
+    "category": "增益",
+    "magnitude": 26,
+    "duration_turns": 1,
+    "proc_chance": 1,
+    "designer_notes": "霜月城流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_35": {
-    "名称文本ID": "effect_35_name",
-    "类别": "增益",
-    "强度": 32,
-    "持续回合": 2,
-    "触发概率": 1,
-    "策划说明": "霜月城流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_35_name",
+    "category": "增益",
+    "magnitude": 32,
+    "duration_turns": 2,
+    "proc_chance": 1,
+    "designer_notes": "霜月城流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
   },
   "effect_36": {
-    "名称文本ID": "effect_36_name",
-    "类别": "增益",
-    "强度": 38,
-    "持续回合": 3,
-    "触发概率": 1,
-    "策划说明": "霜月城流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
+    "name_text_id": "effect_36_name",
+    "category": "增益",
+    "magnitude": 38,
+    "duration_turns": 3,
+    "proc_chance": 1,
+    "designer_notes": "霜月城流派的增益效果；强度由技能倍率使用，不在表间自动计算。"
   }
 }
 
@@ -311,7 +311,7 @@ _tool: {
     "name": "effect"
   },
   "foreignKeys": {
-    "名称文本ID": {
+    "name_text_id": {
       "table": "localization.text"
     }
   },
@@ -322,15 +322,35 @@ _editor: {
   "table": {
     "title": "效果：战斗机制"
   },
+  "columns": {
+    "name_text_id": {
+      "title": "名称文本ID"
+    },
+    "category": {
+      "title": "类别"
+    },
+    "magnitude": {
+      "title": "强度"
+    },
+    "duration_turns": {
+      "title": "持续回合"
+    },
+    "proc_chance": {
+      "title": "触发概率"
+    },
+    "designer_notes": {
+      "title": "策划备注"
+    }
+  },
   "cellComments": {
     "effect_01": {
-      "强度": "这是效果的基础量；技能倍率由游戏运行时组合，不是跨表公式。"
+      "magnitude": "这是效果的基础量；技能倍率由游戏运行时组合，不是跨表公式。"
     },
     "effect_04": {
-      "类别": "治疗与伤害用不同分支，强度仍使用同一非负列。"
+      "category": "治疗与伤害用不同分支，强度仍使用同一非负列。"
     },
     "effect_07": {
-      "触发概率": "0.6代表60%，取值范围由公共概率Schema约束。"
+      "proc_chance": "0.6代表60%，取值范围由公共概率Schema约束。"
     }
   }
 }
@@ -338,7 +358,7 @@ _editor: {
 _export: {
   "csv": {
     "enabled": true,
-    "columns": ["id", "名称文本ID", "类别", "强度", "持续回合", "触发概率"],
+    "columns": ["id", "name_text_id", "category", "magnitude", "duration_turns", "proc_chance"],
     "encoding": {}
   }
 }

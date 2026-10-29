@@ -1,4 +1,4 @@
-id,掉落组ID,道具ID,权重,最小数量,最大数量
+id,loot_group_id,item_id,weight,min_quantity,max_quantity
 drop_01_1,loot_01,item_material_01,0.4,1,1
 drop_01_2,loot_01,item_material_02,0.3,1,2
 drop_01_3,loot_01,item_potion_01,0.3,1,3

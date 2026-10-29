@@ -5,21 +5,29 @@ import {expect, test, type Page} from "@playwright/test";
 test.use({viewport: {width: 1600, height: 1000}});
 // Actual example rows, real App/array dialogs; only Wails is mocked here.
 // TestYunlanSkillAndTagArraysSaveReopenCompileUndoRedo covers actual CUE I/O.
-function rows(path: string): Record<string, Record<string, unknown>> {
+function section(path: string, name = "rows"): Record<string, Record<string, unknown>> {
     const source = readFileSync(new URL(`../../docs/examples/yunlan-rpg/${path}`, import.meta.url), "utf8");
-    const start = source.indexOf("\nrows: ");
-    const end = source.indexOf("\n\n_tool:", start);
+    const marker = `\n${name}: `;
+    const start = source.indexOf(marker);
+    const end = source.indexOf("\n\n_", start);
     if (start < 0 || end < 0) throw new Error("sample rows missing");
-    return JSON.parse(source.slice(start + 7, end)) as Record<string, Record<string, unknown>>;
+    return JSON.parse(source.slice(start + marker.length, end)) as Record<string, Record<string, unknown>>;
 }
 function strings(value: unknown): string[] {
     if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) throw new Error("sample string array expected");
     return value as string[];
 }
-const heroRows = rows("tables/content/hero/hero.cue");
-const skillRows = rows("tables/content/skill/skill.cue");
+const heroRows = section("tables/content/hero/hero.cue");
+const skillRows = section("tables/content/skill/skill.cue");
+const heroEditor = section("tables/content/hero/hero.cue", "_editor");
+const skillEditor = section("tables/content/skill/skill.cue", "_editor");
+function title(editor: Record<string, Record<string, unknown>>, field: string): string {
+    const column = editor.columns[field] as {title?: unknown};
+    if (typeof column?.title !== "string") throw new Error("sample display name missing");
+    return column.title;
+}
 type State = {values: Record<string, string[]>; calls: {method: string; argument?: Record<string, unknown>}[]};
-declare global {interface Window {__yunlanArrays: State}}
+declare global {interface Window {__yunlanArrays: State; __yunlanHeaderText: string[]}}
 async function openArray(page: Page, field: string) {
     const canvas = page.locator(".tab-panel:visible canvas").first();
     await expect(canvas).toBeVisible();
@@ -34,9 +42,17 @@ async function history(page: Page, action: "Undo" | "Redo") {
 }
 
 test("edits Yunlan skill/tag arrays, reopens, compiles, and uses Undo/Redo", async ({page}) => {
-    await page.addInitScript(({heroSkills, skillTags, allSkillIDs}) => {
+    await page.addInitScript(({heroSkills, skillTags, allSkillIDs, displayNames}) => {
         const state: State = {values: {hero: heroSkills, skill: skillTags}, calls: []};
         window.__yunlanArrays = state;
+        // Observe the actual canvas draw calls without changing rendered text.
+        window.__yunlanHeaderText = [];
+        const fillText = CanvasRenderingContext2D.prototype.fillText;
+        CanvasRenderingContext2D.prototype.fillText = function (this: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth?: number) {
+            if (!window.__yunlanHeaderText.includes(text)) window.__yunlanHeaderText.push(text);
+            if (maxWidth === undefined) fillText.call(this, text, x, y);
+            else fillText.call(this, text, x, y, maxWidth);
+        };
         const undo: Record<string, string[]>[] = [], redo: Record<string, string[]>[] = [];
         let pending = false;
         const path = (name: string) => `/project/tables/content/${name}/${name}.cue`;
@@ -48,10 +64,10 @@ test("edits Yunlan skill/tag arrays, reopens, compiles, and uses Undo/Redo", asy
         });
         const table = (tablePath: string) => {
             const name = tablePath === path("hero") ? "hero" : "skill";
-            const field = name === "hero" ? "技能ID" : "标签";
+            const field = name === "hero" ? "skill_ids" : "tags";
             const expression = `[\n${state.values[name].map((v) => JSON.stringify(v)).join(",\n")},\n]`;
             return {path: tablePath, namespace: "content", name,
-                columns: [{name: field, schemaExpression: "[...string]", schema: {kind: "array", element: {kind: "string"}}, ...(name === "hero" ? {foreignKeyTable: "content.skill", foreignKeyOptions: allSkillIDs} : {})}],
+                columns: [{name: field, displayName: displayNames[name], schemaExpression: "[...string]", schema: {kind: "array", element: {kind: "string"}}, ...(name === "hero" ? {foreignKeyTable: "content.skill", foreignKeyOptions: allSkillIDs} : {})}],
                 rows: [{id: `${name}_01`, values: {[field]: {expression, display: expression}}}], localSchema: [], diagnostics: []};
         };
         (window as unknown as Window & {go: unknown}).go = {main: {App: {
@@ -68,12 +84,13 @@ test("edits Yunlan skill/tag arrays, reopens, compiles, and uses Undo/Redo", asy
             Undo: async () => {state.calls.push({method: "Undo"}); redo.push(structuredClone(state.values)); state.values = undo.pop()!; return {workspace: view(), canUndo: undo.length > 0, canRedo: true};},
             Redo: async () => {state.calls.push({method: "Redo"}); undo.push(structuredClone(state.values)); state.values = redo.pop()!; return {workspace: view(), canUndo: true, canRedo: redo.length > 0};},
         }}};
-    }, {heroSkills: strings(heroRows.hero_01.技能ID), skillTags: strings(skillRows.skill_01.标签), allSkillIDs: Object.keys(skillRows)});
+    }, {heroSkills: strings(heroRows.hero_01.skill_ids), skillTags: strings(skillRows.skill_01.tags), allSkillIDs: Object.keys(skillRows), displayNames: {hero: title(heroEditor, "skill_ids"), skill: title(skillEditor, "tags")}});
     await page.goto("/");
     await page.getByRole("button", {name: "File", exact: true}).click();
     await page.getByLabel("Application menu").getByRole("button", {name: "Open project", exact: true}).click();
     await page.getByRole("button", {name: "hero", exact: true}).click();
-    await openArray(page, "技能ID");
+    await openArray(page, "skill_ids");
+    await expect.poll(() => page.evaluate(() => window.__yunlanHeaderText.some((text) => text.startsWith("技能列表")))).toBe(true);
     await expect(page.getByRole("combobox", {name: "Array item 1", exact: true})).toHaveValue("skill_01");
     await page.getByRole("button", {name: "Move item 2 up"}).click();
     await page.getByRole("button", {name: "Apply", exact: true}).click();
@@ -81,11 +98,12 @@ test("edits Yunlan skill/tag arrays, reopens, compiles, and uses Undo/Redo", asy
     await expect.poll(() => page.evaluate(() => window.__yunlanArrays.values.hero)).toEqual(hero);
     await page.getByRole("tab", {name: /content.hero/}).locator(".tab-close").click();
     await page.getByRole("button", {name: "hero", exact: true}).click();
-    await openArray(page, "技能ID");
+    await openArray(page, "skill_ids");
     await expect(page.getByRole("combobox", {name: "Array item 1", exact: true})).toHaveValue("skill_02");
     await page.getByRole("button", {name: "Close array editor"}).click();
     await page.getByRole("button", {name: "skill", exact: true}).click();
-    await openArray(page, "标签");
+    await openArray(page, "tags");
+    await expect.poll(() => page.evaluate(() => window.__yunlanHeaderText)).toContain("标签 (tags)");
     await page.getByRole("button", {name: "Move item 2 up"}).click();
     await page.getByRole("button", {name: "Add item", exact: true}).click();
     await page.getByRole("textbox", {name: "Array item 3", exact: true}).fill('"教学验证"');
@@ -97,15 +115,15 @@ test("edits Yunlan skill/tag arrays, reopens, compiles, and uses Undo/Redo", asy
     await history(page, "Undo");
     await expect.poll(() => page.evaluate(() => window.__yunlanArrays.values.skill)).toEqual(["主动", "战士"]);
     await history(page, "Undo");
-    await expect.poll(() => page.evaluate(() => window.__yunlanArrays.values.hero)).toEqual(strings(heroRows.hero_01.技能ID));
+    await expect.poll(() => page.evaluate(() => window.__yunlanArrays.values.hero)).toEqual(strings(heroRows.hero_01.skill_ids));
     await history(page, "Redo"); await history(page, "Redo");
     await expect.poll(() => page.evaluate(() => window.__yunlanArrays.values)).toEqual({hero, skill});
-    await openArray(page, "标签");
+    await openArray(page, "tags");
     await expect(page.getByRole("textbox", {name: "Array item 3", exact: true})).toHaveValue('"教学验证"');
     await page.getByRole("button", {name: "Close array editor"}).click();
     const updates = await page.evaluate(() => window.__yunlanArrays.calls.filter((call) => call.method === "UpdateCell"));
     expect(updates).toEqual([
-        {method: "UpdateCell", argument: {path: "/project/tables/content/hero/hero.cue", rowID: "hero_01", column: "技能ID", expression: '["skill_02", "skill_01", "skill_03", "skill_04"]'}},
-        {method: "UpdateCell", argument: {path: "/project/tables/content/skill/skill.cue", rowID: "skill_01", column: "标签", expression: '["战士", "主动", "教学验证"]'}},
+        {method: "UpdateCell", argument: {path: "/project/tables/content/hero/hero.cue", rowID: "hero_01", column: "skill_ids", expression: '["skill_02", "skill_01", "skill_03", "skill_04"]'}},
+        {method: "UpdateCell", argument: {path: "/project/tables/content/skill/skill.cue", rowID: "skill_01", column: "tags", expression: '["战士", "主动", "教学验证"]'}},
     ]);
 });

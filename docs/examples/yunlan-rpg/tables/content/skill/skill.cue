@@ -2,548 +2,548 @@ package skill
 
 import "example.com/datapack/yunlan-rpg/schema:common"
 
-#PrimaryKey: common.#资源标识
+#PrimaryKey: common.#resource_id
 
 #Row: {
-    名称文本ID: common.#资源标识
-    描述文本ID: string | null
-    解锁等级: int & >=1 & <=60
-    法力消耗: int & common.#非负
-    冷却回合: int & common.#非负
-    主效果ID: common.#资源标识
-    额外效果ID: [...common.#资源标识]
-    倍率: number & common.#正数
-    标签: [...string]
+    name_text_id: common.#resource_id
+    description_text_id: string | null
+    unlock_level: int & >=1 & <=60
+    mana_cost: int & common.#non_negative
+    cooldown_turns: int & common.#non_negative
+    primary_effect_id: common.#resource_id
+    bonus_effect_ids: [...common.#resource_id]
+    multiplier: number & common.#positive
+    tags: [...string]
 }
 
 rows: {
   "skill_01": {
-    "名称文本ID": "skill_01_name",
-    "描述文本ID": "skill_01_desc",
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_01",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "战士"]
+    "name_text_id": "skill_01_name",
+    "description_text_id": "skill_01_desc",
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_01",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "战士"]
   },
   "skill_02": {
-    "名称文本ID": "skill_02_name",
-    "描述文本ID": "skill_02_desc",
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_11",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "战士"]
+    "name_text_id": "skill_02_name",
+    "description_text_id": "skill_02_desc",
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_11",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "战士"]
   },
   "skill_03": {
-    "名称文本ID": "skill_03_name",
-    "描述文本ID": "skill_03_desc",
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_12",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "战士"]
+    "name_text_id": "skill_03_name",
+    "description_text_id": "skill_03_desc",
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_12",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "战士"]
   },
   "skill_04": {
-    "名称文本ID": "skill_04_name",
-    "描述文本ID": "skill_04_desc",
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_09",
-    "额外效果ID": ["effect_10"],
-    "倍率": 1.75,
-    "标签": ["主动", "战士"]
+    "name_text_id": "skill_04_name",
+    "description_text_id": "skill_04_desc",
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_09",
+    "bonus_effect_ids": ["effect_10"],
+    "multiplier": 1.75,
+    "tags": ["主动", "战士"]
   },
   "skill_05": {
-    "名称文本ID": "skill_05_name",
-    "描述文本ID": "skill_05_desc",
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_01",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "游侠"]
+    "name_text_id": "skill_05_name",
+    "description_text_id": "skill_05_desc",
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_01",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "游侠"]
   },
   "skill_06": {
-    "名称文本ID": "skill_06_name",
-    "描述文本ID": "skill_06_desc",
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_08",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "游侠"]
+    "name_text_id": "skill_06_name",
+    "description_text_id": "skill_06_desc",
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_08",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "游侠"]
   },
   "skill_07": {
-    "名称文本ID": "skill_07_name",
-    "描述文本ID": "skill_07_desc",
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_12",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "游侠"]
+    "name_text_id": "skill_07_name",
+    "description_text_id": "skill_07_desc",
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_12",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "游侠"]
   },
   "skill_08": {
-    "名称文本ID": "skill_08_name",
-    "描述文本ID": "skill_08_desc",
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_03",
-    "额外效果ID": ["effect_10"],
-    "倍率": 1.75,
-    "标签": ["主动", "游侠"]
+    "name_text_id": "skill_08_name",
+    "description_text_id": "skill_08_desc",
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_03",
+    "bonus_effect_ids": ["effect_10"],
+    "multiplier": 1.75,
+    "tags": ["主动", "游侠"]
   },
   "skill_09": {
-    "名称文本ID": "skill_09_name",
-    "描述文本ID": "skill_09_desc",
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_04",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "医师"]
+    "name_text_id": "skill_09_name",
+    "description_text_id": "skill_09_desc",
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_04",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "医师"]
   },
   "skill_10": {
-    "名称文本ID": "skill_10_name",
-    "描述文本ID": "skill_10_desc",
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_05",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "医师"]
+    "name_text_id": "skill_10_name",
+    "description_text_id": "skill_10_desc",
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_05",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "医师"]
   },
   "skill_11": {
-    "名称文本ID": "skill_11_name",
-    "描述文本ID": "skill_11_desc",
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_12",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "医师"]
+    "name_text_id": "skill_11_name",
+    "description_text_id": "skill_11_desc",
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_12",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "医师"]
   },
   "skill_12": {
-    "名称文本ID": "skill_12_name",
-    "描述文本ID": "skill_12_desc",
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_06",
-    "额外效果ID": ["effect_10"],
-    "倍率": 1.75,
-    "标签": ["主动", "医师"]
+    "name_text_id": "skill_12_name",
+    "description_text_id": "skill_12_desc",
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_06",
+    "bonus_effect_ids": ["effect_10"],
+    "multiplier": 1.75,
+    "tags": ["主动", "医师"]
   },
   "skill_13": {
-    "名称文本ID": "skill_13_name",
-    "描述文本ID": "skill_13_desc",
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_01",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "术士"]
+    "name_text_id": "skill_13_name",
+    "description_text_id": "skill_13_desc",
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_01",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "术士"]
   },
   "skill_14": {
-    "名称文本ID": "skill_14_name",
-    "描述文本ID": "skill_14_desc",
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_08",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "术士"]
+    "name_text_id": "skill_14_name",
+    "description_text_id": "skill_14_desc",
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_08",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "术士"]
   },
   "skill_15": {
-    "名称文本ID": "skill_15_name",
-    "描述文本ID": "skill_15_desc",
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_12",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "术士"]
+    "name_text_id": "skill_15_name",
+    "description_text_id": "skill_15_desc",
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_12",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "术士"]
   },
   "skill_16": {
-    "名称文本ID": "skill_16_name",
-    "描述文本ID": "skill_16_desc",
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_03",
-    "额外效果ID": ["effect_10"],
-    "倍率": 1.75,
-    "标签": ["主动", "术士"]
+    "name_text_id": "skill_16_name",
+    "description_text_id": "skill_16_desc",
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_03",
+    "bonus_effect_ids": ["effect_10"],
+    "multiplier": 1.75,
+    "tags": ["主动", "术士"]
   },
   "skill_17": {
-    "名称文本ID": "skill_17_name",
-    "描述文本ID": "skill_17_desc",
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_13",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "战士"]
+    "name_text_id": "skill_17_name",
+    "description_text_id": "skill_17_desc",
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_13",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "战士"]
   },
   "skill_18": {
-    "名称文本ID": "skill_18_name",
-    "描述文本ID": "skill_18_desc",
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_23",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "战士"]
+    "name_text_id": "skill_18_name",
+    "description_text_id": "skill_18_desc",
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_23",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "战士"]
   },
   "skill_19": {
-    "名称文本ID": "skill_19_name",
-    "描述文本ID": "skill_19_desc",
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_24",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "战士"]
+    "name_text_id": "skill_19_name",
+    "description_text_id": "skill_19_desc",
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_24",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "战士"]
   },
   "skill_20": {
-    "名称文本ID": "skill_20_name",
-    "描述文本ID": "skill_20_desc",
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_21",
-    "额外效果ID": ["effect_22"],
-    "倍率": 1.75,
-    "标签": ["主动", "战士"]
+    "name_text_id": "skill_20_name",
+    "description_text_id": "skill_20_desc",
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_21",
+    "bonus_effect_ids": ["effect_22"],
+    "multiplier": 1.75,
+    "tags": ["主动", "战士"]
   },
   "skill_21": {
-    "名称文本ID": "skill_21_name",
-    "描述文本ID": "skill_21_desc",
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_13",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "游侠"]
+    "name_text_id": "skill_21_name",
+    "description_text_id": "skill_21_desc",
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_13",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "游侠"]
   },
   "skill_22": {
-    "名称文本ID": "skill_22_name",
-    "描述文本ID": "skill_22_desc",
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_20",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "游侠"]
+    "name_text_id": "skill_22_name",
+    "description_text_id": "skill_22_desc",
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_20",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "游侠"]
   },
   "skill_23": {
-    "名称文本ID": "skill_23_name",
-    "描述文本ID": "skill_23_desc",
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_24",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "游侠"]
+    "name_text_id": "skill_23_name",
+    "description_text_id": "skill_23_desc",
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_24",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "游侠"]
   },
   "skill_24": {
-    "名称文本ID": "skill_24_name",
-    "描述文本ID": "skill_24_desc",
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_15",
-    "额外效果ID": ["effect_22"],
-    "倍率": 1.75,
-    "标签": ["主动", "游侠"]
+    "name_text_id": "skill_24_name",
+    "description_text_id": "skill_24_desc",
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_15",
+    "bonus_effect_ids": ["effect_22"],
+    "multiplier": 1.75,
+    "tags": ["主动", "游侠"]
   },
   "skill_25": {
-    "名称文本ID": "skill_25_name",
-    "描述文本ID": "skill_25_desc",
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_16",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "医师"]
+    "name_text_id": "skill_25_name",
+    "description_text_id": "skill_25_desc",
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_16",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "医师"]
   },
   "skill_26": {
-    "名称文本ID": "skill_26_name",
-    "描述文本ID": "skill_26_desc",
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_17",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "医师"]
+    "name_text_id": "skill_26_name",
+    "description_text_id": "skill_26_desc",
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_17",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "医师"]
   },
   "skill_27": {
-    "名称文本ID": "skill_27_name",
-    "描述文本ID": "skill_27_desc",
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_24",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "医师"]
+    "name_text_id": "skill_27_name",
+    "description_text_id": "skill_27_desc",
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_24",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "医师"]
   },
   "skill_28": {
-    "名称文本ID": "skill_28_name",
-    "描述文本ID": "skill_28_desc",
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_18",
-    "额外效果ID": ["effect_22"],
-    "倍率": 1.75,
-    "标签": ["主动", "医师"]
+    "name_text_id": "skill_28_name",
+    "description_text_id": "skill_28_desc",
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_18",
+    "bonus_effect_ids": ["effect_22"],
+    "multiplier": 1.75,
+    "tags": ["主动", "医师"]
   },
   "skill_29": {
-    "名称文本ID": "skill_29_name",
-    "描述文本ID": "skill_29_desc",
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_13",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "术士"]
+    "name_text_id": "skill_29_name",
+    "description_text_id": "skill_29_desc",
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_13",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "术士"]
   },
   "skill_30": {
-    "名称文本ID": "skill_30_name",
-    "描述文本ID": "skill_30_desc",
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_20",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "术士"]
+    "name_text_id": "skill_30_name",
+    "description_text_id": "skill_30_desc",
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_20",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "术士"]
   },
   "skill_31": {
-    "名称文本ID": "skill_31_name",
-    "描述文本ID": "skill_31_desc",
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_24",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "术士"]
+    "name_text_id": "skill_31_name",
+    "description_text_id": "skill_31_desc",
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_24",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "术士"]
   },
   "skill_32": {
-    "名称文本ID": "skill_32_name",
-    "描述文本ID": "skill_32_desc",
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_15",
-    "额外效果ID": ["effect_22"],
-    "倍率": 1.75,
-    "标签": ["主动", "术士"]
+    "name_text_id": "skill_32_name",
+    "description_text_id": "skill_32_desc",
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_15",
+    "bonus_effect_ids": ["effect_22"],
+    "multiplier": 1.75,
+    "tags": ["主动", "术士"]
   },
   "skill_33": {
-    "名称文本ID": "skill_33_name",
-    "描述文本ID": "skill_33_desc",
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_25",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "战士"]
+    "name_text_id": "skill_33_name",
+    "description_text_id": "skill_33_desc",
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_25",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "战士"]
   },
   "skill_34": {
-    "名称文本ID": "skill_34_name",
-    "描述文本ID": "skill_34_desc",
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_35",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "战士"]
+    "name_text_id": "skill_34_name",
+    "description_text_id": "skill_34_desc",
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_35",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "战士"]
   },
   "skill_35": {
-    "名称文本ID": "skill_35_name",
-    "描述文本ID": "skill_35_desc",
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_36",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "战士"]
+    "name_text_id": "skill_35_name",
+    "description_text_id": "skill_35_desc",
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_36",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "战士"]
   },
   "skill_36": {
-    "名称文本ID": "skill_36_name",
-    "描述文本ID": "skill_36_desc",
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_33",
-    "额外效果ID": ["effect_34"],
-    "倍率": 1.75,
-    "标签": ["主动", "战士"]
+    "name_text_id": "skill_36_name",
+    "description_text_id": "skill_36_desc",
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_33",
+    "bonus_effect_ids": ["effect_34"],
+    "multiplier": 1.75,
+    "tags": ["主动", "战士"]
   },
   "skill_37": {
-    "名称文本ID": "skill_37_name",
-    "描述文本ID": null,
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_25",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "游侠"]
+    "name_text_id": "skill_37_name",
+    "description_text_id": null,
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_25",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "游侠"]
   },
   "skill_38": {
-    "名称文本ID": "skill_38_name",
-    "描述文本ID": null,
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_32",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "游侠"]
+    "name_text_id": "skill_38_name",
+    "description_text_id": null,
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_32",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "游侠"]
   },
   "skill_39": {
-    "名称文本ID": "skill_39_name",
-    "描述文本ID": null,
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_36",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "游侠"]
+    "name_text_id": "skill_39_name",
+    "description_text_id": null,
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_36",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "游侠"]
   },
   "skill_40": {
-    "名称文本ID": "skill_40_name",
-    "描述文本ID": null,
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_27",
-    "额外效果ID": ["effect_34"],
-    "倍率": 1.75,
-    "标签": ["主动", "游侠"]
+    "name_text_id": "skill_40_name",
+    "description_text_id": null,
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_27",
+    "bonus_effect_ids": ["effect_34"],
+    "multiplier": 1.75,
+    "tags": ["主动", "游侠"]
   },
   "skill_41": {
-    "名称文本ID": "skill_41_name",
-    "描述文本ID": null,
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_28",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "医师"]
+    "name_text_id": "skill_41_name",
+    "description_text_id": null,
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_28",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "医师"]
   },
   "skill_42": {
-    "名称文本ID": "skill_42_name",
-    "描述文本ID": null,
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_29",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "医师"]
+    "name_text_id": "skill_42_name",
+    "description_text_id": null,
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_29",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "医师"]
   },
   "skill_43": {
-    "名称文本ID": "skill_43_name",
-    "描述文本ID": null,
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_36",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "医师"]
+    "name_text_id": "skill_43_name",
+    "description_text_id": null,
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_36",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "医师"]
   },
   "skill_44": {
-    "名称文本ID": "skill_44_name",
-    "描述文本ID": null,
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_30",
-    "额外效果ID": ["effect_34"],
-    "倍率": 1.75,
-    "标签": ["主动", "医师"]
+    "name_text_id": "skill_44_name",
+    "description_text_id": null,
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_30",
+    "bonus_effect_ids": ["effect_34"],
+    "multiplier": 1.75,
+    "tags": ["主动", "医师"]
   },
   "skill_45": {
-    "名称文本ID": "skill_45_name",
-    "描述文本ID": null,
-    "解锁等级": 1,
-    "法力消耗": 5,
-    "冷却回合": 0,
-    "主效果ID": "effect_25",
-    "额外效果ID": [],
-    "倍率": 1.0,
-    "标签": ["主动", "术士"]
+    "name_text_id": "skill_45_name",
+    "description_text_id": null,
+    "unlock_level": 1,
+    "mana_cost": 5,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_25",
+    "bonus_effect_ids": [],
+    "multiplier": 1.0,
+    "tags": ["主动", "术士"]
   },
   "skill_46": {
-    "名称文本ID": "skill_46_name",
-    "描述文本ID": null,
-    "解锁等级": 6,
-    "法力消耗": 13,
-    "冷却回合": 1,
-    "主效果ID": "effect_32",
-    "额外效果ID": [],
-    "倍率": 1.25,
-    "标签": ["主动", "术士"]
+    "name_text_id": "skill_46_name",
+    "description_text_id": null,
+    "unlock_level": 6,
+    "mana_cost": 13,
+    "cooldown_turns": 1,
+    "primary_effect_id": "effect_32",
+    "bonus_effect_ids": [],
+    "multiplier": 1.25,
+    "tags": ["主动", "术士"]
   },
   "skill_47": {
-    "名称文本ID": "skill_47_name",
-    "描述文本ID": null,
-    "解锁等级": 11,
-    "法力消耗": 0,
-    "冷却回合": 0,
-    "主效果ID": "effect_36",
-    "额外效果ID": [],
-    "倍率": 1.5,
-    "标签": ["被动", "术士"]
+    "name_text_id": "skill_47_name",
+    "description_text_id": null,
+    "unlock_level": 11,
+    "mana_cost": 0,
+    "cooldown_turns": 0,
+    "primary_effect_id": "effect_36",
+    "bonus_effect_ids": [],
+    "multiplier": 1.5,
+    "tags": ["被动", "术士"]
   },
   "skill_48": {
-    "名称文本ID": "skill_48_name",
-    "描述文本ID": null,
-    "解锁等级": 16,
-    "法力消耗": 29,
-    "冷却回合": 3,
-    "主效果ID": "effect_27",
-    "额外效果ID": ["effect_34"],
-    "倍率": 1.75,
-    "标签": ["主动", "术士"]
+    "name_text_id": "skill_48_name",
+    "description_text_id": null,
+    "unlock_level": 16,
+    "mana_cost": 29,
+    "cooldown_turns": 3,
+    "primary_effect_id": "effect_27",
+    "bonus_effect_ids": ["effect_34"],
+    "multiplier": 1.75,
+    "tags": ["主动", "术士"]
   }
 }
 
@@ -554,16 +554,16 @@ _tool: {
     "name": "skill"
   },
   "foreignKeys": {
-    "名称文本ID": {
+    "name_text_id": {
       "table": "localization.text"
     },
-    "描述文本ID": {
+    "description_text_id": {
       "table": "localization.text"
     },
-    "主效果ID": {
+    "primary_effect_id": {
       "table": "content.effect"
     },
-    "额外效果ID": {
+    "bonus_effect_ids": {
       "table": "content.effect"
     }
   },
@@ -574,12 +574,41 @@ _editor: {
   "table": {
     "title": "技能：角色招式"
   },
+  "columns": {
+    "name_text_id": {
+      "title": "名称文本ID"
+    },
+    "description_text_id": {
+      "title": "描述文本ID"
+    },
+    "unlock_level": {
+      "title": "解锁等级"
+    },
+    "mana_cost": {
+      "title": "法力消耗"
+    },
+    "cooldown_turns": {
+      "title": "冷却回合"
+    },
+    "primary_effect_id": {
+      "title": "主效果ID"
+    },
+    "bonus_effect_ids": {
+      "title": "附加效果列表"
+    },
+    "multiplier": {
+      "title": "倍率"
+    },
+    "tags": {
+      "title": "标签"
+    }
+  },
   "cellComments": {
     "skill_01": {
-      "倍率": "运行时将倍率与效果强度组合，此处没有跨表公式。"
+      "multiplier": "运行时将倍率与效果强度组合，此处没有跨表公式。"
     },
     "skill_04": {
-      "额外效果ID": "终章招式附带增益；列表仍是一个强类型单元格。"
+      "bonus_effect_ids": "终章招式附带增益；列表仍是一个强类型单元格。"
     }
   }
 }
@@ -587,10 +616,10 @@ _editor: {
 _export: {
   "csv": {
     "enabled": true,
-    "columns": ["id", "名称文本ID", "描述文本ID", "解锁等级", "法力消耗", "冷却回合", "主效果ID", "额外效果ID", "倍率", "标签"],
+    "columns": ["id", "name_text_id", "description_text_id", "unlock_level", "mana_cost", "cooldown_turns", "primary_effect_id", "bonus_effect_ids", "multiplier", "tags"],
     "encoding": {
-      "额外效果ID": "json",
-      "标签": "json"
+      "bonus_effect_ids": "json",
+      "tags": "json"
     }
   }
 }

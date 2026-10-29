@@ -1,4 +1,4 @@
-id,名称文本ID,目标文本ID,关卡ID,前置任务ID,类型,目标道具ID,需求数量,奖励金币,奖励道具ID
+id,name_text_id,objective_text_id,stage_id,prerequisite_quest_id,quest_type,target_item_id,required_quantity,reward_gold,reward_item_ids
 quest_01,quest_01_name,quest_01_goal,stage_01,,讨伐,,3,60,"[""item_potion_01""]"
 quest_02,quest_02_name,quest_02_goal,stage_01,quest_01,收集,item_material_01,2,60,"[""item_potion_01""]"
 quest_03,quest_03_name,quest_03_goal,stage_02,quest_02,讨伐,,3,70,"[""item_potion_01""]"

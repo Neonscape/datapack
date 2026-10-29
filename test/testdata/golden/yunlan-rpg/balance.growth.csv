@@ -1,4 +1,4 @@
-id,等级,升级经验,累计经验,基础攻击,基础防御,基础生命,参考战力
+id,level,level_up_xp,total_xp,base_attack,base_defense,base_hp,power_rating
 level_01,1,103,0,23,12,225,115
 level_02,2,132,103,26,14,250,131
 level_03,3,167,235,29,16,275,146

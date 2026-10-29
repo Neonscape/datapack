@@ -1,4 +1,4 @@
-id,名称文本ID,描述文本ID,解锁等级,法力消耗,冷却回合,主效果ID,额外效果ID,倍率,标签
+id,name_text_id,description_text_id,unlock_level,mana_cost,cooldown_turns,primary_effect_id,bonus_effect_ids,multiplier,tags
 skill_01,skill_01_name,skill_01_desc,1,5,0,effect_01,[],1,"[""主动"",""战士""]"
 skill_02,skill_02_name,skill_02_desc,6,13,1,effect_11,[],1.25,"[""主动"",""战士""]"
 skill_03,skill_03_name,skill_03_desc,11,0,0,effect_12,[],1.5,"[""被动"",""战士""]"

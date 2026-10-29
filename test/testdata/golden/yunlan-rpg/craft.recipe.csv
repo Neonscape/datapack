@@ -1,4 +1,4 @@
-id,名称文本ID,产物ID,产出数量,工坊等级,金币消耗,解锁任务ID
+id,name_text_id,output_item_id,output_quantity,workshop_level,gold_cost,unlock_quest_id
 recipe_01,recipe_01_name,item_weapon_01,1,1,90,quest_02
 recipe_02,recipe_02_name,item_weapon_02,1,2,100,quest_06
 recipe_03,recipe_03_name,item_weapon_03,1,3,110,quest_10

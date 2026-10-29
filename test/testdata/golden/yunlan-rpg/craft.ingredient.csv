@@ -1,4 +1,4 @@
-id,配方ID,材料ID,数量
+id,recipe_id,material_id,quantity
 ingredient_01_1,recipe_01,item_material_01,3
 ingredient_01_2,recipe_01,item_material_02,4
 ingredient_02_1,recipe_02,item_material_02,3

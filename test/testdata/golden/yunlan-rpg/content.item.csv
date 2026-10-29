@@ -1,4 +1,4 @@
-id,名称文本ID,描述文本ID,类别,稀有度,标价,可交易,堆叠上限,装备槽位,效果ID,额外效果ID
+id,name_text_id,description_text_id,category,rarity,list_price,tradable,max_stack,equipment_slot,effect_id,bonus_effect_ids
 item_potion_01,item_potion_01_name,item_potion_01_desc,消耗品,普通,40,true,99,,effect_04,[]
 item_potion_02,item_potion_02_name,item_potion_02_desc,消耗品,精良,60,true,99,,effect_05,[]
 item_potion_03,item_potion_03_name,item_potion_03_desc,消耗品,稀有,80,true,99,,effect_06,[]

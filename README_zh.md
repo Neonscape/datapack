@@ -1,6 +1,6 @@
 # Datapack Editor
 
-**推荐先打开 [《云岚纪》中文 RPG 配表实战](docs/examples/yunlan-rpg/README.md)**：16张表、1002行，真实中文列名与备注，附5分钟导出导览和功能索引。
+**推荐先打开 [《云岚纪》中文 RPG 配表实战](docs/examples/yunlan-rpg/README.md)**：16张表、1002行，英文列 ID、中文显示名与备注，附5分钟导出导览和功能索引。
 
 [English](README.md)
 

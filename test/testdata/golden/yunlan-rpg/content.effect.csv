@@ -1,4 +1,4 @@
-id,名称文本ID,类别,强度,持续回合,触发概率
+id,name_text_id,category,magnitude,duration_turns,proc_chance
 effect_01,effect_01_name,伤害,10,1,1
 effect_02,effect_02_name,伤害,16,2,1
 effect_03,effect_03_name,伤害,22,3,1

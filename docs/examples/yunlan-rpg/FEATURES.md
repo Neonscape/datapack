@@ -1,45 +1,32 @@
-# 功能到表/字段的索引
+# 功能与英文 ID 索引
 
-路径规则：逻辑表 `content.item` 位于 `tables/content/item/item.cue`；主键是 `rows` 的键，不是额外的中文“ID”列。表头ID导出为 `id`，其他字段都使用真实中文名称。
+逻辑表 `content.item` 位于 `tables/content/item/item.cue`。主键来自 `rows` 的英文键，CSV 首列为 `id`。所有业务列使用英文 snake_case ID；中文标题来自 `_editor.columns.<id>.title`，仅供编辑器阅读。CSV 输出 ID，不输出标题。完整逐列对照见 [FIELD_IDS.md](FIELD_IDS.md)。
 
-| 逻辑表 | 行数 | 主要用途、关系与可操作字段 |
+| 逻辑表 | 行数 | 英文列 ID 与功能 |
 |---|---:|---|
-| localization.text | 480 | `简体中文/英语` 两种译文，文本ID被名称/描述列引用，无自动join |
-| content.item | 72 | 六类道具；`稀有度`枚举、`可交易`默认、`装备槽位`nullable、`效果ID/额外效果ID`外键；新手药剂单独演示默认表达式，普通材料null保持无效果 |
-| content.effect | 36 | 四类效果；`触发概率`公共约束、`持续回合`整数、隐藏`策划说明` |
-| content.skill | 48 | `主效果ID`标量FK、`额外效果ID`数组FK、`标签`字符串数组、可空描述文本 |
-| content.hero | 12 | 四种定位；`技能ID`数组、`初始装备ID`nullable FK、`出生坐标`本地扁平结构 |
-| balance.growth | 60 | `等级`本地约束、`参考战力`同行公式、`累计经验`同表跨行依赖 |
-| world.enemy | 24 | 章节、等级、生命、攻击、布尔`精英`；技能与掉落组外键 |
-| world.loot_group | 12 | `抽取次数`与说明，明细权重和由样例回归验证 |
-| world.loot_entry | 36 | 组-道具关系；同一行保存权重和数量范围 |
-| world.stage | 24 | `敌人ID`数组、`后续关卡ID`同表nullable FK、`入口坐标`结构 |
-| quest.quest | 48 | 关卡/前置任务/目标材料/奖励道具关系；中文任务目标文本 |
-| craft.recipe | 36 | 装备产物、工坊等级、金币与解锁任务 |
-| craft.ingredient | 72 | 每配方两行材料；数量与材料同一行，避免平行数组 |
-| economy.shop | 12 | 章节商店、nullable开放任务、布尔营业状态 |
-| economy.product | 24 | 商品关系、独立标价、折扣、`实售价`公式、隐藏`策划备注` |
-| system.parameter | 6 | 设计参考参数；项目明确排除CSV，但仍参与编译/外键校验 |
+| localization.text | 480 | `zh_cn/en_us/usage_notes`：中文、英语及备注，文本 ID 外键，无自动 join |
+| content.item | 72 | `category/rarity/tradable/equipment_slot/effect_id/bonus_effect_ids`：道具子类、枚举、默认、nullable 与数组 FK |
+| content.effect | 36 | `category/magnitude/duration_turns/proc_chance`：四类效果与公共约束，隐藏 `designer_notes` |
+| content.skill | 48 | `primary_effect_id/bonus_effect_ids/tags`：标量/数组 FK 与中文标签 |
+| content.hero | 12 | `role/skill_ids/starting_equipment_id/spawn_position`：定位、技能列表、nullable FK、`x/y` 扁平结构 |
+| balance.growth | 60 | `level/power_rating/total_xp`：本地约束、同行公式、同表跨行依赖 |
+| world.enemy | 24 | `chapter/level/hp/attack/skill_ids/loot_group_id/elite`：遭遇、主动招式、掉落和布尔 |
+| world.loot_group | 12 | `draw_count/description`：抽取规则，权重和由业务回归验证 |
+| world.loot_entry | 36 | `loot_group_id/item_id/weight/min_quantity/max_quantity`：组-道具关系 |
+| world.stage | 24 | `enemy_ids/next_stage_id/first_clear_reward_id/entrance_position`：数组/nullable FK 与坐标 |
+| quest.quest | 48 | `stage_id/prerequisite_quest_id/target_item_id/required_quantity/reward_item_ids`：任务链和奖励 |
+| craft.recipe | 36 | `output_item_id/output_quantity/workshop_level/unlock_quest_id`：产物与解锁 |
+| craft.ingredient | 72 | `recipe_id/material_id/quantity`：每配方两行材料，不用平行数组 |
+| economy.shop | 12 | `chapter/currency/unlock_quest_id/is_open`：章节商店与 nullable 解锁 |
+| economy.product | 24 | `shop_id/item_id/list_price/discount/sale_price/daily_limit`：商品、折扣公式和隐藏 `designer_notes` |
+| system.parameter | 6 | `value/unit/description`：设计参考，排除 CSV 但仍参与完整校验 |
 
-## 跨表链索引
+核心链：`hero_01 → skill_01 → effect_01`，名称经 `name_text_id → localization.text.zh_cn`；`quest_02 → stage_01 → enemy_01 → loot_01 → drop_01_1 → item_material_01`；`recipe_01 → ingredient_01_1/ingredient_01_2 → 材料`，产物 `item_weapon_01` 被英雄和商品引用。
 
-- 角色链：`hero_01 → skill_01 → effect_01`；英雄名称 `hero_01_name` → 本地化“陆青禾”。
-- 内容链：`quest_02 → stage_01 → enemy_01 → loot_01 → drop_01_1 → item_material_01`。
-- 工坊链：`recipe_01 → ingredient_01_1/ingredient_01_2 → 材料`；产物 `item_weapon_01` → `hero_01.初始装备ID` / `product_01_2.道具ID`。
-- 数值链：`level_02.累计经验 → level_01.累计经验 + level_01.升级经验`。所有地址仍在 `balance.growth` 内，不是跨表公式。
+数值地址：`balance.growth.level_02.total_xp` 读取同表 `level_01.total_xp + level_01.level_up_xp`。显示名“累计经验”不参与表达式解析。中文内容与枚举值保留中文，但所有引用字段/Schema 标识为英文。
 
-## Schema索引
+公共 type：`resource_id/non_empty_text/probability/rarity/item_category/effect_category/chapter/hero_role/equipment_slot`。公共 constraint：`non_negative/positive/probability_range`。本地 type：`position`；本地 constraint：`level_range/discount_range`。中文释义与源注释见字段字典。
 
-- 公共type：资源标识、必填文本、概率、稀有度、道具类别、效果类别、章节、角色定位、装备槽位。
-- 公共constraint：非负、正数、概率范围。公共 `#概率` requirements 引用 `#概率范围`；列中 `int & common.#非负` 展示type与constraint组合。
-- 本地type：英雄/关卡各有 `#坐标`，只供本表使用。
-- 本地constraint：成长 `#等级`、商品 `#折扣范围`。
-- 约束错误示例：`effect_07.触发概率=1.2`、`system.parameter.level_cap.数值=-1`，仅在副本实验。
+语义回归检查12英雄/48技能的定位与效果、被动消耗、敌人招式、全部收集任务指定关卡的材料可获得性和配方原料链。这些是样例游戏规则，不冒称编辑器有通用业务规则引擎。
 
-## 工程级能力与边界
-
-通过已有工程菜单练习另存为、自动/手动编译、项目导出表选择、CSV列与JSON编码、评论、引用导航、Schema编辑、批量粘贴、行/列/表改名和全局Undo/Redo。新建/删除表请在副本添加实验表，避免破坏核心关系。
-
-不演示尚未实现的行筛选/排序/搜索、跨表公式、译文自动联表、结构体数组、嵌套容器、动态公式下标；这些没有被伪装成示例功能。导出会校验整个项目，输出选择不是绕过校验的方式。
-
-语义验收逐一检查12位英雄的48项技能名/定位/效果和被动消耗，24个收集任务指定关卡的材料可获得性、配方解锁任务与原料关系；这些游戏规则由样例回归补充，不冒称编辑器通用业务规则。
+工程菜单可练习另存为、自动/手动编译、导出表/列选择、JSON 编码、中文显示名和评论、引用导航、Schema 编辑、粘贴、改名与 Undo/Redo。没有行筛选/搜索、跨表公式、译文自动 join、结构体数组、嵌套容器或动态下标。
