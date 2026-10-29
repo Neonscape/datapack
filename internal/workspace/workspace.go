@@ -1584,6 +1584,10 @@ _editor: {columns: {}}
 func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.renameTable(rename, defaultTableRenameOps())
+}
+
+func (s *Service) renameTable(rename TableRename, ops tableRenameOps) (result TableRenameResult, err error) {
 	if s.current == nil {
 		return TableRenameResult{}, s.userError("workspace.noProject")
 	}
@@ -1611,9 +1615,6 @@ func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
 	newName := rename.Namespace + "." + rename.Name
 	references := []document.TableReference{}
 	for _, table := range tables {
-		if table.Path == rename.Path {
-			continue
-		}
 		for _, key := range table.ForeignKeys {
 			if key.Table == oldName {
 				references = append(references, document.TableReference{Path: table.Path, Column: key.Column, OldTable: oldName, NewTable: newName})
@@ -1629,43 +1630,62 @@ func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
 	for _, reference := range references {
 		files = append(files, reference.Path)
 	}
-	snapshot := s.snapshotFiles(files...)
-	if _, err := document.RenameTable(rename.Path, rename.Namespace, rename.Name, references); err != nil {
+	snapshot, err := snapshotRenameFiles(files...)
+	if err != nil {
+		return TableRenameResult{}, err
+	}
+	transaction, err := newTableRenameTransaction(snapshot, ops.rename)
+	if err != nil {
+		return TableRenameResult{}, err
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, transaction.rollback())
+		}
+	}()
+	if _, err := ops.rewrite(rename.Path, rename.Namespace, rename.Name, references); err != nil {
 		return TableRenameResult{}, err
 	}
 	oldDirectory := filepath.Dir(rename.Path)
-	if err := os.MkdirAll(filepath.Dir(newDirectory), 0o755); err != nil {
-		return TableRenameResult{}, fmt.Errorf("create renamed table directory: %w", err)
-	}
-	if err := os.Rename(oldDirectory, newDirectory); err != nil {
-		return TableRenameResult{}, fmt.Errorf("move renamed table: %w", err)
+	if oldDirectory != newDirectory {
+		if err := ops.mkdirAll(filepath.Dir(newDirectory), 0o755); err != nil {
+			return TableRenameResult{}, fmt.Errorf("create renamed table directory: %w", err)
+		}
+		if err := transaction.move(oldDirectory, newDirectory); err != nil {
+			return TableRenameResult{}, fmt.Errorf("move renamed table: %w", err)
+		}
 	}
 	movedSource := filepath.Join(newDirectory, filepath.Base(rename.Path))
 	if movedSource != newPath {
-		if err := os.Rename(movedSource, newPath); err != nil {
-			_ = os.RemoveAll(newDirectory)
-			_ = s.restoreSnapshot(snapshot)
+		// Never overwrite a sibling file that moved with the source directory.
+		if _, err := os.Lstat(newPath); err == nil {
+			return TableRenameResult{}, fmt.Errorf("renamed table source already exists: %s", newPath)
+		} else if !os.IsNotExist(err) {
+			return TableRenameResult{}, fmt.Errorf("inspect renamed table source: %w", err)
+		}
+		if err := transaction.move(movedSource, newPath); err != nil {
 			return TableRenameResult{}, fmt.Errorf("rename table source file: %w", err)
 		}
 	}
 	project := s.current.Project
+	project.Config.Export.Tables = maps.Clone(project.Config.Export.Tables)
 	if migrateExportTableSelection(&project.Config, oldName, newName) {
-		if err := SaveProject(project); err != nil {
-			_ = os.RemoveAll(newDirectory)
-			_ = s.restoreSnapshot(snapshot)
+		if err := ops.saveProject(project); err != nil {
 			return TableRenameResult{}, err
 		}
-		s.current.Project = project
 	}
-	s.recordEdit(snapshot)
+	table, err := document.LoadTable(newPath)
+	if err != nil {
+		return TableRenameResult{}, fmt.Errorf("reload renamed table: %w", err)
+	}
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return TableRenameResult{}, err
 	}
-	table, err := document.LoadTable(filepath.Join(newDirectory, rename.Name+".cue"))
-	if err != nil {
-		return TableRenameResult{}, fmt.Errorf("reload renamed table: %w", err)
-	}
+	// Publish history only after every filesystem operation has succeeded.
+	s.recordEdit(snapshot)
+	view.CanUndo, view.CanRedo = true, false
+	s.current = &view
 	s.log(logging.Info, "table renamed", map[string]any{"path": rename.Path, "old": oldName, "new": newName})
 	return TableRenameResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
@@ -2165,10 +2185,19 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 	for _, usage := range usages {
 		references = append(references, document.RowReference{Path: usage.Path, RowID: usage.RowID, Column: usage.Column, Index: usage.Index, Array: usage.Array})
 	}
+	paths := []string{rename.Path}
+	for _, reference := range references {
+		paths = append(paths, reference.Path)
+	}
+	snapshot, err := snapshotRenameFiles(paths...)
+	if err != nil {
+		return RowRenameResult{}, err
+	}
 	table, err := document.RenameRow(rename.Path, rename.OldID, rename.NewID, references)
 	if err != nil {
 		return RowRenameResult{}, err
 	}
+	s.recordEdit(snapshot)
 	view, err := s.refreshAfterEdit()
 	if err != nil {
 		return RowRenameResult{}, err
