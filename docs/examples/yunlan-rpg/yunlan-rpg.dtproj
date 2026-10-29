@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "tableRoots": ["tables"],
+  "schemaRoots": ["schema"],
+  "exclude": ["exports"],
+  "export": {
+    "directory": "exports",
+    "targets": ["csv"],
+    "tables": {
+      "content.effect": true,
+      "content.item": true,
+      "content.skill": true,
+      "content.hero": true,
+      "balance.growth": true,
+      "world.loot_group": true,
+      "world.loot_entry": true,
+      "world.enemy": true,
+      "world.stage": true,
+      "quest.quest": true,
+      "craft.recipe": true,
+      "craft.ingredient": true,
+      "economy.shop": true,
+      "economy.product": true,
+      "system.parameter": false,
+      "localization.text": true
+    }
+  }
+}

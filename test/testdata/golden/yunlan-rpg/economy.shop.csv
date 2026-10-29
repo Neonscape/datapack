@@ -1,0 +1,13 @@
+id,名称文本ID,章节,货币,开放任务ID,营业中
+shop_01,shop_01_name,青岚村,金币,,true
+shop_02,shop_02_name,青岚村,金币,quest_05,true
+shop_03,shop_03_name,青岚村,金币,quest_09,true
+shop_04,shop_04_name,青岚村,金币,quest_13,true
+shop_05,shop_05_name,赤砂遗迹,金币,quest_17,true
+shop_06,shop_06_name,赤砂遗迹,金币,quest_21,true
+shop_07,shop_07_name,赤砂遗迹,金币,quest_25,true
+shop_08,shop_08_name,赤砂遗迹,金币,quest_29,true
+shop_09,shop_09_name,霜月城,金币,quest_33,true
+shop_10,shop_10_name,霜月城,金币,quest_37,true
+shop_11,shop_11_name,霜月城,金币,quest_41,true
+shop_12,shop_12_name,霜月城,金币,quest_45,true
