@@ -579,3 +579,21 @@ _tool: {
 - 跨表公式
 - 数组和整个结构体公式
 - 结构化自动合并
+
+### Table deletion history
+
+Deleting a table removes its owned source directory, including attachments. The
+editor captures regular-file bytes, empty directories, permission bits and
+symbolic-link text without following attachment links. Undo restores the whole
+directory; Redo refuses to remove it if its entries changed after restoration.
+A destination recreated since deletion also blocks Undo without consuming history.
+Configured source roots, shared table directories and symlink source paths cannot
+be deleted as one table. Configuration and directory changes compensate reported
+I/O or refresh failures; history is recorded only after success. A failed rollback
+reports the private staging path for recovery and keeps its remaining copy.
+
+This history lives in memory. It is not crash recovery or a transaction against
+external filesystem writers, and does not preserve ownership, timestamps, ACLs or
+hard-link relationships. Staging cleanup failures are logged after a successful
+operation; they do not discard the in-memory Undo snapshot or silently convert a
+completed deletion into a failed one.
