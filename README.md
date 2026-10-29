@@ -2,6 +2,8 @@
 
 [中文说明](README_zh.md)
 
+**中文入门工程：[《云岚纪》16表/1002行 RPG 配表实战](docs/examples/yunlan-rpg/README.md)** — English field IDs with Chinese display names, localization, gameplay relationships, formulas and guided editing.
+
 Datapack is a desktop editor for structured game data. It combines a spreadsheet-like editing experience with CUE-backed schemas, validation, references, formulas, and text source files that work well with Git.
 
 It is intended to replace workflows built around spreadsheets, manual export scripts, and several disconnected copies of the same data. Designers can edit data in a familiar grid while the project keeps its structure, constraints, relationships, and export settings alongside the data itself.

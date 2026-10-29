@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"cuelang.org/go/cue/ast"
-	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/token"
+	"datapack/internal/cueformat"
 )
 
 var negativeComparisonPattern = regexp.MustCompile(`(<|<=)[\t ]+(-[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)`)
@@ -313,7 +313,7 @@ func builtinKind(name string) (Kind, bool) {
 }
 
 func expressionText(expression ast.Expr) (string, error) {
-	bytes, err := format.Node(expression)
+	bytes, err := cueformat.Node(expression)
 	if err != nil {
 		return "", err
 	}

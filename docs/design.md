@@ -597,3 +597,7 @@ external filesystem writers, and does not preserve ownership, timestamps, ACLs o
 hard-link relationships. Staging cleanup failures are logged after a successful
 operation; they do not discard the in-memory Undo snapshot or silently convert a
 completed deletion into a failed one.
+
+### CUE 列表写入兼容性
+
+源文件写入与表达式显示统一保留列表显式逗号。CUE v0.17格式器会根据扫描位置标记推断无逗号样式，替换AST列表元素可能改变该推断；这种输出不兼容仍声明v0.9.0的工程。格式边界临时将列表视为构建节点，并在返回前恢复位置标记，保留位置和评论，不升级工程模块版本。回归覆盖多行CSV导出列改名、数组外键改名以及实际样例数组的保存/重开/编译/UndoRedo。

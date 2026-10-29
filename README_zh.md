@@ -1,5 +1,7 @@
 # Datapack Editor
 
+**推荐先打开 [《云岚纪》中文 RPG 配表实战](docs/examples/yunlan-rpg/README.md)**：16张表、1002行，英文列 ID、中文显示名与备注，附5分钟导出导览和功能索引。
+
 [English](README.md)
 
 Datapack 是一个用于维护结构化游戏数据的桌面编辑器。它将接近电子表格的编辑体验与 CUE Schema、数据校验、引用关系、公式以及适合 Git 管理的文本源文件结合起来。

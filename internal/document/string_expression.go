@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/parser"
+	"datapack/internal/cueformat"
 )
 
 func EncodeStringExpression(value string) string {
@@ -13,7 +13,7 @@ func EncodeStringExpression(value string) string {
 		value = strings.ReplaceAll(strings.ReplaceAll(value, "\r\n", "\n"), "\r", "\n")
 		literal := "\"\"\"\n" + value + "\n\"\"\""
 		if expression, err := parser.ParseExpr("string-value.cue", literal); err == nil {
-			if formatted, err := format.Node(expression); err == nil {
+			if formatted, err := cueformat.Node(expression); err == nil {
 				return strings.TrimSpace(string(formatted))
 			}
 		}
@@ -21,7 +21,7 @@ func EncodeStringExpression(value string) string {
 	literal := strconv.Quote(value)
 	expression, err := parser.ParseExpr("string-value.cue", literal)
 	if err == nil {
-		if formatted, err := format.Node(expression); err == nil {
+		if formatted, err := cueformat.Node(expression); err == nil {
 			return strings.TrimSpace(string(formatted))
 		}
 	}

@@ -11,9 +11,9 @@ import (
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/ast"
 	"cuelang.org/go/cue/cuecontext"
-	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/load"
 	"cuelang.org/go/cue/parser"
+	"datapack/internal/cueformat"
 	"datapack/internal/schemamodel"
 	exprparser "github.com/expr-lang/expr/parser"
 )
@@ -38,7 +38,7 @@ func SetCellValue(path, rowID, column, expression string) (Table, error) {
 		return Table{}, err
 	}
 	removeFormula(file, rowID, column)
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -101,7 +101,7 @@ func PasteCells(path string, rowIDs, columns []string, values [][]string) (Table
 			return Table{}, err
 		}
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format pasted table: %w", err)
 	}
@@ -128,7 +128,7 @@ func SetCellFormula(path, rowID, column, expression string) (Table, error) {
 	if err := setFormula(file, rowID, column, expression); err != nil {
 		return Table{}, err
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -175,7 +175,7 @@ func CreateRow(path, rowID string, values map[string]string, formulas map[string
 			return Table{}, err
 		}
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -202,7 +202,7 @@ func ClearCell(path, rowID, column string) (Table, error) {
 	if err := clearCell(file, rowID, column); err != nil {
 		return Table{}, err
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -257,7 +257,7 @@ func AddRow(path, rowID, expression string) (Table, error) {
 	if err := insertRow(file, rowID, rowValue); err != nil {
 		return Table{}, err
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -280,7 +280,7 @@ func DeleteRow(path, rowID string) (Table, error) {
 	if err := removeRow(file, rowID); err != nil {
 		return Table{}, err
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -330,7 +330,7 @@ func AddColumn(path, name, schemaExpression, initialExpression string, position 
 		}
 	}
 	pruneUnusedImports(file)
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -362,7 +362,7 @@ func SetColumnSchema(path, name, schemaExpression string) (Table, error) {
 	}
 	field.Value = schema
 	pruneUnusedImports(file)
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -384,7 +384,7 @@ func DeleteColumn(path, name string) (Table, error) {
 		return Table{}, err
 	}
 	pruneUnusedImports(file)
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -410,7 +410,7 @@ func RenameColumn(path, oldName, newName string) (Table, error) {
 	if err := renameFormulaColumnReferences(file, oldName, newName); err != nil {
 		return Table{}, err
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -432,7 +432,7 @@ func MoveColumn(path, name string, position int) (Table, error) {
 	if err := moveColumn(file, name, position); err != nil {
 		return Table{}, err
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -845,7 +845,7 @@ func moveExpression(elements []ast.Expr, from, to int) {
 }
 
 func cloneExpression(expression ast.Expr) ast.Expr {
-	formatted, err := format.Node(expression)
+	formatted, err := cueformat.Node(expression)
 	if err != nil {
 		return expression
 	}

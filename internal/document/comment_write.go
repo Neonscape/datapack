@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"cuelang.org/go/cue/ast"
-	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/parser"
+	"datapack/internal/cueformat"
 )
 
 // SetCellComment creates, updates, or removes one _editor.cellComments entry.
@@ -66,7 +66,7 @@ func SetCellComment(path, rowID, column, comment string) (Table, error) {
 	} else {
 		rowStruct.Elts = append(rowStruct.Elts, &ast.Field{Label: ast.NewIdent(column), Value: stringLiteral(comment)})
 	}
-	candidate, err := format.Node(file)
+	candidate, err := cueformat.Node(file)
 	if err != nil {
 		return Table{}, fmt.Errorf("format cell comment: %w", err)
 	}

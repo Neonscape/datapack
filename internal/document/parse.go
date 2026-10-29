@@ -7,9 +7,9 @@ import (
 	"strconv"
 
 	"cuelang.org/go/cue/ast"
-	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/parser"
 	"cuelang.org/go/cue/token"
+	"datapack/internal/cueformat"
 	"datapack/internal/schemamodel"
 )
 
@@ -403,7 +403,7 @@ func boolOf(expression ast.Expr) bool {
 }
 
 func expressionOf(expression ast.Expr) (string, error) {
-	formatted, err := format.Node(expression)
+	formatted, err := cueformat.Node(expression)
 	if err != nil {
 		return "", fmt.Errorf("format expression: %w", err)
 	}

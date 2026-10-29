@@ -1,0 +1,13 @@
+id,name_text_id,biography_text_id,role,starting_level,base_hp,base_attack,starting_equipment_id,skill_ids,spawn_position
+hero_01,hero_01_name,hero_01_bio,战士,1,300,25,item_weapon_01,"[""skill_01"",""skill_02"",""skill_03"",""skill_04""]","{""x"":0,""y"":0}"
+hero_02,hero_02_name,hero_02_bio,游侠,1,320,28,item_weapon_01,"[""skill_05"",""skill_06"",""skill_07"",""skill_08""]","{""x"":1,""y"":3}"
+hero_03,hero_03_name,hero_03_bio,医师,1,340,31,item_weapon_01,"[""skill_09"",""skill_10"",""skill_11"",""skill_12""]","{""x"":2,""y"":6}"
+hero_04,hero_04_name,hero_04_bio,术士,1,360,34,item_weapon_01,"[""skill_13"",""skill_14"",""skill_15"",""skill_16""]","{""x"":3,""y"":9}"
+hero_05,hero_05_name,hero_05_bio,战士,16,400,37,item_weapon_05,"[""skill_17"",""skill_18"",""skill_19"",""skill_20""]","{""x"":104,""y"":12}"
+hero_06,hero_06_name,hero_06_bio,游侠,16,420,40,item_weapon_05,"[""skill_21"",""skill_22"",""skill_23"",""skill_24""]","{""x"":105,""y"":15}"
+hero_07,hero_07_name,hero_07_bio,医师,16,440,43,item_weapon_05,"[""skill_25"",""skill_26"",""skill_27"",""skill_28""]","{""x"":106,""y"":18}"
+hero_08,hero_08_name,hero_08_bio,术士,16,460,46,item_weapon_05,"[""skill_29"",""skill_30"",""skill_31"",""skill_32""]","{""x"":107,""y"":21}"
+hero_09,hero_09_name,hero_09_bio,战士,31,500,49,item_weapon_09,"[""skill_33"",""skill_34"",""skill_35"",""skill_36""]","{""x"":208,""y"":24}"
+hero_10,hero_10_name,hero_10_bio,游侠,31,520,52,item_weapon_09,"[""skill_37"",""skill_38"",""skill_39"",""skill_40""]","{""x"":209,""y"":27}"
+hero_11,hero_11_name,hero_11_bio,医师,31,540,55,item_weapon_09,"[""skill_41"",""skill_42"",""skill_43"",""skill_44""]","{""x"":210,""y"":30}"
+hero_12,hero_12_name,hero_12_bio,术士,31,560,58,item_weapon_09,"[""skill_45"",""skill_46"",""skill_47"",""skill_48""]","{""x"":211,""y"":33}"

@@ -513,7 +513,7 @@ function App() {
             const columnDefinition = table.columns.find((entry) => entry.name === column);
             const result = input.startsWith("=")
                 ? await SetCellFormula({path: table.path, rowID, column, expression: input.slice(1).trim()})
-                : columnDefinition?.schema.kind === "string"
+                : !columnDefinition?.foreignKeyTable && (columnDefinition?.effectiveSchema ?? columnDefinition?.schema)?.kind === "string"
                     ? await SetCellText({path: table.path, rowID, column, expression: input})
                     : await UpdateCell({path: table.path, rowID, column, expression: input});
             updateActiveTable(result.table as TableDocument);
