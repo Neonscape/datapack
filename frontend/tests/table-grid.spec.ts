@@ -1,4 +1,7 @@
 import {expect, test} from "@playwright/test";
+import type {NavRequest, ProjectExportSettings, PublicSchemaDocument, SchemaDefinitionDocument, SchemaNode, WorkspaceView} from "../src/types";
+
+type SchemaDefinitionArgument = Omit<SchemaDefinitionDocument, "schema">;
 
 test.use({viewport: {width: 1920, height: 1080}});
 
@@ -18,7 +21,7 @@ const table = {
     diagnostics: [{rowID: "sword", column: "effectID", message: "foreign key references missing row rpg.effect.burn"}, {rowID: "", message: "table has an invalid export configuration"}],
 };
 
-const publicSchema = {
+const publicSchema: PublicSchemaDocument = {
     path: "/project/schema/common.cue",
     package: "common",
     definitions: [
@@ -72,8 +75,8 @@ test.beforeEach(async ({page}) => {
             GetExportFormats: () => Promise.resolve([{id: "csv", labels: {en: "CSV", "zh-CN": "CSV"}, supportsColumns: true, extensions: ["csv"]}]),
             SetTableExportSettings: () => Promise.resolve({table, workspace}),
             GetProjectSettings: () => Promise.resolve({project: {path: "/project/game.dtproj", root: "/project", tableRoots: ["tables"], schemaRoots: ["schema"], exclude: []}, export: {directory: "exports", targets: ["csv"], tables: {}}, formats: [{id: "csv", labels: {en: "CSV", "zh-CN": "CSV"}, supportsColumns: true, extensions: ["csv"]}], tables: [{id: "rpg.item", namespace: "rpg", name: "item", path: "/project/tables/item.cue", selected: true, configured: true, columns: ["id", "name"]}], workspace}),
-            SetProjectExportSettings: (settings) => {
-                (window as Window & {projectExportSettings?: unknown}).projectExportSettings = settings;
+            SetProjectExportSettings: (settings: ProjectExportSettings) => {
+                (window as unknown as Window & {projectExportSettings?: unknown}).projectExportSettings = settings;
                 return Promise.resolve({workspace});
             },
             SetLanguage: () => Promise.resolve({language: "en", theme: "system"}),
@@ -99,11 +102,11 @@ test.beforeEach(async ({page}) => {
             Redo: () => Promise.resolve({table, workspace, canUndo: true, canRedo: false}),
             Export: () => Promise.resolve({directory: "/project/exports", files: ["/project/exports/rpg.item.csv"]}),
             OpenPath: () => Promise.resolve(),
-            CreateSchemaDefinition: (argument) => {
+            CreateSchemaDefinition: (argument: SchemaDefinitionArgument) => {
                 publicSchema.definitions.push({name: argument.name, kind: argument.kind, type: argument.type, appliesTo: argument.appliesTo, schema: {kind: "string"}, schemaExpression: argument.schemaExpression});
                 return Promise.resolve({schema: publicSchema, table, workspace});
             },
-            SetSchemaDefinition: (argument) => {
+            SetSchemaDefinition: (argument: SchemaDefinitionArgument) => {
                 const definition = publicSchema.definitions.find((entry) => entry.name === argument.name);
                 if (definition) {
                     definition.kind = argument.kind;
@@ -113,19 +116,19 @@ test.beforeEach(async ({page}) => {
                 }
                 return Promise.resolve({schema: publicSchema, table, workspace});
             },
-            RenameSchemaDefinition: (argument) => {
+            RenameSchemaDefinition: (argument: {oldName: string; newName: string}) => {
                 const definition = publicSchema.definitions.find((entry) => entry.name === argument.oldName);
                 if (definition) definition.name = argument.newName;
                 return Promise.resolve({schema: publicSchema, table, workspace});
             },
-            DeleteSchemaDefinition: (argument) => {
+            DeleteSchemaDefinition: (argument: {name: string}) => {
                 publicSchema.definitions = publicSchema.definitions.filter((entry) => entry.name !== argument.name);
                 return Promise.resolve({schema: publicSchema, table, workspace});
             },
-            SetCompileMode: (mode) => Promise.resolve({...workspace, settings: {...workspace.settings, build: {...workspace.settings.build, mode}}, compile: {...workspace.compile, mode}}),
+            SetCompileMode: (mode: WorkspaceView["compile"]["mode"]) => Promise.resolve({...workspace, settings: {...workspace.settings, build: {...workspace.settings.build, mode}}, compile: {...workspace.compile, mode}}),
             Compile: () => Promise.resolve({workspace: {...workspace, compile: {...workspace.compile, pending: false}}}),
-            Navigate: (request) => Promise.resolve({kind: request.kind, path: table.path, rowID: request.rowID, column: request.column, definition: request.reference}),
-            PrintSchema: (node) => {
+            Navigate: (request: NavRequest) => Promise.resolve({kind: request.kind, path: table.path, rowID: request.rowID, column: request.column, definition: request.reference}),
+            PrintSchema: (node: SchemaNode | null | undefined) => {
                 if (!node) return Promise.resolve("string");
                 if (node.kind === "enum") return Promise.resolve(`"N" | "R"`);
                 let expression = node.kind === "reference" ? (node.reference ?? "string") : node.kind;
@@ -135,13 +138,14 @@ test.beforeEach(async ({page}) => {
                 }
                 return Promise.resolve(expression);
             },
-            RenameTable: (argument) => Promise.resolve({table: {...table, namespace: argument.namespace, name: argument.name, path: `/project/tables/${argument.namespace}/${argument.name}/${argument.name}.cue`}, workspace}),
+            RenameTable: (argument: {namespace: string; name: string}) => Promise.resolve({table: {...table, namespace: argument.namespace, name: argument.name, path: `/project/tables/${argument.namespace}/${argument.name}/${argument.name}.cue`}, workspace}),
             DeleteTable: () => Promise.resolve({workspace}),
-            CreateSchemaFile: (namespace) => Promise.resolve({schema: {...publicSchema, package: namespace, definitions: []}, workspace}),
+            CreateSchemaFile: (namespace: string) => Promise.resolve({schema: {...publicSchema, package: namespace, definitions: []}, workspace}),
         };
-        // Wails generated bindings resolve methods through this object.
-        (window as Window & {go: unknown}).go = {main: {App: api}};
-        (window as Window & {__mock: unknown}).__mock = {table, workspace};
+        // Wails generated bindings resolve methods through this object. These test-only
+        // globals are installed here, so browser callbacks assert the boundary via unknown.
+        (window as unknown as Window & {go: unknown}).go = {main: {App: api}};
+        (window as unknown as Window & {__mock: unknown}).__mock = {table, workspace};
     }, {table, workspace, publicSchema});
     await page.goto("/");
     await page.getByRole("button", {name: "File"}).click();
@@ -210,12 +214,12 @@ test("edits formula cells with the application inline editor", async ({page}) =>
     const calls: string[] = [];
     page.on("pageerror", (error) => pageErrors.push(error));
     await page.evaluate(() => {
-        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const api = (window as unknown as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
         const setFormula = api.SetCellFormula;
         const updateCell = api.UpdateCell;
-        api.SetCellFormula = (...args) => { (window as Window & {formulaCalls: string[]}).formulaCalls.push("formula"); return setFormula(...args); };
-        api.UpdateCell = (...args) => { (window as Window & {formulaCalls: string[]}).formulaCalls.push("value"); return updateCell(...args); };
-        (window as Window & {formulaCalls: string[]}).formulaCalls = [];
+        api.SetCellFormula = (...args) => { (window as unknown as Window & {formulaCalls: string[]}).formulaCalls.push("formula"); return setFormula(...args); };
+        api.UpdateCell = (...args) => { (window as unknown as Window & {formulaCalls: string[]}).formulaCalls.push("value"); return updateCell(...args); };
+        (window as unknown as Window & {formulaCalls: string[]}).formulaCalls = [];
     });
     const canvas = page.locator("canvas:visible").first();
     const box = await canvas.boundingBox();
@@ -228,7 +232,7 @@ test("edits formula cells with the application inline editor", async ({page}) =>
     await expect(page.locator("textarea")).toHaveValue("=20 + 5");
     await page.mouse.click(box.x + 1000, box.y + 200);
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
-    expect(await page.evaluate(() => (window as Window & {formulaCalls: string[]}).formulaCalls)).toEqual([]);
+    expect(await page.evaluate(() => (window as unknown as Window & {formulaCalls: string[]}).formulaCalls)).toEqual([]);
     expect(pageErrors).toEqual([]);
 });
 
@@ -336,11 +340,11 @@ test("edits the selected column Schema", async ({page}) => {
 
 test("edits a column Schema with the structured editor", async ({page}) => {
     await page.evaluate(() => {
-        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const api = (window as unknown as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
         const setColumnSchema = api.SetColumnSchema;
-        (window as Window & {schemaCalls: {schemaExpression: string}[]}).schemaCalls = [];
+        (window as unknown as Window & {schemaCalls: {schemaExpression: string}[]}).schemaCalls = [];
         api.SetColumnSchema = (...args) => {
-            (window as Window & {schemaCalls: {schemaExpression: string}[]}).schemaCalls.push(args[0] as {schemaExpression: string});
+            (window as unknown as Window & {schemaCalls: {schemaExpression: string}[]}).schemaCalls.push(args[0] as {schemaExpression: string});
             return setColumnSchema(...args);
         };
     });
@@ -357,7 +361,7 @@ test("edits a column Schema with the structured editor", async ({page}) => {
     await page.getByRole("textbox", {name: "Comparison value"}).fill("10");
     await page.getByRole("button", {name: "Apply"}).click();
     await expect(page.getByRole("heading", {name: "Edit column schema"})).toBeHidden();
-    expect(await page.evaluate(() => (window as Window & {schemaCalls: {schemaExpression: string}[]}).schemaCalls)).toEqual([{path: "/project/tables/item.cue", name: "testAttack", schemaExpression: "integer >= 10"}]);
+    expect(await page.evaluate(() => (window as unknown as Window & {schemaCalls: {schemaExpression: string}[]}).schemaCalls)).toEqual([{path: "/project/tables/item.cue", name: "testAttack", schemaExpression: "integer >= 10"}]);
 });
 
 test("edits enum values in the structured editor", async ({page}) => {
@@ -385,8 +389,8 @@ test("toggles compile mode between manual and auto", async ({page}) => {
 
 test("compiles manually after pending edits", async ({page}) => {
     await page.evaluate(() => {
-        const mock = (window as Window & {__mock: {table: unknown; workspace: {compile: {pending: boolean}}}}).__mock;
-        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const mock = (window as unknown as Window & {__mock: {table: unknown; workspace: {compile: {pending: boolean}}}}).__mock;
+        const api = (window as unknown as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
         api.SetCellText = () => Promise.resolve({table: mock.table, workspace: {...mock.workspace, compile: {...mock.workspace.compile, pending: true}}});
     });
     const canvas = page.locator("canvas:visible").first();
@@ -405,13 +409,13 @@ test("compiles manually after pending edits", async ({page}) => {
 
 test("edits a cell through the formula bar", async ({page}) => {
     await page.evaluate(() => {
-        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const api = (window as unknown as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
         const setCellText = api.SetCellText;
-        (window as Window & {formulaBarCalls: {rowID: string; column: string; expression: string}[]}).formulaBarCalls = [];
+        (window as unknown as Window & {formulaBarCalls: {rowID: string; column: string; expression: string}[]}).formulaBarCalls = [];
         api.SetCellText = (...args) => {
             const argument = args[0] as {rowID: string; column: string; expression: string};
-            (window as Window & {formulaBarCalls: {rowID: string; column: string; expression: string}[]}).formulaBarCalls.push(argument);
-            return updateCell(...args);
+            (window as unknown as Window & {formulaBarCalls: {rowID: string; column: string; expression: string}[]}).formulaBarCalls.push(argument);
+            return setCellText(...args);
         };
     });
     const formulaBar = page.getByLabel("Formula bar");
@@ -426,16 +430,16 @@ test("edits a cell through the formula bar", async ({page}) => {
     await formulaBar.click();
     await formulaBar.fill("Steel Sword");
     await formulaBar.blur();
-    expect(await page.evaluate(() => (window as Window & {formulaBarCalls: {path: string; rowID: string; column: string; expression: string}[]}).formulaBarCalls)).toEqual([{path: "/project/tables/item.cue", rowID: "sword", column: "name", expression: "Steel Sword"}]);
+    expect(await page.evaluate(() => (window as unknown as Window & {formulaBarCalls: {path: string; rowID: string; column: string; expression: string}[]}).formulaBarCalls)).toEqual([{path: "/project/tables/item.cue", rowID: "sword", column: "name", expression: "Steel Sword"}]);
 });
 
 test("navigates from a foreign key cell with ctrl-click", async ({page}) => {
     await page.evaluate(() => {
-        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const api = (window as unknown as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
         const navigate = api.Navigate;
-        (window as Window & {navCalls: unknown[]}).navCalls = [];
+        (window as unknown as Window & {navCalls: unknown[]}).navCalls = [];
         api.Navigate = (...args) => {
-            (window as Window & {navCalls: unknown[]}).navCalls.push(args[0]);
+            (window as unknown as Window & {navCalls: unknown[]}).navCalls.push(args[0]);
             return navigate(...args);
         };
     });
@@ -446,16 +450,16 @@ test("navigates from a foreign key cell with ctrl-click", async ({page}) => {
     await page.keyboard.down("Control");
     await page.mouse.click(box.x + 395, box.y + 50);
     await page.keyboard.up("Control");
-    expect(await page.evaluate(() => (window as Window & {navCalls: unknown[]}).navCalls)).toEqual([{kind: "foreign-key", path: "/project/tables/item.cue", rowID: "burn", column: "effectID"}]);
+    expect(await page.evaluate(() => (window as unknown as Window & {navCalls: unknown[]}).navCalls)).toEqual([{kind: "foreign-key", path: "/project/tables/item.cue", rowID: "burn", column: "effectID"}]);
 });
 
 test("navigates from a schema-reference column with ctrl-click", async ({page}) => {
     await page.evaluate(() => {
-        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const api = (window as unknown as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
         const navigate = api.Navigate;
-        (window as Window & {navCalls: unknown[]}).navCalls = [];
+        (window as unknown as Window & {navCalls: unknown[]}).navCalls = [];
         api.Navigate = (...args) => {
-            (window as Window & {navCalls: unknown[]}).navCalls.push(args[0]);
+            (window as unknown as Window & {navCalls: unknown[]}).navCalls.push(args[0]);
             return navigate(...args);
         };
     });
@@ -466,7 +470,7 @@ test("navigates from a schema-reference column with ctrl-click", async ({page}) 
     await page.keyboard.down("Control");
     await page.mouse.click(box.x + 1075, box.y + 50);
     await page.keyboard.up("Control");
-    expect(await page.evaluate(() => (window as Window & {navCalls: unknown[]}).navCalls)).toEqual([{kind: "schema-reference", path: "/project/tables/item.cue", reference: "_local.#Position"}]);
+    expect(await page.evaluate(() => (window as unknown as Window & {navCalls: unknown[]}).navCalls)).toEqual([{kind: "schema-reference", path: "/project/tables/item.cue", reference: "_local.#Position"}]);
 });
 
 test("creates and opens a table from the project explorer", async ({page}) => {
@@ -518,7 +522,7 @@ test("configures project export table selection", async ({page}) => {
     await expect(page.getByRole("heading", {name: "Project settings"})).toBeHidden();
     await page.getByRole("button", {name: "game.dtproj", exact: true}).click();
     await expect(page.getByRole("heading", {name: "Project settings"})).toBeVisible();
-    expect(await page.evaluate(() => (window as Window & {projectExportSettings?: {tables: Record<string, boolean>}}).projectExportSettings)).toEqual({
+    expect(await page.evaluate(() => (window as unknown as Window & {projectExportSettings?: {tables: Record<string, boolean>}}).projectExportSettings)).toEqual({
         directory: "exports",
         targets: ["csv"],
         tables: {"rpg.item": true},
@@ -536,15 +540,15 @@ test("configures table export formats and fields", async ({page}) => {
 
 test("undoes and redoes edits from the Edit menu", async ({page}) => {
     await page.evaluate(() => {
-        const mock = (window as Window & {__mock: {workspace: {canUndo: boolean; canRedo: boolean}}}).__mock;
-        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
-        (window as Window & {undoCalls: string[]}).undoCalls = [];
+        const mock = (window as unknown as Window & {__mock: {workspace: {canUndo: boolean; canRedo: boolean}}}).__mock;
+        const api = (window as unknown as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        (window as unknown as Window & {undoCalls: string[]}).undoCalls = [];
         api.Undo = () => {
-            (window as Window & {undoCalls: string[]}).undoCalls.push("undo");
+            (window as unknown as Window & {undoCalls: string[]}).undoCalls.push("undo");
             return Promise.resolve({workspace: {...mock.workspace, canUndo: false, canRedo: true}, canUndo: false, canRedo: true});
         };
         api.Redo = () => {
-            (window as Window & {undoCalls: string[]}).undoCalls.push("redo");
+            (window as unknown as Window & {undoCalls: string[]}).undoCalls.push("redo");
             return Promise.resolve({workspace: {...mock.workspace, canUndo: true, canRedo: false}, canUndo: true, canRedo: false});
         };
     });
@@ -557,7 +561,7 @@ test("undoes and redoes edits from the Edit menu", async ({page}) => {
     await page.getByRole("button", {name: "Edit"}).click();
     await expect(page.getByRole("button", {name: /Undo/})).toBeEnabled();
     await expect(page.getByRole("button", {name: /Redo/})).toBeDisabled();
-    expect(await page.evaluate(() => (window as Window & {undoCalls: string[]}).undoCalls)).toEqual(["undo", "redo"]);
+    expect(await page.evaluate(() => (window as unknown as Window & {undoCalls: string[]}).undoCalls)).toEqual(["undo", "redo"]);
 });
 
 test("keeps navigation visible after creating a draft row", async ({page}) => {
@@ -621,11 +625,11 @@ test("does not save an unchanged formula on blur", async ({page}) => {
     const pageErrors: Error[] = [];
     page.on("pageerror", (error) => pageErrors.push(error));
     await page.evaluate(() => {
-        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const api = (window as unknown as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
         const clearCell = api.ClearCell;
-        (window as Window & {clearCalls: number}).clearCalls = 0;
+        (window as unknown as Window & {clearCalls: number}).clearCalls = 0;
         api.ClearCell = (...args) => {
-            (window as Window & {clearCalls: number}).clearCalls++;
+            (window as unknown as Window & {clearCalls: number}).clearCalls++;
             return clearCell(...args);
         };
     });
@@ -638,7 +642,7 @@ test("does not save an unchanged formula on blur", async ({page}) => {
     await expect(page.locator("textarea")).toHaveValue("=20 + 5");
     await page.mouse.click(box.x + 1250, box.y + 200);
     await expect(page.locator(".table-document")).toHaveAttribute("data-inline-editor", "closed");
-    expect(await page.evaluate(() => (window as Window & {clearCalls: number}).clearCalls)).toBe(0);
+    expect(await page.evaluate(() => (window as unknown as Window & {clearCalls: number}).clearCalls)).toBe(0);
     expect(pageErrors).toEqual([]);
 });
 
@@ -654,7 +658,7 @@ test("edits a named Schema reference through its effective type", async ({page})
 
 test("renders a workspace with null Schema collections", async ({page}) => {
     await page.evaluate(() => {
-        const api = (window as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
+        const api = (window as unknown as Window & {go: {main: {App: Record<string, (...args: unknown[]) => unknown>}}}).go.main.App;
         const selectProject = api.SelectProject;
         api.SelectProject = async (...args) => {
             const workspace = await selectProject(...args) as {schemas: Record<string, unknown>};

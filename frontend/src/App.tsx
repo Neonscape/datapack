@@ -519,6 +519,9 @@ function App() {
             updateActiveTable(result.table as TableDocument);
             setWorkspace(result.workspace as WorkspaceView);
         } catch (reason) {
+            // The draft editor owns creation errors and must keep its unsaved row.
+            // Ordinary cell edits continue to report their error through the app toast.
+            if (column === "__create__") throw reason;
             const message = reason instanceof Error ? reason.message : String(reason);
             setError(message);
             setCellError({rowID, column, message});

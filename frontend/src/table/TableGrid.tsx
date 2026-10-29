@@ -43,7 +43,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
     const [commentEditor, setCommentEditor] = useState<CommentEditor | null>(null);
     const [commentTooltip, setCommentTooltip] = useState<CommentTooltip | null>(null);
     const [commentError, setCommentError] = useState("");
-    const [selectedCell, setSelectedCell] = useState<{column: number; row: number} | null>(null);
+    const [selectedCellState, setSelectedCell] = useState<{column: number; row: number} | null>(null);
     const [formulaEditing, setFormulaEditing] = useState(false);
     const [formulaValue, setFormulaValue] = useState("");
     const editorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -57,6 +57,30 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         ...table.columns.map((column) => ({id: column.name, title: column.displayName ? `${column.displayName} (${column.name})` : column.name, width: columnWidths[column.name] ?? column.width ?? 170})),
     ];
     const isDraft = (row: number) => row === table.rows.length;
+    const cellInBounds = (column: number, row: number) => column >= 0 && column < columns.length && row >= 0 && row <= table.rows.length;
+    // A structure edit can invalidate a retained coordinate before effects run.
+    const selectedCell = selectedCellState && cellInBounds(selectedCellState.column, selectedCellState.row) ? selectedCellState : null;
+    useEffect(() => {
+        if (selectedCellState && !selectedCell) {
+            setSelectedCell(null);
+            setFormulaEditing(false);
+            setFormulaValue("");
+        }
+        setGridSelection((selection) => {
+            const current = selection.current;
+            const validCurrent = !current || (cellInBounds(...current.cell)
+                && cellInBounds(current.range.x, current.range.y)
+                && cellInBounds(current.range.x + current.range.width - 1, current.range.y + current.range.height - 1));
+            const validColumns = selection.columns.toArray().filter((column) => column >= 0 && column < columns.length);
+            const validRows = selection.rows.toArray().filter((row) => row >= 0 && row <= table.rows.length);
+            if (validCurrent && validColumns.length === selection.columns.length && validRows.length === selection.rows.length) return selection;
+            return {
+                columns: validColumns.reduce((result, column) => result.add(column), CompactSelection.empty()),
+                rows: validRows.reduce((result, row) => result.add(row), CompactSelection.empty()),
+                current: validCurrent ? current : undefined,
+            };
+        });
+    }, [columns.length, table.rows.length, selectedCellState, selectedCell]);
     useEffect(() => {
         const editor = inlineEditor ? editorRef.current : foreignKeyEditorRef.current;
         editor?.focus();
@@ -90,6 +114,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
     const rowFor = (row: number): TableDocument["rows"][number] => isDraft(row) ? {id: draft.id, values: Object.fromEntries(Object.entries(draft.values).map(([name, expression]) => [name, {expression, display: expression, formula: false}]))} : table.rows[row];
     const effectiveSchemaFor = (column: number) => table.columns[column - 1]?.effectiveSchema ?? table.columns[column - 1]?.schema;
     const rawCellValue = (column: number, row: number): string => {
+        if (!cellInBounds(column, row)) return "";
         const source = rowFor(row);
         if (column === 0) return source.id;
         const columnDefinition = table.columns[column - 1];
@@ -104,7 +129,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         setFormulaValue(rawCellValue(selectedCell.column, selectedCell.row));
     }, [selectedCell, table, draft, formulaEditing]);
     const navigationRequestForCell = (column: number, row: number): NavRequest | null => {
-        if (isDraft(row)) return null;
+        if (!cellInBounds(column, row) || isDraft(row)) return null;
         const source = table.rows[row];
         if (column === 0) {
             return {kind: "primary-key-references", path: table.path, rowID: source.id};
@@ -143,17 +168,21 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         onFocusDone();
     }, [focusTarget, table]);
     useEffect(() => {
+        const element = gridRef.current;
+        if (!active || !element) return;
         const navigateShortcut = (event: KeyboardEvent) => {
-            if (event.key !== "F12" || !selectedCell) return;
-            event.preventDefault();
+            if (event.key !== "F12" || event.defaultPrevented || !selectedCell || !element.contains(document.activeElement)) return;
+            const target = event.target;
+            if (!(target instanceof Element) || target.closest("textarea, input, select") || (target instanceof HTMLElement && target.isContentEditable)) return;
             const request = navigationRequestForCell(selectedCell.column, selectedCell.row);
             if (!request) return;
+            event.preventDefault();
             const gridBounds = gridRef.current?.getBoundingClientRect();
             onNavigate(request, {x: gridBounds?.x ?? 0, y: gridBounds?.y ?? 0});
         };
-        document.addEventListener("keydown", navigateShortcut);
-        return () => document.removeEventListener("keydown", navigateShortcut);
-    }, [selectedCell, table]);
+        element.addEventListener("keydown", navigateShortcut);
+        return () => element.removeEventListener("keydown", navigateShortcut);
+    }, [active, selectedCell, table, onNavigate]);
     const errorFor = (rowID: string, column: string) => table.diagnostics?.find((diagnostic) => diagnostic.rowID === rowID && (!diagnostic.column || diagnostic.column === column));
     const commentFor = (rowID: string, column: string) => table.cellComments?.[rowID]?.[column] ?? "";
     const cellColumnName = (column: number) => column === 0 ? "id" : table.columns[column - 1]?.name ?? "";
@@ -193,6 +222,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         dataEditorRef.current?.focus();
     };
     const getCellContent = ([column, row]: Item): GridCell => {
+        if (!cellInBounds(column, row)) return {kind: GridCellKind.Text, data: "", displayData: "", allowOverlay: false, readonly: true};
         const source = rowFor(row);
         const cell = column === 0 ? {display: source.id, expression: source.id} : source.values[table.columns[column - 1].name];
         const error = isDraft(row) ? draftError : errorFor(source.id, table.columns[column - 1]?.name ?? "");
@@ -227,6 +257,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         };
     };
     const editCell = async ([column, row]: Item, value: GridCell) => {
+        if (!cellInBounds(column, row)) return;
         const enumValue = value as EnumCell;
         const input = value.kind === GridCellKind.Custom && enumValue.data.kind === "enum" ? JSON.stringify(enumValue.data.value) : value.kind === GridCellKind.Boolean ? value.data ? "true" : "false" : value.kind === GridCellKind.Text ? value.data.trim() : null;
         if (input === null) return;
@@ -278,7 +309,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: value, displayData: value});
     };
     const openInlineAt = (column: number, row: number, bounds: {x: number; y: number; width: number; height: number}) => {
-        if (column < 0 || row < 0 || row >= table.rows.length + 1) return;
+        if (!cellInBounds(column, row)) return;
         const source = rowFor(row);
         const cell = column === 0 ? {expression: source.id, formula: false} : source.values[table.columns[column - 1].name];
         const columnDefinition = table.columns[column - 1];
@@ -387,7 +418,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
                 ref={formulaBarRef}
                 className="formula-bar-input"
                 aria-label={t("grid.formulaBar")}
-                value={formulaValue}
+                value={selectedCell ? formulaValue : ""}
                 disabled={!selectedCell}
                  readOnly={!formulaBarEditable || !formulaEditing}
                 placeholder={t("grid.selectCell")}
@@ -411,8 +442,8 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
                         event.preventDefault();
                         event.currentTarget.blur();
                     }
-                    if (event.key === "Escape") {
-                        setFormulaValue(rawCellValue(selectedCell!.column, selectedCell!.row));
+                    if (event.key === "Escape" && selectedCell) {
+                        setFormulaValue(rawCellValue(selectedCell.column, selectedCell.row));
                         setFormulaEditing(false);
                         formulaBarRef.current?.blur();
                     }
