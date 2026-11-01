@@ -20,6 +20,7 @@ import (
 	"cuelang.org/go/cue/token"
 	"datapack/internal/compiler"
 	"datapack/internal/cueformat"
+	"datapack/internal/cuerows"
 	"datapack/internal/cuesource"
 	"datapack/internal/document"
 	"datapack/internal/exporters"
@@ -2612,18 +2613,13 @@ func appendCueDiagnostics(table *document.Table, rows map[string]map[string]any)
 	rowSchema := packageValue.LookupPath(cue.MakePath(cue.Def("Row")))
 	primaryKey := packageValue.LookupPath(cue.MakePath(cue.Def("PrimaryKey")))
 	for _, row := range table.Rows {
-		if err := primaryKey.Unify(context.Encode(row.ID)).Validate(cue.Concrete(true)); err != nil {
-			table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: row.ID, Message: "invalid ID: " + err.Error()})
-		}
-		for column, value := range rows[row.ID] {
-			fieldSchema := rowSchema.LookupPath(cue.MakePath(cue.Str(column)))
-			if err := fieldSchema.Unify(context.Encode(value)).Validate(cue.Concrete(true)); err != nil {
-				table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: row.ID, Column: column, Message: err.Error()})
+		_, issues := cuerows.Validate(rowSchema, primaryKey, row.ID, rows[row.ID])
+		for _, issue := range issues {
+			message := issue.Err.Error()
+			if issue.Kind == cuerows.Identity {
+				message = "invalid ID: " + message
 			}
-		}
-		candidate := rowSchema.Unify(context.Encode(rows[row.ID]))
-		if err := candidate.Validate(cue.Concrete(true)); err != nil {
-			table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: row.ID, Message: err.Error()})
+			table.Diagnostics = append(table.Diagnostics, document.Diagnostic{RowID: row.ID, Column: issue.Column, Message: message})
 		}
 	}
 }

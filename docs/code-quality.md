@@ -4,7 +4,7 @@
 
 | 模块 | 当前证据 / 处理 | 验证与后续优先级 |
 |---|---|---|
-| compiler / formula / foreignkey / schemaregistry | 领域职责明确：最终值、依赖状态、FK 来源与导航索引各有边界。显示名仅随 DTO 传播，不参与 ID。 | 维持包/functional/golden/race。没有重写依据。 |
+| compiler / formula / foreignkey / schemaregistry | 领域职责明确：最终值、依赖状态、FK 来源与导航索引各有边界。显示名仅随 DTO 传播，不参与 ID。 | 维持包/functional/golden/race。领域流程没有重写依据；compiler/preview 仅共享无 I/O 的 cuerows 校验机制，package选择、诊断和默认解码保留各自策略。详见 cue-row-validation.md。 |
 | cuesource / document / schemamodel / cueformat | 宽容树解析与严格编辑有不同用途，不能合并；CUE 格式兼容层已有测试。 | 保留边界。裸字节 staging 提到 sourcefile，语法/模型校验仍由命令负责。 |
 | sourcefile | 统一临时文件创建、权限、写入、同步、关闭及恢复副本；document 三类 writer、多文件替换和 workspace 历史写入复用。 | 测试 create/chmod/write/sync/close 故障，原字节与 mode、空文件、无效 CUE 的原样 staging。机制层不做语义校验。 |
 | workspace | 已有 Service RWMutex、历史补偿、目录快照及 FK 来源保护。旧文档“没有锁”的结论过时。新事务边界在成功刷新后发布历史，读取失败不会伪装成不存在。 | 新增刷新失败的行/Schema 命令、目录、附件、历史/revision/compile 状态回归。仍需 P1 会话生命周期与发布协议特征测试，P2 测量重复扫描后再考虑缓存。 |
