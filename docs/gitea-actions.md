@@ -55,3 +55,7 @@ After a successful Linux build, the release packaging script can be tested local
 ```
 
 The generated files are placed in `release/`.
+
+## Alpha prereleases
+
+Tags containing `-alpha.` publish as prereleases on both services. GitHub explicitly uses `prerelease: true` and `make_latest: false`, with the checked-in Chinese alpha notes; stable-tag release inputs remain unchanged. Gitea uses the same notes and prerelease flag. For alpha, an existing release or an inconclusive lookup is refused before any record/asset mutation; previous releases and assets are not overwritten. Stable-tag retry behavior remains unchanged. GitHub provides the existing Linux/Windows x64 assets; this Gitea workflow provides Linux x64.

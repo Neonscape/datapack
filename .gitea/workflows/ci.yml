@@ -70,6 +70,7 @@ jobs:
         run: |
           bash test/scripts/package-linux-release.test.sh
           bash test/scripts/release-gitea.test.sh
+          bash test/scripts/release-alpha.test.sh
 
       - name: Check frontend types
         run: npm --prefix frontend run typecheck
