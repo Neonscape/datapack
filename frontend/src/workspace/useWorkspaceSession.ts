@@ -1,9 +1,19 @@
+import {schemaDefinitionContent} from "../schema/definitionContent";
 import {useState} from "react";
 import type {PublicSchemaDocument, SchemaDefinition, SchemaEditorState, TableDocument, WorkspaceView} from "../types";
 
 export type OpenTab =
     | {id: string; kind: "table"; path: string; table: TableDocument}
     | {id: string; kind: "schema"; state: SchemaEditorState};
+
+// A metadata-only refresh keeps selection and creation state, as well as the
+// editor's local draft. Semantic changes still reconcile a removed selection.
+export function refreshSchemaState(state: SchemaEditorState, definitions: SchemaEditorState["definitions"], metadata: Pick<SchemaEditorState, "displayName" | "logicalTable" | "package">): SchemaEditorState {
+    const unchanged = schemaDefinitionContent(state.definitions) === schemaDefinitionContent(definitions);
+    return {...state, ...metadata, definitions,
+        selected: unchanged ? state.selected : definitions.some((entry) => entry.name === state.selected) ? state.selected : definitions[0]?.name ?? null,
+        creating: unchanged ? state.creating : false};
+}
 
 export function useWorkspaceSession() {
     const [workspace, setWorkspace] = useState<WorkspaceView | null>(null);
