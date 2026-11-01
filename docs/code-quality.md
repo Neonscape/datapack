@@ -11,7 +11,7 @@
 | projecttree / navigation | 固定分组与标题由 UI 呈现；内部名、路径和节点 kind 保持身份。 | 导航回归覆盖大树/小窗口、初始默认祖先、刷新保留手动展开、切换项目和语言。无需领域导航框架。 |
 | exporters / export_path | 导出只消费 compiled 包，危险路径保护与 CSV 编码已有回归。 | 维持现有安全边界，无重构依据。显示名修改前后 CSV 字节一致。 |
 | App / workspace session | 已实证三项迟到读取/刷新丢标签问题并独立纠错。session 原子维护 view/tabs/active/peek，显式命令替代 React setter；项目 generation、请求序号、标签实例和焦点意图约束 open/history 的结果应用。 | 纠错前真实浏览器3项准确失败，修复后11项延迟 Promise 回归通过，含删除/改名请求失效及peek/命令交错。最终全量94项通过；其余编辑命令的异步结果协议仍需后续验证与适配。 |
-| TableGrid / valueCodecs | Codecs 已拆出，旧文档相反；保留选区、活动/焦点 ownership、编辑草稿与全局事件仍耦合。 | 维持真实浏览器复制/粘贴/F12/草稿/数组回归。后续明确编辑器局部状态归属，再拆受控组件；不引入新状态框架。 |
+| TableGrid / valueCodecs | 保留已有codecs。行草稿工作流归useRowDraft，输入字段身份/创建回调解耦坐标和IPC；选区边界是独立纯规则，clipboard/F12共用事件归属判断。 | 保留全部真实浏览器输入/失败/焦点/数组回归，新增纯边界契约。专用数组/结构编辑器继续由Grid协调，本批不重写成熟输入或引入框架。 |
 | types / Wails bridge | DTO/UI模型保留各自职责；bridge为组件唯一生成绑定入口，集中tag/集合/零结果转换和请求模型构造。App/Settings/SchemaEditor的DTO断言与generated imports已移除。 | 生成模型契约验证身份/源码/false/0/manual/pending、取消/空半部/非法tag及输入不变；有效输入维持原行为。生成文件未改，真实Wails交互仍另列缺口。 |
 | i18n / theme / logging / settings | Catalog 与主题边界清楚。固定导航文案已入中英资源；logger 调外部 sink 时持锁、settings manual 分支早返回为待验证风险。 | 不为风格重写 catalog。低优先级复现 sink 重入/错误校验边界后决定修复，未将静态疑点当确认缺陷。 |
 | tests / examples | Go 包、functional/golden 与真实 Chromium UI 各有价值；UI 只 mock Wails IPC，不证明原生窗口/序列化。云岚保留业务链与英文 ID/中文显示名。 | 产品和测试源码都做严格 TS 检查；浏览器串行并检查布局截图。真实桌面 smoke 尚未执行。 |
