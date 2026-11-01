@@ -1,4 +1,5 @@
-package document
+// Package sourcefile owns byte staging and compensation, without CUE validation.
+package sourcefile
 
 import (
 	"errors"
@@ -7,10 +8,22 @@ import (
 	"path/filepath"
 )
 
-// stageSource performs raw filesystem staging only. Each command retains its
+// Stage performs raw filesystem staging only. Each command retains its
 // own candidate validation; rollback must also accept original bytes verbatim.
-func stageSource(path string, source []byte, mode os.FileMode) (temporaryPath string, err error) {
-	file, err := os.CreateTemp(filepath.Dir(path), ".datapack-stage-*")
+type stagedFile interface {
+	Name() string
+	Chmod(os.FileMode) error
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+func Stage(path string, source []byte, mode os.FileMode) (string, error) {
+	return stage(path, source, mode, func(dir, pattern string) (stagedFile, error) { return os.CreateTemp(dir, pattern) })
+}
+
+func stage(path string, source []byte, mode os.FileMode, create func(string, string) (stagedFile, error)) (temporaryPath string, err error) {
+	file, err := create(filepath.Dir(path), ".datapack-stage-*")
 	if err != nil {
 		return "", err
 	}
@@ -40,8 +53,8 @@ func stageSource(path string, source []byte, mode os.FileMode) (temporaryPath st
 	return temporaryPath, err
 }
 
-func restoreStagedSource(path string, original []byte, mode os.FileMode, rename func(string, string) error) error {
-	temporary, err := stageSource(path, original, mode)
+func Restore(path string, original []byte, mode os.FileMode, rename func(string, string) error) error {
+	temporary, err := Stage(path, original, mode)
 	if err != nil {
 		return err
 	}

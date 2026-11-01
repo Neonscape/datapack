@@ -1,6 +1,7 @@
 package document
 
 import (
+	"datapack/internal/sourcefile"
 	"errors"
 	"fmt"
 	"os"
@@ -233,7 +234,7 @@ func replaceAllWithOps(paths []string, candidates, originals map[string][]byte, 
 			return fmt.Errorf("stat renamed table: %w", err)
 		}
 		modes[path] = info.Mode().Perm()
-		staged, err := stageSource(path, candidates[path], modes[path])
+		staged, err := sourcefile.Stage(path, candidates[path], modes[path])
 		if err != nil {
 			return fmt.Errorf("stage renamed table: %w", err)
 		}
@@ -245,7 +246,7 @@ func replaceAllWithOps(paths []string, candidates, originals map[string][]byte, 
 			failures := []error{fmt.Errorf("replace renamed table: %w", err)}
 			for index := len(committed) - 1; index >= 0; index-- {
 				previous := committed[index]
-				if restoreErr := restoreStagedSource(previous, originals[previous], modes[previous], ops.rename); restoreErr != nil {
+				if restoreErr := sourcefile.Restore(previous, originals[previous], modes[previous], ops.rename); restoreErr != nil {
 					failures = append(failures, fmt.Errorf("restore renamed table %q: %w", previous, restoreErr))
 				}
 			}

@@ -1,6 +1,7 @@
 package document
 
 import (
+	"datapack/internal/sourcefile"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -997,27 +998,11 @@ func validateAndReplace(path string, source []byte) (Table, error) {
 	if err != nil {
 		return Table{}, fmt.Errorf("stat table source: %w", err)
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".datapack-*.cue")
+	temporaryPath, err := sourcefile.Stage(path, source, info.Mode())
 	if err != nil {
-		return Table{}, fmt.Errorf("create temporary table source: %w", err)
+		return Table{}, fmt.Errorf("stage temporary table source: %w", err)
 	}
-	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(info.Mode()); err != nil {
-		temporary.Close()
-		return Table{}, fmt.Errorf("set temporary table permissions: %w", err)
-	}
-	if _, err := temporary.Write(source); err != nil {
-		temporary.Close()
-		return Table{}, fmt.Errorf("write temporary table source: %w", err)
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return Table{}, fmt.Errorf("sync temporary table source: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return Table{}, fmt.Errorf("close temporary table source: %w", err)
-	}
 	table, err := LoadTable(temporaryPath)
 	if err != nil {
 		return Table{}, fmt.Errorf("validate updated table: %w", err)

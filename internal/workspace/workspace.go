@@ -30,6 +30,7 @@ import (
 	"datapack/internal/projecttree"
 	"datapack/internal/schemamodel"
 	"datapack/internal/schemaregistry"
+	"datapack/internal/sourcefile"
 )
 
 type View struct {
@@ -2011,27 +2012,11 @@ func writeFileAtomic(path string, content []byte) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".datapack-restore-*")
+	temporaryPath, err := sourcefile.Stage(path, content, mode)
 	if err != nil {
 		return err
 	}
-	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(mode); err != nil {
-		temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(content); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
 	return os.Rename(temporaryPath, path)
 }
 
