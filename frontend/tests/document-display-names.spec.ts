@@ -86,3 +86,32 @@ test("language changes preserve custom titles and expanded definition identities
     await page.getByRole("button", {name: "相同显示名 (item)", exact: true}).click({button: "right"});
     await expect(page.getByRole("button", {name: "编辑显示名", exact: true})).toBeVisible();
 });
+
+test("metadata-only title updates preserve unapplied schema edits and new definitions", async ({page}) => {
+    await page.getByRole("button",{name:"相同定义名 (#ID)",exact:true}).click();
+    await page.getByRole("button",{name:"Custom expression",exact:true}).click();
+    const expression=page.locator(".schema-editor-form textarea");
+    await expression.fill('string & =~"draft"');
+    await editTitle(page,"相同显示名 (item)","无关表标题");
+    await expect(expression).toHaveValue('string & =~"draft"');
+    await editTitle(page,"相同定义名 (#ID)","定义新标题");
+    await expect(expression).toHaveValue('string & =~"draft"');
+    await page.getByRole("button",{name:"New definition",exact:true}).click();
+    await page.getByRole("textbox",{name:"Name",exact:true}).fill("UnappliedDraft");
+    await editTitle(page,"公共规则 (common.cue)","文件新标题");
+    await expect(page.getByRole("textbox",{name:"Name",exact:true})).toHaveValue("UnappliedDraft");
+    await expect(page.locator(".schema-editor-form").getByRole("button",{name:"Create",exact:true})).toBeVisible();
+});
+
+test("long display titles stay inside a small workbench", async ({page},info) => {
+    await page.setViewportSize({width:980,height:580});
+    const title="较长的中文显示名和StableIdentifier".repeat(25);
+    await editTitle(page,"相同显示名 (item)",title);
+    await page.getByRole("button",{name:`${title} (item)`,exact:true}).click();
+    const bounds=await page.locator(".table-document-header").evaluate((header)=>({height:header.clientHeight,width:header.clientWidth,contentWidth:header.scrollWidth}));
+    expect(bounds.height).toBeLessThan(90);
+    expect(bounds.contentWidth).toBeLessThanOrEqual(bounds.width);
+    const footer=await page.locator(".log-panel").boundingBox();
+    expect(footer!.y+footer!.height).toBeLessThanOrEqual(580);
+    await page.screenshot({path:info.outputPath("long-display-title.png")});
+});

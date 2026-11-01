@@ -3,11 +3,13 @@ package document
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"cuelang.org/go/cue/ast"
 	"cuelang.org/go/cue/parser"
 	"datapack/internal/cueformat"
+	"datapack/internal/cuesource"
 )
 
 // SetDisplayName edits presentation metadata only. An empty definition selects
@@ -23,6 +25,16 @@ func SetDisplayName(path, definition, displayName string) error {
 	}
 	fields := fieldsOfFile(file)
 	isTable := fields["_tool"] != nil
+	if !isTable && definition == "" {
+		if err := setSchemaFileTitle(file, strings.TrimSpace(displayName)); err != nil {
+			return err
+		}
+		candidate, err := cueformat.Node(file)
+		if err != nil {
+			return fmt.Errorf("format schema file title: %w", err)
+		}
+		return replaceSource(path, candidate)
+	}
 	metadataPath := []string{"schema"}
 	if isTable {
 		metadataPath[0] = "table"
@@ -129,4 +141,39 @@ func definitionTitles(file *ast.File) (*ast.StructLit, error) {
 		return nil, fmt.Errorf("_editor.schemas must be a struct")
 	}
 	return value, nil
+}
+
+// File attributes do not become package fields. This avoids unifying different
+// file titles when several public Schema files share one CUE package.
+func setSchemaFileTitle(file *ast.File, title string) error {
+	editor, err := editorStruct(file, false)
+	if err != nil {
+		return err
+	}
+	if editor != nil {
+		if legacy := fieldsOfStruct(editor)["schema"]; legacy != nil {
+			value, ok := legacy.Value.(*ast.StructLit)
+			if !ok {
+				return fmt.Errorf("_editor.schema must be a struct")
+			}
+			removeNamedField(value, "title")
+		}
+	}
+	var declarations []ast.Decl
+	count := 0
+	for _, decl := range file.Decls {
+		if attribute, ok := decl.(*ast.Attribute); ok && strings.HasPrefix(attribute.Text, "@"+cuesource.FileTitleAttribute+"(") {
+			count++
+			continue
+		}
+		declarations = append(declarations, decl)
+	}
+	if count > 1 {
+		return fmt.Errorf("duplicate file title attributes")
+	}
+	if title != "" {
+		declarations = append([]ast.Decl{&ast.Attribute{Text: "@" + cuesource.FileTitleAttribute + "(" + strconv.Quote(title) + ")"}}, declarations...)
+	}
+	file.Decls = declarations
+	return nil
 }

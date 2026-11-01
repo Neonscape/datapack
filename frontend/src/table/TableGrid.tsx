@@ -406,7 +406,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         <div className="table-document-header">
             <div>
                 <div className="table-eyebrow">{t("grid.cueExpressionEditing")}</div>
-                <h1>{displayLabel(table.displayName, table.namespace ? `${table.namespace}.${table.name}` : table.name)}</h1>
+                <h1 title={displayLabel(table.displayName, table.namespace ? `${table.namespace}.${table.name}` : table.name)}>{displayLabel(table.displayName, table.namespace ? `${table.namespace}.${table.name}` : table.name)}</h1>
             </div>
             <span>{t("grid.rowsDraft", {count: table.rows.length})}</span>
         </div>

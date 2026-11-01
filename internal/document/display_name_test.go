@@ -151,3 +151,37 @@ _editor: {schemas: {New: {title: "orphan"}}}`)
 		t.Fatal("failed rename changed source")
 	}
 }
+
+func TestSchemaFileTitleMigratesLegacyMetadataToFileAttribute(t *testing.T) {
+	path := writeSource(t, "common.cue", `@keep("opaque")
+package common
+#ID:string
+_schema:{definitions:{ID:{kind:"type",type:"string"}}}
+_editor:{schema:{title:"旧标题",note:"keep"}}`)
+	legacy, err := LoadPublicSchema(path)
+	if err != nil || legacy.DisplayName != "旧标题" {
+		t.Fatalf("legacy title: %#v %v", legacy, err)
+	}
+	if err := SetDisplayName(path, "", "新标题\n第二行"); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadPublicSchema(path)
+	if err != nil || loaded.DisplayName != "新标题\n第二行" {
+		t.Fatalf("attribute title: %#v %v", loaded, err)
+	}
+	source, _ := os.ReadFile(path)
+	if !strings.Contains(string(source), "@datapackTitle(") || strings.Contains(string(source), "旧标题") {
+		t.Fatalf("legacy migration: %s", source)
+	}
+	if err := SetDisplayName(path, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = LoadPublicSchema(path)
+	if err != nil || loaded.DisplayName != "" {
+		t.Fatalf("clear: %#v %v", loaded, err)
+	}
+	source, _ = os.ReadFile(path)
+	if !strings.Contains(string(source), `@keep("opaque")`) || !strings.Contains(string(source), `note: "keep"`) {
+		t.Fatalf("unrelated metadata removed: %s", source)
+	}
+}
