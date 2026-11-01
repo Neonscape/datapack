@@ -1,0 +1,18 @@
+goos: linux
+goarch: amd64
+pkg: datapack/internal/workspace
+cpu: Intel(R) Core(TM) Ultra 7 270K Plus
+BenchmarkYunlan/scan-24         	       3	   4208701 ns/op	 3106504 B/op	   42365 allocs/op
+BenchmarkYunlan/scan-24         	       3	   4492665 ns/op	 3104677 B/op	   42362 allocs/op
+BenchmarkYunlan/scan-24         	       3	   4764285 ns/op	 3104640 B/op	   42362 allocs/op
+BenchmarkYunlan/parse-24        	       3	  11127527 ns/op	10286365 B/op	  133498 allocs/op
+BenchmarkYunlan/parse-24        	       3	  10897728 ns/op	10255706 B/op	  133489 allocs/op
+BenchmarkYunlan/parse-24        	       3	  10619833 ns/op	10271322 B/op	  133489 allocs/op
+BenchmarkYunlan/index-24        	       3	     58499 ns/op	   41338 B/op	     446 allocs/op
+BenchmarkYunlan/index-24        	       3	     49176 ns/op	   41317 B/op	     445 allocs/op
+BenchmarkYunlan/index-24        	       3	     56174 ns/op	   41338 B/op	     446 allocs/op
+BenchmarkYunlan/compile-24      	       3	 192484313 ns/op	310639594 B/op	 1712390 allocs/op
+BenchmarkYunlan/compile-24      	       3	 191193410 ns/op	310587624 B/op	 1712375 allocs/op
+BenchmarkYunlan/compile-24      	       3	 189262543 ns/op	310494813 B/op	 1712353 allocs/op
+PASS
+ok  	datapack/internal/workspace	2.519s

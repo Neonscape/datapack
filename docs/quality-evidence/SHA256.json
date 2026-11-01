@@ -1,0 +1,17 @@
+{
+  "benchmark-baseline.log": "6f4a755c7f273e940a2fbc435fc589ee634e05dda1c75fd048a2f1a98aceb0f8",
+  "benchmark-integrated.log": "3582cba4a2ddbc6e2cf8e63f91c1ffdcb0dd9927c3f4fd22c47ee5d5c65747f2",
+  "native-startup-smoke.sh": "480f0e43f105239ee1d635cf709c291053025d73f1bb24be5e43e8c125423e9d",
+  "native-after-cancel.png": "d51bad9da3167e6b3d7f1d0518d2807be31d5dd7d9eeae9dd680d8b61b6108c8",
+  "native-smoke-redacted.log": "a5ca9beed518691d9888ae8529c0e65aec788d5624b1f6aea885350611dd8fc1",
+  "original_native_log_sha256": "012c11be87fd9ea5a30b461bfa523d868bf048d141358c73e2f69baf9f63bb38",
+  "binary_sha256": "cab83fceb3e603703876d14087b8c97ba695b59ec99cf9b01a65ec727de41d8d",
+  "benchmark_harness_sha256": "35c0787c4989e06fa250637ffd1973430472aaef0e916f438d71896b6ef239c2",
+  "fixture_git_tree": "40e06f06e3eb43e58e1a494b36bed3d16a530763",
+  "fixture_project_sha256": "10b5c12cefa85ca4b6bd69ce6359189539d8a0b260613514f28efe0215167768",
+  "baseline_production_commit": "02fe4f144557671eb3738b4278901e17f708baa1",
+  "baseline_characterization_commit": "7cc5ffc22e75964c38afc0bb362054b1ccb6945b",
+  "measured_integration_commit": "5300ebdc86fdbc4da85f217d2a777feb23b3b537",
+  "equivalent_published_commit": "ada0b8a2976a4d53fdf3f1b204406a24183379f5",
+  "equivalent_code_tree": "61f75d1e1d2a7072f9cb4e55b1e611e6fe74cac4"
+}

@@ -1,36 +1,40 @@
-# Code Quality And Maintenance
+# 代码质量与职责边界
 
-本轮评估覆盖全项目。保留源文件权威、受限 CUE、显式编译结果和稳定内部 ID；重构不能改变默认值、诊断时点、允许保存业务错误、导出筛选和历史语义。以下按源码证据和回归区分已处理、无需变更与后续工作，不能把待验证风险称为缺陷。
+2026-11-01 的维护覆盖后端、前端、桥接、测试、文档与构建。以下记录完成的有限边界及保留理由，不以文件行数或重写数量衡量质量。源文件仍是权威，内部 ID、文件格式、CUE 语义、默认值时点、导出筛选和历史协议保持兼容；已确认的正确性问题以独立纠错提交处理。
 
-| 模块 | 当前证据 / 处理 | 验证与后续优先级 |
+|模块|本轮处理 / 保留理由|验证与边界|
 |---|---|---|
-| compiler / formula / foreignkey / schemaregistry | 领域职责明确：最终值、依赖状态、FK 来源与导航索引各有边界。显示名仅随 DTO 传播，不参与 ID。 | 维持包/functional/golden/race。领域流程没有重写依据；compiler/preview 仅共享无 I/O 的 cuerows 校验机制，package选择、诊断和默认解码保留各自策略。详见 cue-row-validation.md。 |
-| cuesource / document / schemamodel / cueformat | 宽容树解析与严格编辑有不同用途，不能合并；CUE 格式兼容层已有测试。 | 保留边界。裸字节 staging 提到 sourcefile，语法/模型校验仍由命令负责。 |
-| sourcefile | 统一临时文件创建、权限、写入、同步、关闭及恢复副本；document 三类 writer、多文件替换和 workspace 历史写入复用。 | 测试 create/chmod/write/sync/close 故障，原字节与 mode、空文件、无效 CUE 的原样 staging。机制层不做语义校验。 |
-| workspace | 已有 Service RWMutex、历史补偿、目录快照及 FK 来源保护。旧文档“没有锁”的结论过时。新事务边界在成功刷新后发布历史，读取失败不会伪装成不存在。 | 新增刷新失败的行/Schema 命令、目录、附件、历史/revision/compile 状态回归。生命周期/发布协议已先锁manual/auto/失败/重开特征，再由纯viewLifecycle拥有revision与编译发布；源/编译管线按职责收敛。云岚基准见workspace-lifecycle.md，不引入缓存或改变触发时点。 |
-| projecttree / navigation | 固定分组与标题由 UI 呈现；内部名、路径和节点 kind 保持身份。 | 导航回归覆盖大树/小窗口、初始默认祖先、刷新保留手动展开、切换项目和语言。无需领域导航框架。 |
-| exporters / export_path | 导出只消费 compiled 包，危险路径保护与 CSV 编码已有回归。 | 维持现有安全边界，无重构依据。显示名修改前后 CSV 字节一致。 |
-| App / workspace session | 已实证三项迟到读取/刷新丢标签问题并独立纠错。session 原子维护 view/tabs/active/peek，显式命令替代 React setter；项目 generation、请求序号、标签实例和焦点意图约束 open/history 的结果应用。 | 纠错前真实浏览器3项准确失败，修复后11项延迟 Promise 回归通过，含删除/改名请求失效及peek/命令交错。最终全量94项通过；其余编辑命令的异步结果协议仍需后续验证与适配。 |
-| TableGrid / valueCodecs | 保留已有codecs。行草稿工作流归useRowDraft，输入字段身份/创建回调解耦坐标和IPC；选区边界是独立纯规则，clipboard/F12共用事件归属判断。 | 保留全部真实浏览器输入/失败/焦点/数组回归，新增纯边界契约。专用数组/结构编辑器继续由Grid协调，本批不重写成熟输入或引入框架。 |
-| types / Wails bridge | DTO/UI模型保留各自职责；bridge为组件唯一生成绑定入口，集中tag/集合/零结果转换和请求模型构造。App/Settings/SchemaEditor的DTO断言与generated imports已移除。 | 生成模型契约验证身份/源码/false/0/manual/pending、取消/空半部/非法tag及输入不变；有效输入维持原行为。生成文件未改，真实Wails交互仍另列缺口。 |
-| i18n / theme / logging / settings | Catalog 与主题边界清楚。固定导航文案已入中英资源；logger 调外部 sink 时持锁、settings manual 分支早返回为待验证风险。 | 不为风格重写 catalog。低优先级复现 sink 重入/错误校验边界后决定修复，未将静态疑点当确认缺陷。 |
-| tests / examples | Go 包、functional/golden 与真实 Chromium UI 各有价值；UI 只 mock Wails IPC，不证明原生窗口/序列化。云岚保留业务链与英文 ID/中文显示名。 | 产品和测试源码都做严格 TS 检查；浏览器串行并检查布局截图。真实桌面 smoke 尚未执行。 |
-| build / CI / scripts | 已复现并修复干净 checkout 缺 embed 资源、打包清空输出目录及预存链接/附件范围风险。PR14已正常合并且精确/post CI成功。 | 前端 build 前置、可移植浏览器、无覆盖 staging 发布和当前版本附件白名单均有安全回归；未实际 release/deploy。 |
-| docs | 原质量文档已与锁、session、codecs 和损坏文档诊断实现不符。 | 本文纠正现状；test/README 的 API 边界说明也已更新。 |
+|workspace 源命令与历史|统一成功刷新后记历史，快照包含未入树目标；读取错误不伪装不存在，失败保留状态并报告补偿错误。|故障注入覆盖第二文件提交/恢复失败、特殊 mode、目录/附件、history/revision/compile；拒绝 symlink/非普通源文件。见 source-transactions.md。|
+|document / sourcefile|共享裸字节 stage/restore 机制，AST/模型校验仍由领域命令持有。|非法语法不落盘，合法业务错误仍能保存并诊断。只有原字节完整暂存后最终 rename 失败才保证保留恢复材料；不宣称 crash、外部并发、ACL/xattr/inode 事务。|
+|Schema 改名|使用 CUE 词法绑定、import/package 身份，拒绝名称捕获等不安全迁移。|公共/本地/嵌套/同名/alias/comprehension 编译前后、无关源零写入与历史回归。见 schema-renames.md。|
+|Schema import 身份|内部解析上下文统一索引/反向使用/导航/有效类型，不改原表达式或 DTO。|真实 module 默认 major，implicit/explicit v1、qualifier、错误路径/版本、循环、修复坏 module；不硬编码省略 major 为 v0。见 schema-imports.md。|
+|有效 Schema 模型|递归展开前复制 Fields slice，避免改写共享 document/registry。|源引用不变性及并行展开 Go race 回归；是局部所有权修复，不是通用深拷贝框架。见 schema-preview-isolation.md。|
+|workspace 生命周期|viewLifecycle 拥有 revision/上次编译/纯发布，compile_pipeline 负责源收集、索引、完整编译及 view 构造；Service 保留锁、源命令和历史。|先特征测试：manual 旧诊断/时间与 pending、auto 编辑、失败刷新不发布、重开后确实重编译外部变化；无新计时器或缓存。见 workspace-lifecycle.md。|
+|preview / compiler|共享 cuerows 的纯 CUE 主键/字段/整行检查，保留调用方 package loader、诊断策略和 final Decode。|默认整数/空数组/null 与源预览不水合、诊断次数/位置/key、多 package 选择差异先锁定再提取；manual/pending 未统一。见 cue-row-validation.md。|
+|formula / foreignkey / registry 领域 / exporter / export_path / cueformat|领域边界与安全回归有效，没有重写依据；只改实证的局部兼容问题。|维持最终值、FK 来源、compiled 消费、危险路径和格式兼容保护；不因“质量维护”重新设计成熟模块。|
+|cuesource / document|宽容树扫描与严格编辑服务不同场景。|保持分离，损坏文件仍可进树并诊断，严格编辑不会以容错解析掩盖非法源。|
+|App / session|session 原子拥有 workspace/tabs/active/peek，封装初始化、tab 身份转换和 command/result 应用，减少裸 setter。|project generation、request sequence、tab 实例、focus intent 与 publication counter 保护 open/history；延迟 Promise 真浏览器回归。并未为所有持久化命令增加通用并发队列。见 workspace-session.md。|
+|Wails bridge / types|单一 adapter 处理生成 DTO 与 UI 类型；组件不散落生成绑定/断言，生成文件未手改。|raw JSON/null、false/0/map、diagnostics/timestamp、输入参数及 native rejection identity 契约。取消选择的 zero view 保留现有归一化。见 bridge-contract.md。|
+|TableGrid / valueCodecs|保留既有 codecs；useRowDraft 拥有未存行，纯 selection 负责坐标转换，eventOwnership 明确活动焦点。|是适度提取，复杂 array/struct editor UI 仍在 Grid；全量复制粘贴/F12/草稿/选区/数组输入回归。见 grid-editing.md。|
+|在途草稿|单个 CreateRow 在途时继续保本地输入，禁止重复提交；迟到结果只清原样草稿。|成功/失败/同 ID 新字段的真实延迟回归；已保存 ID 的新草稿提示重复并保输入，显式编辑才重试，不自动保存或静默更新旧行。|
+|projecttree / navigation / display names|滚动受左侧容器限制；模态滚轮/焦点/快捷键隔离；首次只展开默认文档祖先，刷新保手工状态；显示名不参与身份。|长树/小窗口/长文案截图、默认与无默认工程、语言/项目切换、同名、显示名保存/Undo/草稿、同 package Schema 标题兼容。|
+|i18n / theme|固定树/Schema 文案进入现有中英 catalog，检查键集合一致性。|显示内容与稳定 key/ID 分离；没有风格性重写 catalog 或主题系统。|
+|settings / logging|manual 仍校验语言/主题；日志 writer/注册快照锁与外部 callback 分离。|legacy 默认和零 manual debounce 保留，无效保存写前拒绝。**并发 Log 的 Sink 可并发、无全局顺序**，这是一项明确的合同变化；Sink 要线程安全、不阻塞，无新增队列。生产唯一 Sink 是无局部状态的 Wails 事件转发。见 runtime-boundaries.md。|
+|build / CI / scripts|前端构建在 Go embed 前，可移植浏览器配置；打包用临时 staging、无覆盖发布和精确版本附件白名单。|干净构建、链接/旧产物/中途失败保护、shell syntax 和 mock release contract；同版本不同字节拒绝，应使用新版本。本轮没有实际 release/deploy。|
+|测试 / 文档 / 样例|保留 Go 功能/golden 和 mock IPC 的真实 Chromium 两类边界，产品及测试源码均严格类型检查；更新过时 API/职责说明。|云岚数据/golden不变；没有删除断言来通过检查。原生 smoke 实测窗口、设置 IPC 和打开工程对话框取消，不等于桌面编辑/系统剪贴板/保存对话框全测。|
 
-## 独立的纠错与兼容边界
+## 测量与验证
 
-文件改写成功但视图刷新失败时，必须恢复源与权限，保留历史双栈、revision 和 compile 状态。补偿失败必须报告；只有原字节已成功暂存、最后 rename 失败时保证保留该副本，暂存阶段失败不保证存在恢复文件。这里是内存历史与已报告 I/O 失败的补偿，不能宣称崩溃原子性或阻止外部并发修改。
+`internal/workspace/quality_benchmark_test.go::BenchmarkYunlan` 使用 `docs/examples/yunlan-rpg/yunlan-rpg.dtproj`，不改源文件。复跑：
 
-校验所有权仍属于领域命令。非法 CUE 不落盘；合法语法但违反业务约束的数据仍可保存并产生诊断。sourcefile 只能原样写字节，不得悄悄升级为“必须编译全项目成功才保存”。
+```sh
+go test ./internal/workspace -run '^$' -bench '^BenchmarkYunlan$' -benchtime=3x -count=3 -benchmem
+```
 
-Schema 改名的旧遍历器会按同名 `#Name` 修改无关作用域，已在真实可编译的公共/本地同名定义下复现 panic。独立纠错批次改用 CUE 词法绑定与模块/import 身份识别，覆盖名称捕获拒绝、无关源零写入和编译/导出/历史回归；这属于正确性修复，不算纯 writer 重构。范围与保守拒绝条件见 `schema-renames.md`。独立 alias 纠错使用私有词法/import 身份上下文，统一索引、循环、反向引用、有效类型与导航；原词法表达式/DTO不变，参见 `schema-imports.md`。
+本机 Linux / Go 1.26.5 的组合版本5300ebdc（与已发布ada0b8a具有相同完整tree）实测3次×3迭代，完整CUE编译约189–192ms、索引约0.049–0.058ms。这只是本机观测，不是性能提升证明。原始输出、SHA256、实际运行代码与基线harness的关系和原生smoke步骤均存于 [验证证据](quality-evidence/README.md)。旧基线日志未自带HEAD标记，故不再引用前后提升或严谨配对结论。本轮没有缓存、增量编译或debounce改变诊断时机。
 
-## 持续维护次序
+验证包括 Go 全量/race/vet、产品及全部测试源码 strict TS、Vite 与 Linux Wails 构建，以及串行真实 Chromium 回归。组合版本110项中96项实际使用浏览器、14项为纯catalog/DTO/坐标契约；UI仍mock Wails IPC，真实持久化/编译/导出由Go测试覆盖。额外使用隔离 Xvfb/临时 XDG 设置运行原生窗口、GetSettings 和文件选择取消 smoke；不读取或改写真实工程/用户配置。
 
-1. 先完成已复现的数据/作用域与会话竞态纠错，每项保留旧代码失败证据。
-2. 用特征测试锁定会话初始化、命令成功/失败发布及标签身份，再减少裸 setter 和重复刷新协议。
-3. 测量云岚样例 scan/load/index/compile 时间，再决定性能维护；不先引入缓存/增量编译。
-4. 整理桥接契约与编辑器状态归属。成熟小模块没有实质问题则明确不改。
+## 后续维护边界
 
-每批提交可单独审阅。Go 全测、race、vet、产品/测试类型、前端构建、真实浏览器 E2E 与适用的原生构建通过后，仍须独立复核、精确 CI 和正常合并流程。不安装依赖、不修改同步/安全设置、不部署发布来完成本轮维护。
+本轮已识别的实质职责项已处理；保留上述验证与复杂安全模块，不继续无边界审计。更完整的持久化命令迟到结果协议、大型 editor 受控组件拆分、真实桌面编辑与系统剪贴板自动化，可作为后续独立任务。缓存和调度变化需测量与兼容设计，不能以本轮行为保持重构为名加入新语义。
