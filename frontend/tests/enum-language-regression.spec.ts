@@ -26,7 +26,7 @@ async function setup(page:Page,mode:"manual"|"auto",diagnostic:"field"|"row"|"en
   const original=CanvasRenderingContext2D.prototype.fillText;
   CanvasRenderingContext2D.prototype.fillText=function(text,x,y,maxWidth){probe.draws.push({text,color:String(this.fillStyle),font:this.font});if(maxWidth===undefined)original.call(this,text,x,y);else original.call(this,text,x,y,maxWidth);};
   const view=()=>({project:{path:"/project/probe.dtproj",root:"/project"},settings:{build:{mode}},tree:{root:{kind:"project",name:"probe.dtproj",children:[{kind:"table",name:"probe",path:table.path}]}},schemas:{definitions:[],diagnostics:[]},foreignKeys:{diagnostics:[]},compile:{mode,pending,diagnostics:[]},canUndo:false,canRedo:false});
-  const update=async(argument:{column:string;expression:string})=>{probe.calls.push({method:"UpdateCell",...argument});let display:string;try{display=String(JSON.parse(argument.expression));}catch{display=argument.expression;}
+  const update=async(argument:{column:string;expression:string})=>{probe.calls.push({method:"UpdateCell",...argument});let display:string;try{const parsed:unknown=JSON.parse(argument.expression);display=typeof parsed==="string"?parsed:argument.expression;}catch{display=argument.expression;}
    table.rows[0].values[argument.column]={expression:argument.expression,display,formula:false};pending=mode==="manual";if(mode==="auto")table.diagnostics=table.diagnostics?.filter(d=>d.column!==argument.column);return structuredClone({table,workspace:view()});};
   (window as unknown as Window&{go:unknown}).go={main:{App:{GetSettings:async()=>({language:"en",theme:"light"}),GetExportFormats:async()=>[],SelectProject:async()=>view(),GetTable:async()=>structuredClone(table),UpdateCell:update,SetCellFormula:async(argument:{column:string;expression:string})=>{probe.calls.push({method:"SetCellFormula",...argument});table.rows[0].values[argument.column]={expression:argument.expression,display:"2",formula:true};pending=mode==="manual";return structuredClone({table,workspace:view()});},SetLanguage:async(lang:string)=>{probe.calls.push({method:"SetLanguage",expression:lang});return{language:lang,theme:"light"};},Compile:async()=>{pending=false;table.diagnostics=table.diagnostics?.filter(d=>d.column!=="rarity");return{workspace:view()};}}}};
  },{mode,diagnostic,variant});
@@ -46,6 +46,7 @@ for(const mode of ["manual","auto"] as const)test(`language changes retain formu
 
 const literals=[
  {name:"number",expressions:["1","2"],initial:"1",target:"2"},
+ {name:"large integer",expressions:["9007199254740992","9007199254740993"],initial:"9007199254740992",target:"9007199254740993"},
  {name:"boolean",expressions:["false","true"],initial:"false",target:"true"},
  {name:"nullable",expressions:["1","2"],initial:"1",target:"null",nullable:true},
  {name:"escaped string",expressions:[JSON.stringify("plain"),JSON.stringify('a"b\\c')],initial:JSON.stringify("plain"),target:JSON.stringify('a"b\\c')},
@@ -55,7 +56,7 @@ const literals=[
 for(const mode of ["manual","auto"] as const)for(const literal of literals)test(`repairs ${literal.name} enum with source expression intact in ${mode}`,async({page})=>{
  const diagnostic=literal.name==="invalid current"?"enum":"field";
  await setup(page,mode,diagnostic,literal);const p=await cell(page,2);await page.mouse.dblclick(p.x,p.y);const select=page.locator("#portal select");await expect(select).toBeVisible();
- await select.selectOption({label:literal.target.startsWith('"')?JSON.parse(literal.target) as string:literal.target});await page.mouse.click(p.x,p.y+120);
+ await select.selectOption({label:literal.target.startsWith('"')?JSON.parse(literal.target) as string:literal.target},{timeout:3000});await page.mouse.click(p.x,p.y+120);
  await expect.poll(()=>page.evaluate(()=>window.__enumLanguage.calls.filter(c=>c.method==="UpdateCell").map(c=>c.expression))).toEqual([literal.target]);
  expect(await page.evaluate(()=>window.__enumLanguage.table.rows[0].values.total)).toEqual({expression:"20 + 5",display:"25",formula:true});
  if(mode==="manual"&&diagnostic==="enum"){await page.getByRole("button",{name:"Compile",exact:true}).click();await expect(page.getByRole("region",{name:"Table diagnostics"})).toHaveCount(0);}

@@ -13,7 +13,7 @@ import {arrayEntries, structValues} from "./valueCodecs";
 
 type EnumCell = CustomCell<{kind: "enum"; value: string; display: string; label: string; options: {expression: string; label: string}[]}>;
 function enumLabel(expression:string):string {
-    try { const value:unknown=JSON.parse(expression);return typeof value==="string"?value:String(value); }
+    try { const value:unknown=JSON.parse(expression);return typeof value==="string"?value:expression; }
     catch { return expression; } // Preserve valid CUE spellings beyond JSON literals.
 }
 const EnumEditor:ProvideEditorComponent<EnumCell> = (props) => {
