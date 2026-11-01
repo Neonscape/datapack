@@ -1,28 +1,11 @@
-import {schemaDefinitionContent} from "../schema/definitionContent";
 import {useRef, useState} from "react";
-import type {SchemaDefinition, SchemaEditorState, TableDocument, TreeNode, WorkspaceView} from "../types";
+import type {SchemaDefinition, SchemaEditorState, TableDocument, WorkspaceView} from "../types";
+import {containsPath, tabPath, withTabs, type OpenTab, type SessionState} from "./sessionState";
+import {readTab, type TabReader} from "./tabRead";
+export {refreshSchemaState} from "./sessionState";
+export type {OpenTab} from "./sessionState";
 
-export type OpenTab =
-    | {id: string; kind: "table"; path: string; table: TableDocument}
-    | {id: string; kind: "schema"; state: SchemaEditorState};
-
-type SessionState = {workspace: WorkspaceView | null; tabs: OpenTab[]; activeTabId: string | null; selectedSchema: SchemaDefinition | null};
 type SessionRequest = {project: number; scope: string; serial: number; focus: number};
-
-export function refreshSchemaState(state: SchemaEditorState, definitions: SchemaEditorState["definitions"], metadata: Pick<SchemaEditorState, "displayName" | "logicalTable" | "package">): SchemaEditorState {
-    const unchanged = schemaDefinitionContent(state.definitions) === schemaDefinitionContent(definitions);
-    return {...state, ...metadata, definitions,
-        selected: unchanged ? state.selected : definitions.some((entry) => entry.name === state.selected) ? state.selected : definitions[0]?.name ?? null,
-        creating: unchanged ? state.creating : false};
-}
-
-function containsPath(node: TreeNode, path: string): boolean {
-    return node.path === path || (node.children ?? []).some(child => containsPath(child, path));
-}
-function tabPath(tab: OpenTab) { return tab.kind === "table" ? tab.path : tab.state.path; }
-function withTabs(state: SessionState, tabs: OpenTab[]): SessionState {
-    return {...state, tabs, activeTabId: state.activeTabId && !tabs.some(tab => tab.id === state.activeTabId) ? tabs[0]?.id ?? null : state.activeTabId};
-}
 
 export function useWorkspaceSession() {
     const [state, setState] = useState<SessionState>({workspace:null,tabs:[],activeTabId:null,selectedSchema:null});
@@ -62,10 +45,10 @@ export function useWorkspaceSession() {
             return {...current,tabs:next,activeTabId:current.activeTabId === id ? next[Math.min(index,next.length-1)]?.id ?? null : current.activeTabId};
         });
     }
-    function updateActiveTable(document: TableDocument) {
+    function updateTable(document: TableDocument) {
         setState(current => ({...current,tabs:current.tabs.map(tab => tab.kind === "table" && tab.path === document.path ? {...tab,table:document} : tab)}));
     }
-    function updateActiveSchema(value: SchemaEditorState) {
+    function updateSchema(value: SchemaEditorState) {
         updateSchemaTabById(`schema:${value.path}`,value);
     }
     function updateSchemaTabById(id: string, value: SchemaEditorState) {
@@ -117,6 +100,20 @@ export function useWorkspaceSession() {
             return withTabs(current,next);
         });
     }
+    async function refreshOpenTabs(request: SessionRequest, view: WorkspaceView, reader: TabReader) {
+        const opened = tabs;
+        const refreshed: OpenTab[] = [];
+        for (const tab of opened) {
+            if (!isCurrent(request)) return;
+            try {
+                refreshed.push(await readTab(tab, reader));
+            } catch {
+                // A read failure does not prove deletion. applyRefresh closes a
+                // tab only when its source is absent from the new project tree.
+            }
+        }
+        applyRefresh(request, opened, refreshed, view);
+    }
     function renameTable(path: string, document: TableDocument) {
         setState(current => {
             const next = current.tabs.map(tab => {
@@ -138,7 +135,7 @@ export function useWorkspaceSession() {
             return {...tab,state:{...tab.state,definitions,selected:selected ?? definitions[0]?.name ?? null,creating:false}};
         })}));
     }
-    return {workspace,tabs,activeTabId,selectedSchema,activeTab,table,schemaDocument,publishWorkspace,selectSchema,activateTab,closeTab,updateActiveTable,updateActiveSchema,updateSchemaTabById,updateDisplayName,applyProjectView,addTableTab,addSchemaTab,beginRequest,isCurrent,applyRefresh,renameTable,closeDocument,applyDefinitionResult};
+    return {workspace,tabs,activeTabId,selectedSchema,activeTab,table,schemaDocument,publishWorkspace,selectSchema,activateTab,closeTab,updateTable,updateSchema,updateSchemaTabById,updateDisplayName,applyProjectView,addTableTab,addSchemaTab,beginRequest,isCurrent,refreshOpenTabs,renameTable,closeDocument,applyDefinitionResult};
 }
 
 export type WorkspaceSession = ReturnType<typeof useWorkspaceSession>;
