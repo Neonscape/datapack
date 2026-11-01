@@ -66,3 +66,18 @@ test("PrintSchema request adapter preserves lexical input through generated mode
   if(descriptor)Object.defineProperty(globalThis,"window",descriptor);else Reflect.deleteProperty(globalThis,"window");
  }
 });
+
+test("raw IPC JSON preserves nonempty diagnostics and timestamps and handles null halves",()=>{
+ const raw:workspace.SchemaEditResult=JSON.parse(`{"schema":{"path":"","package":"","definitions":null},"table":{"path":"","namespace":"","name":"","columns":null,"rows":null,"localSchema":null},"workspace":{"project":{"path":"/project/game.dtproj","root":"/project"},"settings":{"build":{"mode":"manual"}},"tree":{"root":{"kind":"project","name":"game"}},"schemas":{"definitions":[],"diagnostics":[]},"foreignKeys":{},"compile":{"mode":"manual","pending":true,"compiledAt":"2026-11-01T10:00:00Z","diagnostics":[{"path":"/project/item.cue","key":"compile.invalidID","args":["one"],"message":"保留诊断"}]},"canUndo":false,"canRedo":true}}`);
+ const result=schemaResult(raw);
+ expect(result.schema.definitions).toEqual([]);expect(result.table.columns).toEqual([]);expect(result.table.rows).toEqual([]);
+ expect(result.workspace.compile).toEqual(raw.workspace.compile);expect(result.workspace.canRedo).toBe(true);
+});
+
+test("bridge rejection preserves native rejection identity and request arguments",async()=>{
+ const {GetTable}=await import("../src/bridge");
+ const descriptor=Object.getOwnPropertyDescriptor(globalThis,"window");const reason=new Error("native read rejected");let captured:unknown;
+ Object.defineProperty(globalThis,"window",{configurable:true,value:{go:{main:{App:{GetTable:async(value:unknown)=>{captured=value;throw reason;}}}}}});
+ try {await expect(GetTable("/project/item.cue")).rejects.toBe(reason);expect(captured).toBe("/project/item.cue");}
+ finally {if(descriptor)Object.defineProperty(globalThis,"window",descriptor);else Reflect.deleteProperty(globalThis,"window");}
+});
