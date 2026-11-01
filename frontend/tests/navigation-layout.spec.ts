@@ -1,3 +1,5 @@
+import {en} from "../src/i18n/en";
+import {zh} from "../src/i18n/zh";
 import {expect, test, type Page} from "@playwright/test";
 
 // Real App, DOM scrolling and Glide canvas; only native Wails calls are mocked.
@@ -29,12 +31,12 @@ async function fixture(page: Page, withDefault = true, defaultLocal = false) {
                 if (state.opens++ > 0) { view.project.path = "/other/other.dtproj"; view.tree.root.name = "other.dtproj"; }
                 return view;
             }, GetTable: async () => table,
-            Compile: async () => ({workspace: structuredClone(workspace)}),
+            Compile: () => state.holdCompile ? new Promise<{workspace: typeof workspace}>((resolve) => { state.resumeCompile = () => resolve({workspace: structuredClone(workspace)}); }) : Promise.resolve({workspace: structuredClone(workspace)}),
             Undo: async () => { state.undo++; return {table, workspace}; }, Redo: async () => { state.undo++; return {table, workspace}; },
             GetProjectSettings: async () => ({project: {...workspace.project, tableRoots: ["tables"], schemaRoots: ["schema"]}, export: {directory: "exports", targets: []}, formats: [], workspace,
                 tables: Array.from({length: 160}, (_, i) => ({id: `game.item_${i}`, path: `/project/${i}.cue`, selected: true, configured: true}))}),
         };
-        const state = {undo: 0, opens: 0};
+        const state = {undo: 0, opens: 0, holdCompile: false, resumeCompile: null as null | (() => void)};
         Object.assign(window, {go: {main: {App: api}}, __layout: state});
     }, {withDefault, defaultLocal});
     await page.goto("/");
@@ -180,4 +182,48 @@ test("a default local definition expands its ancestors without translating its i
     await expect(treeRow(page, "Local schemas")).toBeVisible();
     await expect(treeRow(page, "#Position")).toBeVisible();
     await expect(treeRow(page, "common.cue")).toHaveCount(0);
+});
+
+test("catalogs retain identical internal keys and translate Schema UI labels", () => {
+    expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort());
+    for (const key of ["column.cueSchema","column.editSchema","grid.editSchema","schemaForm.elementSchema","schemaForm.openTypeSchema","schemaForm.typeSchema","tree.localSchema","tree.newSchema","tree.openSchema"]) {
+        expect(zh[key], key).toMatch(/[\u4e00-\u9fff]/);
+        expect(zh[key], key).not.toContain("Schema");
+    }
+});
+
+test("Chinese local-rule and creation menus use translated labels", async ({page}) => {
+    await fixture(page,true,true);
+    await page.getByRole("button", {name:"Settings",exact:true}).click();
+    await page.locator(".structure-dialog select").first().selectOption("zh-CN");
+    await page.getByRole("button",{name:"应用",exact:true}).click();
+    await expect(treeRow(page,"本地校验规则")).toBeVisible();
+    await page.getByRole("button",{name:"game.dtproj",exact:true}).click({button:"right"});
+    await expect(page.getByRole("button",{name:"新建校验规则",exact:true})).toBeVisible();
+});
+
+test("modal survives parent rerender and restores focus after Escape and backdrop closing", async ({page}) => {
+    await fixture(page);
+    await openGrid(page);
+    await page.evaluate(() => { (window as unknown as {__layout:{holdCompile:boolean}}).__layout.holdCompile=true; });
+    await page.getByRole("button",{name:"Compile",exact:true}).click();
+    await page.getByRole("button",{name:"game.dtproj",exact:true}).click();
+    const input=page.locator(".project-settings-directory-input input");
+    await input.fill("new directory");
+    await input.focus();
+    await page.evaluate(() => { (window as unknown as {__layout:{resumeCompile:()=>void}}).__layout.resumeCompile(); });
+    await expect(input).toBeFocused();
+    await input.pressSequentially(" still typing");
+    await expect(input).toHaveValue("new directory still typing");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("button",{name:"game.dtproj",exact:true})).toBeFocused();
+    await page.getByRole("button",{name:"game.dtproj",exact:true}).click();
+    await page.locator(".project-settings-backdrop").click({position:{x:5,y:5}});
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("button",{name:"game.dtproj",exact:true})).toBeFocused();
+    await expect(page.locator(".app-shell > [inert]")).toHaveCount(0);
+    await page.getByRole("button",{name:"game.dtproj",exact:true}).click();
+    await page.getByRole("button",{name:"Close",exact:true}).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
 });
