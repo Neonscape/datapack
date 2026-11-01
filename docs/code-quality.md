@@ -15,7 +15,7 @@
 | types / Wails bridge | 手写 UI 模型与生成 DTO 并存，断言较多。 | P2 建单一适配与契约测试；生成文件使用官方生成器，不能手写成另一套协议。 |
 | i18n / theme / logging / settings | Catalog 与主题边界清楚。固定导航文案已入中英资源；logger 调外部 sink 时持锁、settings manual 分支早返回为待验证风险。 | 不为风格重写 catalog。低优先级复现 sink 重入/错误校验边界后决定修复，未将静态疑点当确认缺陷。 |
 | tests / examples | Go 包、functional/golden 与真实 Chromium UI 各有价值；UI 只 mock Wails IPC，不证明原生窗口/序列化。云岚保留业务链与英文 ID/中文显示名。 | 产品和测试源码都做严格 TS 检查；浏览器串行并检查布局截图。真实桌面 smoke 尚未执行。 |
-| build / CI / scripts | 独立构建批次已复现干净 checkout 缺 embed 资源、打包清空输出目录。 | 独立修复分支：前端 build 前置、可移植浏览器、隔离 staging 与打包安全回归。合并前仍需最终组合 CI。 |
+| build / CI / scripts | 已复现并修复干净 checkout 缺 embed 资源、打包清空输出目录及预存链接/附件范围风险。PR14已正常合并且精确/post CI成功。 | 前端 build 前置、可移植浏览器、无覆盖 staging 发布和当前版本附件白名单均有安全回归；未实际 release/deploy。 |
 | docs | 原质量文档已与锁、session、codecs 和损坏文档诊断实现不符。 | 本文纠正现状；test/README 的 API 边界说明也已更新。 |
 
 ## 独立的纠错与兼容边界
@@ -24,7 +24,7 @@
 
 校验所有权仍属于领域命令。非法 CUE 不落盘；合法语法但违反业务约束的数据仍可保存并产生诊断。sourcefile 只能原样写字节，不得悄悄升级为“必须编译全项目成功才保存”。
 
-Schema 改名的旧遍历器会按同名 `#Name` 修改无关作用域，已在真实可编译的公共/本地同名定义下复现 panic。独立纠错批次改用 CUE 词法绑定与模块/import 身份识别，覆盖名称捕获拒绝、无关源零写入和编译/导出/历史回归；这属于正确性修复，不算纯 writer 重构。范围与保守拒绝条件见 `schema-renames.md`。import alias 在 Schema 索引中的兼容性缺口另列后续纠错，不能将词法改写通过称作应用全部别名路径可用。
+Schema 改名的旧遍历器会按同名 `#Name` 修改无关作用域，已在真实可编译的公共/本地同名定义下复现 panic。独立纠错批次改用 CUE 词法绑定与模块/import 身份识别，覆盖名称捕获拒绝、无关源零写入和编译/导出/历史回归；这属于正确性修复，不算纯 writer 重构。范围与保守拒绝条件见 `schema-renames.md`。独立 alias 纠错使用私有词法/import 身份上下文，统一索引、循环、反向引用、有效类型与导航；原词法表达式/DTO不变，参见 `schema-imports.md`。
 
 ## 持续维护次序
 
