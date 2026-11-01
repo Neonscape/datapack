@@ -31,7 +31,7 @@
 go test ./internal/workspace -run '^$' -bench '^BenchmarkYunlan$' -benchtime=3x -count=3 -benchmem
 ```
 
-本机 Linux / Go 1.26.5，维护前后各 3 次 × 3 迭代：基线 scan 约4.9ms、parse 11.5–12.5ms、index 0.043–0.062ms、compile 191–198ms；组合版约4.2–4.8ms、10.6–11.1ms、0.049–0.058ms、189–192ms。这是小样本本机观测，不能推断性能提升。完整 CUE 编译主导，本轮不引入跨命令缓存、增量编译或 debounce 改变诊断时机。
+本机 Linux / Go 1.26.5 的组合版本5300ebdc（与已发布ada0b8a具有相同完整tree）实测3次×3迭代，完整CUE编译约189–192ms、索引约0.049–0.058ms。这只是本机观测，不是性能提升证明。原始输出、SHA256、实际运行代码与基线harness的关系和原生smoke步骤均存于 [验证证据](quality-evidence/README.md)。旧基线日志未自带HEAD标记，故不再引用前后提升或严谨配对结论。本轮没有缓存、增量编译或debounce改变诊断时机。
 
 验证包括 Go 全量/race/vet、产品及全部测试源码 strict TS、Vite 与 Linux Wails 构建，以及串行真实 Chromium 回归。组合版本110项中96项实际使用浏览器、14项为纯catalog/DTO/坐标契约；UI仍mock Wails IPC，真实持久化/编译/导出由Go测试覆盖。额外使用隔离 Xvfb/临时 XDG 设置运行原生窗口、GetSettings 和文件选择取消 smoke；不读取或改写真实工程/用户配置。
 

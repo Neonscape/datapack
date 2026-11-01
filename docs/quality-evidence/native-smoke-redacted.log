@@ -1,0 +1,9 @@
+dbus-daemon[1704446]: [session uid=1000 pid=1704446] Activating service name='org.a11y.Bus' requested by ':1.0' (uid=1000 pid=1704448 comm="<isolated-datapack>")
+dbus-daemon[1704446]: [session uid=1000 pid=1704446] Successfully activated service 'org.a11y.Bus'
+dbus-daemon[1704473]: Activating service name='org.a11y.atspi.Registry' requested by ':1.0' (uid=1000 pid=1704448 comm="<isolated-datapack>")
+dbus-daemon[1704473]: Successfully activated service 'org.a11y.atspi.Registry'
+SpiRegistry daemon is running with well-known name - org.a11y.atspi.Registry
+native window and screenshot captured
+dbus-daemon[1704446]: [session uid=1000 pid=1704446] Activating service name='ca.desrt.dconf' requested by ':1.4' (uid=1000 pid=1704448 comm="<isolated-datapack>")
+dbus-daemon[1704446]: [session uid=1000 pid=1704446] Successfully activated service 'ca.desrt.dconf'
+native file dialog opened and Escape cancellation captured
