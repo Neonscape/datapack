@@ -1,7 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import {useModalBoundary} from "./useModalBoundary";
-import {GetProjectSettings, SelectProjectExportDirectory, SetProjectExportSettings} from "../../wailsjs/go/main/App";
-import {workspace as workspaceModel} from "../../wailsjs/go/models";
+import {GetProjectSettings, SelectProjectExportDirectory, SetProjectExportSettings} from "../bridge";
 import {useTranslation} from "../i18n";
 import type {ProjectExportSettings, ProjectExportTable, ProjectSettings as ProjectSettingsModel} from "../types";
 
@@ -22,7 +21,7 @@ export function ProjectSettings({onClose, onSaved}: {onClose: () => void; onSave
     useEffect(() => {
         void (async () => {
             try {
-                const result = await GetProjectSettings() as ProjectSettingsModel;
+                const result = await GetProjectSettings();
                 setSettings(result);
                 setTables(result.tables);
                 setDirectory(result.export.directory);
@@ -72,7 +71,7 @@ export function ProjectSettings({onClose, onSaved}: {onClose: () => void; onSave
             tables: Object.fromEntries(tables.map((table) => [table.id, table.selected])),
         };
         try {
-            const result = await SetProjectExportSettings(new workspaceModel.ProjectExportSettings(payload)) as ProjectSettingsModel;
+            const result = await SetProjectExportSettings(payload);
             onSaved(result.workspace);
             onClose();
         } catch (reason) {
