@@ -10,7 +10,7 @@
 | workspace | 已有 Service RWMutex、历史补偿、目录快照及 FK 来源保护。旧文档“没有锁”的结论过时。新事务边界在成功刷新后发布历史，读取失败不会伪装成不存在。 | 新增刷新失败的行/Schema 命令、目录、附件、历史/revision/compile 状态回归。仍需 P1 会话生命周期与发布协议特征测试，P2 测量重复扫描后再考虑缓存。 |
 | projecttree / navigation | 固定分组与标题由 UI 呈现；内部名、路径和节点 kind 保持身份。 | 导航回归覆盖大树/小窗口、初始默认祖先、刷新保留手动展开、切换项目和语言。无需领域导航框架。 |
 | exporters / export_path | 导出只消费 compiled 包，危险路径保护与 CSV 编码已有回归。 | 维持现有安全边界，无重构依据。显示名修改前后 CSV 字节一致。 |
-| App / workspace session | 已实证三项迟到读取/刷新丢标签问题并独立纠错。session 原子维护 view/tabs/active/peek，显式命令替代 React setter；项目 generation、请求序号、标签实例和焦点意图约束 open/history 的结果应用。 | 纠错前真实浏览器3项准确失败，修复后6项延迟 Promise 回归通过。职责抽取前后全量89项行为一致；其余编辑命令的异步结果协议仍需后续验证与适配。 |
+| App / workspace session | 已实证三项迟到读取/刷新丢标签问题并独立纠错。session 原子维护 view/tabs/active/peek，显式命令替代 React setter；项目 generation、请求序号、标签实例和焦点意图约束 open/history 的结果应用。 | 纠错前真实浏览器3项准确失败，修复后11项延迟 Promise 回归通过，含删除/改名请求失效及peek/命令交错。最终全量94项通过；其余编辑命令的异步结果协议仍需后续验证与适配。 |
 | TableGrid / valueCodecs | Codecs 已拆出，旧文档相反；保留选区、活动/焦点 ownership、编辑草稿与全局事件仍耦合。 | 维持真实浏览器复制/粘贴/F12/草稿/数组回归。后续明确编辑器局部状态归属，再拆受控组件；不引入新状态框架。 |
 | types / Wails bridge | 手写 UI 模型与生成 DTO 并存，断言较多。 | P2 建单一适配与契约测试；生成文件使用官方生成器，不能手写成另一套协议。 |
 | i18n / theme / logging / settings | Catalog 与主题边界清楚。固定导航文案已入中英资源；logger 调外部 sink 时持锁、settings manual 分支早返回为待验证风险。 | 不为风格重写 catalog。低优先级复现 sink 重入/错误校验边界后决定修复，未将静态疑点当确认缺陷。 |
