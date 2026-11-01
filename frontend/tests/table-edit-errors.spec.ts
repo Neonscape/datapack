@@ -11,6 +11,8 @@ type EditState = {
     edits: {method: string; argument: EditCall}[];
     deletes: string[];
     createFailures: number;
+    deferCreate?: boolean;
+    settleCreate?: (failure?:string)=>void;
     failEdit: string | null;
     unhandled: string[];
 };
@@ -105,6 +107,7 @@ test.beforeEach(async ({page}) => {
             SelectProject: async () => structuredClone(workspace), GetTable: async () => structuredClone(table),
             CreateRow: async (argument: CreateCall) => {
                 state.creates.push(argument);
+                if (state.deferCreate) await new Promise<void>((resolve,reject)=>{state.settleCreate=(failure)=>failure?reject(new Error(failure)):resolve();});
                 if (state.createFailures-- > 0) throw "CreateRow rejected";
                 const values: TableDocument["rows"][number]["values"] = {};
                 for (const [name, expression] of Object.entries(argument.values)) values[name] = {expression, display: expression, formula: false};
@@ -242,4 +245,41 @@ test("preserves an unaffected valid cell selection when deleting a later column"
     await formula(page).press("Enter");
     await expect(formula(page)).toHaveValue("edited after deletion");
     await expectNoUnhandled(page, pageErrors);
+});
+
+for (const failure of [false,true]) test(`pending create ${failure?"failure":"success"} retains newer draft without duplicate submissions`, async ({page}) => {
+    await page.evaluate(()=>{window.__editErrorsTest.createFailures=0;window.__editErrorsTest.deferCreate=true;});
+    await editCell(page,1,1,'"first"');
+    await editCell(page,0,1,"first_row");
+    await expect.poll(()=>page.evaluate(()=>window.__editErrorsTest.creates.length)).toBe(1);
+    await editCell(page,0,1,"second_row");
+    await editCell(page,1,1,'"newer"');
+    expect(await page.evaluate(()=>window.__editErrorsTest.creates.length)).toBe(1);
+    await page.evaluate((reject)=>{window.__editErrorsTest.deferCreate=false;window.__editErrorsTest.settleCreate!(reject?"delayed rejection":undefined);},failure);
+    const draftRow=failure?1:2;
+    if(!failure) await expect(page.locator(".table-document-header")).toContainText("2 rows");
+    else await expect(page.locator(".table-validation-error")).toContainText("delayed rejection");
+    // The canvas row geometry updates on an animation frame after React publishes the returned table.
+    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    await selectCell(page,0,draftRow);await expect(formula(page)).toHaveValue("second_row");
+    await selectCell(page,1,draftRow);await expect(formula(page)).toHaveValue('"newer"');
+    await editCell(page,1,draftRow,'"retry"');
+    await expect.poll(()=>page.evaluate(()=>window.__editErrorsTest.creates.length)).toBe(2);
+    expect(await page.evaluate(()=>window.__editErrorsTest.creates[1])).toEqual({path,rowID:"second_row",values:{name:'"retry"'},formulas:{}});
+});
+
+test("pending create success retains newer fields under the saved ID with a duplicate warning",async ({page})=>{
+ await page.evaluate(()=>{window.__editErrorsTest.createFailures=0;window.__editErrorsTest.deferCreate=true;});
+ await editCell(page,1,1,'"first"');await editCell(page,0,1,"same_row");
+ await expect.poll(()=>page.evaluate(()=>window.__editErrorsTest.creates.length)).toBe(1);
+ await editCell(page,1,1,'"keep after save"');
+ await page.evaluate(()=>{window.__editErrorsTest.deferCreate=false;window.__editErrorsTest.settleCreate!();});
+ await expect(page.locator(".table-validation-error")).toContainText("ID already exists");
+ await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+ await selectCell(page,0,2);await expect(formula(page)).toHaveValue("same_row");
+ await selectCell(page,1,2);await expect(formula(page)).toHaveValue('"keep after save"');
+ expect(await page.evaluate(()=>window.__editErrorsTest.creates.length)).toBe(1);
+ await editCell(page,0,2,"next_row");
+ await expect.poll(()=>page.evaluate(()=>window.__editErrorsTest.creates.length)).toBe(2);
+ expect(await page.evaluate(()=>window.__editErrorsTest.creates[1].values)).toEqual({name:'"keep after save"'});
 });
