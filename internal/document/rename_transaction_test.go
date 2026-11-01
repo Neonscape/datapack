@@ -27,25 +27,46 @@ func TestReplaceAllCleansStagedFilesWhenStagingFails(t *testing.T) {
 
 func TestReplaceAllCleansStagedFilesAndRestoresCommittedSources(t *testing.T) {
 	root := t.TempDir()
-	first := filepath.Join(root, "first.cue")
-	second := filepath.Join(root, "second.cue")
-	if err := os.WriteFile(first, []byte("original"), 0o644); err != nil {
-		t.Fatal(err)
+	first, second := filepath.Join(root, "first.cue"), filepath.Join(root, "second.cue")
+	originals := map[string][]byte{first: []byte("first original"), second: []byte("second original")}
+	candidates := map[string][]byte{first: []byte("first candidate"), second: []byte("second candidate")}
+	modes := map[string]os.FileMode{first: 0640, second: 0644}
+	for path, data := range originals {
+		if err := os.WriteFile(path, data, modes[path]); err != nil {
+			t.Fatal(err)
+		}
 	}
-	// Replacing a directory with the staged file fails after first commits.
-	if err := os.Mkdir(second, 0o755); err != nil {
-		t.Fatal(err)
+	calls := 0
+	firstCommitted := false
+	ops := sourceReplaceOps{rename: func(from, to string) error {
+		calls++
+		if calls == 2 {
+			return errors.New("injected second replacement failure")
+		}
+		err := os.Rename(from, to)
+		if calls == 1 && err == nil {
+			bytes, _ := os.ReadFile(first)
+			firstCommitted = string(bytes) == string(candidates[first])
+		}
+		return err
+	}}
+	if err := replaceAllWithOps([]string{first, second}, candidates, originals, ops); err == nil {
+		t.Fatal("second replacement succeeded")
 	}
-	if err := replaceAll([]string{first, second}, map[string][]byte{first: []byte("candidate"), second: []byte("candidate")}, map[string][]byte{first: []byte("original")}); err == nil {
-		t.Fatal("replacement over a directory succeeded")
+	if calls != 3 || !firstCommitted {
+		t.Fatalf("not a committed-then-restored transaction: calls=%d committed=%v", calls, firstCommitted)
+	}
+	for path, want := range originals {
+		bytes, err := os.ReadFile(path)
+		if err != nil || string(bytes) != string(want) {
+			t.Fatalf("source %s: %q %v", path, bytes, err)
+		}
+		info, err := os.Stat(path)
+		if err != nil || runtime.GOOS != "windows" && info.Mode().Perm() != modes[path] {
+			t.Fatalf("mode %s: %v %v", path, info, err)
+		}
 	}
 	assertNoRenameTemporaryFiles(t, root)
-	if source, err := os.ReadFile(first); err != nil || string(source) != "original" {
-		t.Fatalf("first source = %q, %v", source, err)
-	}
-	if info, err := os.Stat(second); err != nil || !info.IsDir() {
-		t.Fatalf("original directory was changed: %v", err)
-	}
 }
 
 func assertNoRenameTemporaryFiles(t *testing.T, root string) {

@@ -16,16 +16,16 @@ import (
 // is published to history. This is not a crash/concurrent filesystem transaction.
 func editSource[T any](s *Service, path string, operation func() (T, error)) (result T, view View, err error) {
 	started := time.Now()
-	before, err := os.ReadFile(path)
-	if err != nil {
-		return result, View{}, fmt.Errorf("record edit source: %w", err)
-	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		return result, View{}, fmt.Errorf("record edit permissions: %w", err)
 	}
 	if !info.Mode().IsRegular() {
 		return result, View{}, fmt.Errorf("source %q is not a regular file; symlinks are unsupported", path)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		return result, View{}, fmt.Errorf("record edit source: %w", err)
 	}
 	defer func() {
 		if err != nil {
