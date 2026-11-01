@@ -150,6 +150,8 @@ test.beforeEach(async ({page}) => {
     await page.goto("/");
     await page.getByRole("button", {name: "File"}).click();
     await page.getByRole("navigation", {name: "Application menu"}).getByRole("button", {name: "Open project"}).click();
+    await page.getByRole("button", {name: "Expand rpg", exact: true}).click();
+    await page.getByRole("button", {name: "Expand Tables", exact: true}).click();
     await page.getByRole("button", {name: "item", exact: true}).click();
 });
 

@@ -11,6 +11,7 @@ import {SchemaForm} from "./schema/SchemaForm";
 import {ProjectSettings} from "./project/ProjectSettings";
 import {TableGrid} from "./table/TableGrid";
 import {Tree} from "./tree/Tree";
+import {initialExpandedNodes} from "./tree/expansion";
 import {useWorkspaceSession, type OpenTab} from "./workspace/useWorkspaceSession";
 import type {CellError, ExportFormat, NavRequest, NavTarget, PublicSchemaDocument, SchemaDefinition, SchemaEditorState, SchemaEditResult, SchemaNode, SchemaUsage, TableDocument, TableExportSettings as TableExportSettingsModel, TreeNode, WorkspaceView} from "./types";
 
@@ -49,7 +50,7 @@ function App() {
     const [navMenu, setNavMenu] = useState<{x: number; y: number; targets: NavTarget[]} | null>(null);
     const [treeMenu, setTreeMenu] = useState<{node: TreeNode; namespace: string; x: number; y: number} | null>(null);
     const [treeDialog, setTreeDialog] = useState<TreeDialog | null>(null);
-    const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
+    const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         void (async () => {
@@ -196,7 +197,7 @@ function App() {
 
     useEffect(() => {
         const historyShortcut = (event: KeyboardEvent) => {
-            if (!activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select")) return;
+            if (projectSettingsOpen || !activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select")) return;
             const redo = event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z");
             if (event.key.toLowerCase() !== "z" && !redo) return;
             if (redo ? !workspace?.canRedo : !workspace?.canUndo) return;
@@ -205,7 +206,7 @@ function App() {
         };
         document.addEventListener("keydown", historyShortcut);
         return () => document.removeEventListener("keydown", historyShortcut);
-    }, [activeTab, workspace, tabs]);
+    }, [activeTab, workspace, tabs, projectSettingsOpen]);
 
     useEffect(() => {
         const closeMenu = (event: PointerEvent) => {
@@ -241,7 +242,9 @@ function App() {
     function applyProjectView(view: WorkspaceView) {
         if (!view?.project?.path) return;
         setWorkspace(view);
-        setSelectedSchema(schemaDefinitions(view)[0] ?? null);
+        const defaultSchema = schemaDefinitions(view)[0] ?? null;
+        setSelectedSchema(defaultSchema);
+        setExpandedNodes(initialExpandedNodes(view.tree.root, defaultSchema?.path, defaultSchema?.id.split(".#").at(-1)));
         setTabs([]);
         setActiveTabId(null);
         setCellError(null);
@@ -711,7 +714,7 @@ function App() {
                 <section className="workbench">
                     <aside className="project-explorer">
                         <div className="panel-title">{t("panel.project")}</div>
-                        <div className="tree"><Tree node={workspace.tree.root} collapsed={collapsedNodes} onToggleCollapse={(key) => setCollapsedNodes((current) => {
+                        <div className="tree"><Tree node={workspace.tree.root} expanded={expandedNodes} onToggleCollapse={(key) => setExpandedNodes((current) => {
                             const next = new Set(current);
                             if (next.has(key)) next.delete(key); else next.add(key);
                             return next;

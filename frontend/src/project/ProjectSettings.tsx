@@ -1,4 +1,5 @@
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
+import {useModalBoundary} from "./useModalBoundary";
 import {GetProjectSettings, SelectProjectExportDirectory, SetProjectExportSettings} from "../../wailsjs/go/main/App";
 import {workspace as workspaceModel} from "../../wailsjs/go/models";
 import {useTranslation} from "../i18n";
@@ -7,6 +8,8 @@ import type {ProjectExportSettings, ProjectExportTable, ProjectSettings as Proje
 type Tab = "export" | "info";
 
 export function ProjectSettings({onClose, onSaved}: {onClose: () => void; onSaved: (workspace: ProjectSettingsModel["workspace"]) => void}) {
+    const backdrop = useRef<HTMLDivElement>(null);
+    useModalBoundary(backdrop, onClose);
     const {language, t} = useTranslation();
     const [tab, setTab] = useState<Tab>("export");
     const [settings, setSettings] = useState<ProjectSettingsModel | null>(null);
@@ -79,11 +82,11 @@ export function ProjectSettings({onClose, onSaved}: {onClose: () => void; onSave
         }
     }
 
-    return <div className="dialog-backdrop project-settings-backdrop" role="presentation" onMouseDown={onClose}>
-        <form className="project-settings-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void save(); }}>
+    return <div ref={backdrop} className="dialog-backdrop project-settings-backdrop" role="presentation" onMouseDown={(event) => { event.preventDefault(); onClose(); }}>
+        <form className="project-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="project-settings-title" tabIndex={-1} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void save(); }}>
             <header className="project-settings-header">
                 <div>
-                    <h2>{t("projectSettings.title")}</h2>
+                    <h2 id="project-settings-title">{t("projectSettings.title")}</h2>
                     {settings && <div className="project-settings-path">{settings.project.path}</div>}
                 </div>
                 <button type="button" className="peek-close" aria-label={t("common.close")} onClick={onClose}>×</button>
