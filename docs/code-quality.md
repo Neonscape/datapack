@@ -7,7 +7,7 @@
 | compiler / formula / foreignkey / schemaregistry | 领域职责明确：最终值、依赖状态、FK 来源与导航索引各有边界。显示名仅随 DTO 传播，不参与 ID。 | 维持包/functional/golden/race。领域流程没有重写依据；compiler/preview 仅共享无 I/O 的 cuerows 校验机制，package选择、诊断和默认解码保留各自策略。详见 cue-row-validation.md。 |
 | cuesource / document / schemamodel / cueformat | 宽容树解析与严格编辑有不同用途，不能合并；CUE 格式兼容层已有测试。 | 保留边界。裸字节 staging 提到 sourcefile，语法/模型校验仍由命令负责。 |
 | sourcefile | 统一临时文件创建、权限、写入、同步、关闭及恢复副本；document 三类 writer、多文件替换和 workspace 历史写入复用。 | 测试 create/chmod/write/sync/close 故障，原字节与 mode、空文件、无效 CUE 的原样 staging。机制层不做语义校验。 |
-| workspace | 已有 Service RWMutex、历史补偿、目录快照及 FK 来源保护。旧文档“没有锁”的结论过时。新事务边界在成功刷新后发布历史，读取失败不会伪装成不存在。 | 新增刷新失败的行/Schema 命令、目录、附件、历史/revision/compile 状态回归。仍需 P1 会话生命周期与发布协议特征测试，P2 测量重复扫描后再考虑缓存。 |
+| workspace | 已有 Service RWMutex、历史补偿、目录快照及 FK 来源保护。旧文档“没有锁”的结论过时。新事务边界在成功刷新后发布历史，读取失败不会伪装成不存在。 | 新增刷新失败的行/Schema 命令、目录、附件、历史/revision/compile 状态回归。生命周期/发布协议已先锁manual/auto/失败/重开特征，再由纯viewLifecycle拥有revision与编译发布；源/编译管线按职责收敛。云岚基准见workspace-lifecycle.md，不引入缓存或改变触发时点。 |
 | projecttree / navigation | 固定分组与标题由 UI 呈现；内部名、路径和节点 kind 保持身份。 | 导航回归覆盖大树/小窗口、初始默认祖先、刷新保留手动展开、切换项目和语言。无需领域导航框架。 |
 | exporters / export_path | 导出只消费 compiled 包，危险路径保护与 CSV 编码已有回归。 | 维持现有安全边界，无重构依据。显示名修改前后 CSV 字节一致。 |
 | App / workspace session | 已实证三项迟到读取/刷新丢标签问题并独立纠错。session 原子维护 view/tabs/active/peek，显式命令替代 React setter；项目 generation、请求序号、标签实例和焦点意图约束 open/history 的结果应用。 | 纠错前真实浏览器3项准确失败，修复后11项延迟 Promise 回归通过，含删除/改名请求失效及peek/命令交错。最终全量94项通过；其余编辑命令的异步结果协议仍需后续验证与适配。 |

@@ -56,18 +56,16 @@ type CompileState struct {
 }
 
 type Service struct {
-	mu               sync.RWMutex
-	configRoot       string
-	current          *View
-	undoStack        []historyEntry
-	redoStack        []historyEntry
-	logger           *logging.Logger
-	revision         int
-	compiledRevision int
-	compileState     CompileState
-	settings         EditorSettings
-	settingsLoaded   bool
-	exporters        exporters.Registry
+	mu         sync.RWMutex
+	configRoot string
+	current    *View
+	undoStack  []historyEntry
+	redoStack  []historyEntry
+	logger     *logging.Logger
+	viewLifecycle
+	settings       EditorSettings
+	settingsLoaded bool
+	exporters      exporters.Registry
 }
 
 type CellUpdate struct {
@@ -677,8 +675,7 @@ func (s *Service) OpenProject(path string) (View, error) {
 		s.log(logging.Error, "open project failed", map[string]any{"path": path, "error": err.Error()})
 		return View{}, err
 	}
-	s.revision = 0
-	s.compiledRevision = 0
+	s.resetRevisions()
 	s.undoStack = nil
 	s.redoStack = nil
 	view := buildView(project, settings, tree)
@@ -687,131 +684,6 @@ func (s *Service) OpenProject(path string) (View, error) {
 	view = *s.current
 	s.log(logging.Info, "open project completed", map[string]any{"path": path, "schemas": len(view.Schemas.Definitions), "compile_diagnostics": len(view.Compile.Diagnostics), "duration_ms": time.Since(started).Milliseconds()})
 	return view, nil
-}
-
-// compile runs one full compile against the current tree and publishes the
-// result into the current view.
-func (s *Service) compile() compiler.Result {
-	started := time.Now()
-	var publicSchemas []document.PublicSchema
-	var tables []document.Table
-	collectionDiagnostics := collectDocuments(s.current.Tree.Root, &publicSchemas, &tables)
-	result := compiler.CompileAll(publicSchemas, tables)
-	result.Diagnostics = append(collectionDiagnostics, result.Diagnostics...)
-	appendTreeDiagnostics(s.current.Tree.Root, &result)
-	diagnostics := result.Diagnostics
-	if diagnostics == nil {
-		diagnostics = []compiler.Diagnostic{}
-	}
-	s.compileState = CompileState{
-		Mode:        s.current.Settings.Build.Mode,
-		CompiledAt:  time.Now().UTC().Format(time.RFC3339),
-		Diagnostics: diagnostics,
-	}
-	s.compiledRevision = s.revision
-	if s.current != nil {
-		s.current.Compile = s.compileState
-	}
-	s.log(logging.Info, "compile completed", map[string]any{"diagnostics": len(result.Diagnostics), "mode": s.compileState.Mode, "duration_ms": time.Since(started).Milliseconds()})
-	return result
-}
-
-func appendTreeDiagnostics(node projecttree.Node, result *compiler.Result) {
-	if node.Kind == projecttree.NodeDamaged {
-		for _, diagnostic := range node.Diagnostics {
-			result.Diagnostics = append(result.Diagnostics, compiler.Diagnostic{Path: node.Path, Key: "workspace.documentLoad", Message: diagnostic.Message})
-		}
-	}
-	for _, child := range node.Children {
-		appendTreeDiagnostics(child, result)
-	}
-}
-
-// publishView stamps the compile state onto a freshly built view.
-func (s *Service) publishView(view *View) {
-	view.Compile = s.compileState
-	view.Compile.Mode = s.current.Settings.Build.Mode
-	view.Compile.Pending = s.compiledRevision < s.revision
-	if view.Compile.Diagnostics == nil {
-		view.Compile.Diagnostics = []compiler.Diagnostic{}
-	}
-	view.CanUndo = len(s.undoStack) > 0
-	view.CanRedo = len(s.redoStack) > 0
-	s.current = view
-}
-
-func buildSchemaIndex(tree projecttree.Tree) schemaregistry.Index {
-	var publicSchemas []document.PublicSchema
-	var tables []document.Table
-	_ = collectDocuments(tree.Root, &publicSchemas, &tables)
-	return schemaregistry.Build(publicSchemas, tables).Index()
-}
-
-func buildForeignKeyIndex(tree projecttree.Tree) foreignkey.Index {
-	var tables []document.Table
-	var diagnostics []foreignkey.Diagnostic
-	var collect func(projecttree.Node)
-	collect = func(node projecttree.Node) {
-		switch node.Kind {
-		case projecttree.NodeDamaged:
-			diagnostics = append(diagnostics, foreignkey.Diagnostic{Path: node.Path, Message: "cannot resolve references from damaged source"})
-		case projecttree.NodeTable:
-			table, err := document.LoadTable(node.Path)
-			if err != nil {
-				diagnostics = append(diagnostics, foreignkey.Diagnostic{Path: node.Path, Message: "cannot load reference source: " + err.Error()})
-			} else {
-				tables = append(tables, table)
-			}
-		}
-		for _, child := range node.Children {
-			collect(child)
-		}
-	}
-	collect(tree.Root)
-	index := foreignkey.Build(tables)
-	index.Diagnostics = append(diagnostics, index.Diagnostics...)
-	index.Incomplete = index.Incomplete || len(diagnostics) > 0
-	return index
-}
-
-func buildView(project Project, settings EditorSettings, tree projecttree.Tree) View {
-	return View{
-		Project:     project,
-		Settings:    settings,
-		Tree:        tree,
-		Schemas:     buildSchemaIndex(tree),
-		ForeignKeys: buildForeignKeyIndex(tree).Summary(),
-	}
-}
-
-func collectDocuments(node projecttree.Node, publicSchemas *[]document.PublicSchema, tables *[]document.Table) []compiler.Diagnostic {
-	seen := map[string]bool{}
-	var diagnostics []compiler.Diagnostic
-	collectDocumentsInto(node, publicSchemas, tables, seen, &diagnostics)
-	return diagnostics
-}
-
-func collectDocumentsInto(node projecttree.Node, publicSchemas *[]document.PublicSchema, tables *[]document.Table, seenSchemas map[string]bool, diagnostics *[]compiler.Diagnostic) {
-	switch node.Kind {
-	case projecttree.NodeSchemaDefinition:
-		if node.Path != "" && !seenSchemas[node.Path] {
-			seenSchemas[node.Path] = true
-			if schema, err := document.LoadPublicSchema(node.Path); err == nil {
-				*publicSchemas = append(*publicSchemas, schema)
-			} else {
-				*diagnostics = append(*diagnostics, compiler.Diagnostic{Path: node.Path, Key: "workspace.documentLoad", Message: "load public Schema: " + err.Error()})
-			}
-		}
-	case projecttree.NodeTable:
-		if table, err := document.LoadTable(node.Path); err == nil {
-			*tables = append(*tables, table)
-		} else {
-			*diagnostics = append(*diagnostics, compiler.Diagnostic{Path: node.Path, Table: node.Name, Key: "workspace.documentLoad", Message: "load table: " + err.Error()})
-		}
-	}
-	for _, child := range node.Children {
-		collectDocumentsInto(child, publicSchemas, tables, seenSchemas, diagnostics)
-	}
 }
 
 func (s *Service) Current() (View, bool) {
@@ -2448,7 +2320,7 @@ func (s *Service) refreshCurrentView() (View, error) {
 		s.log(logging.Error, "workspace refresh failed", map[string]any{"error": err.Error()})
 		return View{}, fmt.Errorf("refresh project tree: %w", err)
 	}
-	s.revision++
+	s.markEdited()
 	view := buildView(project, s.current.Settings, tree)
 	s.publishView(&view)
 	s.log(logging.Debug, "workspace refresh completed", map[string]any{"schemas": len(view.Schemas.Definitions), "revision": s.revision, "duration_ms": time.Since(started).Milliseconds()})
