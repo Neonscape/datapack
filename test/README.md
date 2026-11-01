@@ -61,3 +61,11 @@ CSV 期望值来自样例源文件和 `docs/design.md`，不是从导出器抄�
 `CreateSchemaFile` 生成的空 Schema 包也不会出现在工程树里，因此 `CreateSchemaDefinition` 无法以它为路径。`mvp_loop_test.go` 会先写入一个已有定义的公共 Schema 文件，再通过 Service 追加约束。
 
 这不是推荐产品用法，只是当前公开 API 的边界。
+
+### 构建与打包守护
+
+干净 checkout 先构建 `frontend/dist`，再运行 `go test ./...`（主程序的 Go embed 需要前端资源）。前端测试源码也需要 `npm --prefix frontend run typecheck:tests`；它与产品类型检查互补。
+
+`bash test/scripts/package-linux-release.test.sh` 在独立临时目录中验证打包：保留输出目录的无关文件和已有 `package/`，支持重复执行和含空格路径，校验内容、可执行权限、校验和、失败清理及版本路径拒绝。不会调用部署或发布接口。
+
+Playwright 默认使用它安装的 Chromium。若本机已有浏览器而无 bundled Chromium，可显式指定 `DATAPACK_CHROMIUM_EXECUTABLE=/usr/bin/google-chrome`。测试不会复用已占用的 4173 服务，以免误测另一个工作树；同机测试仍应串行运行。
