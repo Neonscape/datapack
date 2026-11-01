@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"cuelang.org/go/cue/ast"
+	"cuelang.org/go/cue/ast/astutil"
 	"cuelang.org/go/cue/token"
 	"datapack/internal/cueformat"
 )
@@ -50,14 +51,15 @@ const (
 )
 
 type Requirement struct {
-	Kind       string `json:"kind,omitempty"`
-	Op         string `json:"op,omitempty"`
-	Value      string `json:"value,omitempty"`
-	Pattern    string `json:"pattern,omitempty"`
-	Min        *int   `json:"min,omitempty"`
-	Max        *int   `json:"max,omitempty"`
-	Reference  string `json:"reference,omitempty"`
-	Expression string `json:"expression,omitempty"`
+	referenceImport string
+	Kind            string `json:"kind,omitempty"`
+	Op              string `json:"op,omitempty"`
+	Value           string `json:"value,omitempty"`
+	Pattern         string `json:"pattern,omitempty"`
+	Min             *int   `json:"min,omitempty"`
+	Max             *int   `json:"max,omitempty"`
+	Reference       string `json:"reference,omitempty"`
+	Expression      string `json:"expression,omitempty"`
 }
 
 type Field struct {
@@ -66,14 +68,16 @@ type Field struct {
 }
 
 type Node struct {
-	Kind         Kind          `json:"kind"`
-	Nullable     bool          `json:"nullable"`
-	Default      *Value        `json:"default,omitempty"`
-	Reference    string        `json:"reference,omitempty"`
-	EnumValues   []Value       `json:"enumValues,omitempty"`
-	Element      *Node         `json:"element,omitempty"`
-	Fields       []Field       `json:"fields,omitempty"`
-	Requirements []Requirement `json:"requirements,omitempty"`
+	referenceImport string
+	sourcePackage   string
+	Kind            Kind          `json:"kind"`
+	Nullable        bool          `json:"nullable"`
+	Default         *Value        `json:"default,omitempty"`
+	Reference       string        `json:"reference,omitempty"`
+	EnumValues      []Value       `json:"enumValues,omitempty"`
+	Element         *Node         `json:"element,omitempty"`
+	Fields          []Field       `json:"fields,omitempty"`
+	Requirements    []Requirement `json:"requirements,omitempty"`
 }
 
 // DefaultExpression returns the safest concrete value for a schema node.
@@ -154,7 +158,7 @@ func parse(expression ast.Expr) (Node, error) {
 		if err != nil {
 			return Node{}, err
 		}
-		return Node{Kind: KindReference, Reference: reference}, nil
+		return Node{Kind: KindReference, Reference: reference, referenceImport: importedReference(expression)}, nil
 	}
 	if structLiteral, ok := expression.(*ast.StructLit); ok {
 		return parseStruct(structLiteral)
@@ -177,7 +181,7 @@ func parseAnd(expression *ast.BinaryExpr) (Node, error) {
 			return Node{}, err
 		}
 		if node.Kind == KindReference && result.Kind != KindUnknown {
-			result.Requirements = append(result.Requirements, Requirement{Kind: RequirementReference, Expression: node.Reference, Reference: node.Reference})
+			result.Requirements = append(result.Requirements, Requirement{Kind: RequirementReference, Expression: node.Reference, Reference: node.Reference, referenceImport: node.referenceImport})
 			continue
 		}
 		if hasBaseType(node) {
@@ -548,4 +552,85 @@ func requirementExpression(requirement Requirement) string {
 	default:
 		return requirement.Expression
 	}
+}
+
+// ReferenceImport preserves the actual import identity without changing the
+// lexical Reference/Expression sent to editors or written back to source.
+func (n Node) ReferenceImport() string        { return n.referenceImport }
+func (r Requirement) ReferenceImport() string { return r.referenceImport }
+func (n Node) WithSourcePackage(value string) Node {
+	n.sourcePackage = value
+	if n.Element != nil {
+		element := n.Element.WithSourcePackage(value)
+		n.Element = &element
+	}
+	if n.Fields != nil {
+		fields := append([]Field(nil), n.Fields...)
+		for i := range fields {
+			fields[i].Schema = fields[i].Schema.WithSourcePackage(value)
+		}
+		n.Fields = fields
+	}
+	return n
+}
+func (n Node) SourcePackage() string { return n.sourcePackage }
+func (n Node) ReferenceID() string {
+	if n.referenceImport == "" && n.sourcePackage != "" && strings.HasPrefix(n.Reference, "#") {
+		return ast.ParseImportPath(n.sourcePackage).Qualifier + "." + n.Reference
+	}
+	return referenceID(n.Reference, n.referenceImport)
+}
+func referenceID(reference, importPath string) string {
+	if importPath == "" {
+		return reference
+	}
+	marker := strings.LastIndex(reference, ".#")
+	if marker < 0 {
+		return reference
+	}
+	return ast.ParseImportPath(importPath).Qualifier + reference[marker:]
+}
+func importedReference(expression ast.Expr) string {
+	selector, ok := expression.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+	root, ok := selector.X.(*ast.Ident)
+	if !ok {
+		return ""
+	}
+	spec, ok := root.Node.(*ast.ImportSpec)
+	if !ok {
+		return ""
+	}
+	info, err := astutil.ParseImportSpec(spec)
+	if err != nil {
+		return ""
+	}
+	return info.ID
+}
+
+// ResolveImports attaches source-module major defaults to private bindings.
+// It does not change the lexical reference or mutate shared input slices.
+func (n Node) ResolveImports(resolve func(string) string) Node {
+	n.referenceImport = resolve(n.referenceImport)
+	if n.Requirements != nil {
+		requirements := append([]Requirement(nil), n.Requirements...)
+		for i := range requirements {
+			requirements[i].referenceImport = resolve(requirements[i].referenceImport)
+		}
+		n.Requirements = requirements
+	}
+	if n.Element != nil {
+		element := n.Element.ResolveImports(resolve)
+		n.Element = &element
+	}
+	if n.Fields != nil {
+		fields := append([]Field(nil), n.Fields...)
+		for i := range fields {
+			fields[i].Schema = fields[i].Schema.ResolveImports(resolve)
+		}
+		n.Fields = fields
+	}
+	return n
 }
