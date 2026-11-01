@@ -1,6 +1,7 @@
 package document
 
 import (
+	"bytes"
 	"datapack/internal/sourcefile"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"cuelang.org/go/cue/parser"
 	"cuelang.org/go/cue/token"
 	"datapack/internal/cueformat"
+	"datapack/internal/cuesource"
 )
 
 // SchemaDefinitionUpdate carries the editable metadata and expression of one
@@ -237,11 +239,8 @@ func RenamePublicSchemaDefinition(path, oldName, newName string, referencePaths 
 		if fields["#"+newName] != nil {
 			return fmt.Errorf("Schema definition #%s already exists", newName)
 		}
-		for _, declaration := range target.Decls {
-			if field, ok := declaration.(*ast.Field); ok && labelOf(field) == "#"+oldName {
-				field.Label = ast.NewIdent("#" + newName)
-				break
-			}
+		if err := renameBoundSchemaReferences(files, path, oldName, newName, false); err != nil {
+			return err
 		}
 		schemaField := fields["_schema"]
 		if schemaField == nil {
@@ -256,10 +255,6 @@ func RenamePublicSchemaDefinition(path, oldName, newName string, referencePaths 
 		}
 		if err := renameDefinitionTitle(target, oldName, newName); err != nil {
 			return err
-		}
-		for _, file := range files {
-			renameSchemaReferences(file, oldName, newName)
-			pruneUnusedImports(file)
 		}
 		return nil
 	})
@@ -439,8 +434,11 @@ func RenameLocalSchemaDefinition(path, oldName, newName string, referencePaths [
 		if fieldsOfStruct(local.Value)["#"+newName] != nil {
 			return fmt.Errorf("local Schema definition #%s already exists", newName)
 		}
-		if !renameNamedField(local.Value, "#"+oldName, "#"+newName) {
+		if fieldsOfStruct(local.Value)["#"+oldName] == nil {
 			return fmt.Errorf("local Schema definition #%s does not exist", oldName)
+		}
+		if err := renameBoundSchemaReferences(files, path, oldName, newName, true); err != nil {
+			return err
 		}
 		if schemaField := fields["_schema"]; schemaField != nil {
 			if localDefinitions := fieldsOfStruct(schemaField.Value)["localDefinitions"]; localDefinitions != nil {
@@ -449,10 +447,6 @@ func RenameLocalSchemaDefinition(path, oldName, newName string, referencePaths [
 		}
 		if err := renameDefinitionTitle(target, oldName, newName); err != nil {
 			return err
-		}
-		for _, file := range files {
-			renameSchemaReferences(file, oldName, newName)
-			pruneUnusedImports(file)
 		}
 		return nil
 	})
@@ -472,6 +466,7 @@ func RenameLocalSchemaDefinition(path, oldName, newName string, referencePaths [
 func editSchemaSourceFiles(paths []string, mutate func(map[string]*ast.File) error) error {
 	files := map[string]*ast.File{}
 	original := map[string][]byte{}
+	normalized := map[string][]byte{}
 	for _, path := range paths {
 		if _, exists := files[path]; exists {
 			continue
@@ -484,8 +479,13 @@ func editSchemaSourceFiles(paths []string, mutate func(map[string]*ast.File) err
 		if err != nil {
 			return fmt.Errorf("read schema source: %w", err)
 		}
+		before, err := cueformat.Node(file)
+		if err != nil {
+			return fmt.Errorf("format original schema source: %w", err)
+		}
 		files[path] = file
 		original[path] = source
+		normalized[path] = before
 	}
 	if err := mutate(files); err != nil {
 		return err
@@ -496,6 +496,9 @@ func editSchemaSourceFiles(paths []string, mutate func(map[string]*ast.File) err
 		candidate, err := cueformat.Node(file)
 		if err != nil {
 			return fmt.Errorf("format schema source: %w", err)
+		}
+		if bytes.Equal(candidate, normalized[path]) {
+			continue
 		}
 		if err := validateSchemaSourceCandidate(path, candidate); err != nil {
 			return err
@@ -526,31 +529,21 @@ func validateSchemaSourceCandidate(path string, source []byte) error {
 		return fmt.Errorf("parse updated source: %w", err)
 	}
 	if fieldsOfFile(file)["rows"] != nil {
+		if diagnostics := cuesource.ParseTable(path, source).Diagnostics; len(diagnostics) > 0 {
+			return fmt.Errorf("validate updated table structure: %s", diagnostics[0].Message)
+		}
 		if _, err := LoadTable(temporaryPath); err != nil {
 			return fmt.Errorf("validate updated table: %w", err)
 		}
 		return nil
 	}
+	if diagnostics := cuesource.ParseSchema(path, source).Diagnostics; len(diagnostics) > 0 {
+		return fmt.Errorf("validate updated schema structure: %s", diagnostics[0].Message)
+	}
 	if _, err := LoadPublicSchema(temporaryPath); err != nil {
 		return fmt.Errorf("validate updated schema: %w", err)
 	}
 	return nil
-}
-
-func renameSchemaReferences(file *ast.File, oldName, newName string) {
-	ast.Walk(file, func(node ast.Node) bool {
-		switch value := node.(type) {
-		case *ast.SelectorExpr:
-			if identifier, ok := value.Sel.(*ast.Ident); ok && identifier.Name == "#"+oldName {
-				value.Sel = ast.NewIdent("#" + newName)
-			}
-		case *ast.Ident:
-			if value.Name == "#"+oldName {
-				value.Name = "#" + newName
-			}
-		}
-		return true
-	}, nil)
 }
 
 func validatePublicSchemaAndReplace(path string, source []byte) (PublicSchema, error) {
