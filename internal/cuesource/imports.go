@@ -1,81 +1,106 @@
 package cuesource
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"cuelang.org/go/cue/ast"
 	"cuelang.org/go/cue/ast/astutil"
 	"cuelang.org/go/cue/parser"
+	"cuelang.org/go/mod/modfile"
 )
 
-// CanonicalImport identifies a package independently of its source alias and
-// implicit/default major version. It never resolves or downloads dependencies.
+// CanonicalImport only normalizes syntax. An omitted major is resolved by the
+// enclosing module, not a global v0 default.
 func CanonicalImport(value string) string {
 	if value == "" {
 		return ""
 	}
 	parts := ast.ParseImportPath(value)
-	if parts.Version == "" {
-		parts.Version = "v0"
-	}
 	parts.ExplicitQualifier = true
 	return parts.String()
 }
 
-// PackageImportPath describes a package in its enclosing local CUE module.
-// Absence of a module is allowed for the editor's legacy standalone documents.
-func PackageImportPath(path, packageName string) (string, error) {
+type ImportContext struct {
+	Package string
+	module  *modfile.File
+}
+
+func (c ImportContext) Resolve(value string) string {
+	if value == "" {
+		return ""
+	}
+	parts := ast.ParseImportPath(value)
+	if parts.Version == "" && c.module != nil {
+		if target, ok := c.module.ModuleForImportPath(value); ok {
+			parts.Version = ast.ParseImportPath(target.Path()).Version
+		}
+	}
+	return CanonicalImport(parts.String())
+}
+
+// ReadImportContext reads local module metadata only. Official CUE module
+// logic resolves defaults, including the main major and declared dependency
+// defaults; it does not consult registries or download a dependency.
+func ReadImportContext(path, packageName string) (ImportContext, error) {
 	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
-		source, err := os.ReadFile(filepath.Join(dir, "cue.mod", "module.cue"))
+		modulePath := filepath.Join(dir, "cue.mod", "module.cue")
+		source, err := os.ReadFile(modulePath)
 		if err == nil {
-			file, err := parser.ParseFile("module.cue", source, parser.AllErrors)
+			syntax, err := parser.ParseFile(modulePath, source, parser.AllErrors)
 			if err != nil {
-				return "", err
+				return ImportContext{}, err
 			}
-			for _, decl := range file.Decls {
-				field, ok := decl.(*ast.Field)
-				if !ok {
-					continue
+			modern := false
+			for _, decl := range syntax.Decls {
+				if field, ok := decl.(*ast.Field); ok {
+					name, _, _ := ast.LabelName(field.Label)
+					if name == "language" {
+						modern = true
+					}
 				}
-				name, _, _ := ast.LabelName(field.Label)
-				if name != "module" {
-					continue
-				}
-				literal, ok := field.Value.(*ast.BasicLit)
-				if !ok {
-					return "", fmt.Errorf("module name must be a string")
-				}
-				value, err := strconv.Unquote(literal.Value)
-				if err != nil {
-					return "", err
-				}
-				parts := ast.ParseImportPath(value)
-				relative, err := filepath.Rel(dir, filepath.Dir(path))
-				if err != nil {
-					return "", err
-				}
-				if relative != "." {
-					parts.Path = strings.TrimSuffix(parts.Path, "/") + "/" + filepath.ToSlash(relative)
-				}
-				parts.Qualifier = packageName
-				parts.ExplicitQualifier = true
-				return CanonicalImport(parts.String()), nil
 			}
-			return "", fmt.Errorf("CUE module has no module declaration")
+			var module *modfile.File
+			if modern {
+				module, err = modfile.ParseNonStrict(source, modulePath)
+			} else {
+				module, err = modfile.ParseLegacy(source, modulePath)
+				if err == nil {
+					err = module.InitNonStrict()
+				}
+			}
+			if err != nil {
+				return ImportContext{}, err
+			}
+			parts := ast.ParseImportPath(module.QualifiedModule())
+			relative, err := filepath.Rel(dir, filepath.Dir(path))
+			if err != nil {
+				return ImportContext{}, err
+			}
+			if relative != "." {
+				parts.Path = strings.TrimSuffix(parts.Path, "/") + "/" + filepath.ToSlash(relative)
+			}
+			parts.Qualifier = packageName
+			parts.ExplicitQualifier = true
+			packagePath := ""
+			if packageName != "" {
+				packagePath = CanonicalImport(parts.String())
+			}
+			return ImportContext{Package: packagePath, module: module}, nil
 		}
 		if !os.IsNotExist(err) {
-			return "", err
+			return ImportContext{}, err
 		}
 		if filepath.Dir(dir) == dir {
-			return "", nil
+			return ImportContext{}, nil
 		}
 	}
 }
-
+func PackageImportPath(path, packageName string) (string, error) {
+	context, err := ReadImportContext(path, packageName)
+	return context.Package, err
+}
 func ImportBindings(file *ast.File) map[string]string {
 	result := map[string]string{}
 	for _, decl := range file.Decls {
@@ -89,7 +114,6 @@ func ImportBindings(file *ast.File) map[string]string {
 	}
 	return result
 }
-
 func ReadImportBindings(path string) (map[string]string, error) {
 	source, err := os.ReadFile(path)
 	if err != nil {
@@ -99,5 +123,12 @@ func ReadImportBindings(path string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ImportBindings(file), nil
+	// Invalid module metadata remains a compiler diagnostic; import-name
+	// inspection must not block an otherwise legal source edit.
+	context, _ := ReadImportContext(path, "")
+	bindings := ImportBindings(file)
+	for alias, value := range bindings {
+		bindings[alias] = context.Resolve(value)
+	}
+	return bindings, nil
 }

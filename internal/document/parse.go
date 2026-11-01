@@ -196,6 +196,14 @@ func LoadTable(path string) (Table, error) {
 		}
 	}
 	sort.Slice(document.LocalSchema, func(i, j int) bool { return document.LocalSchema[i].Name < document.LocalSchema[j].Name })
+	context, _ := cuesource.ReadImportContext(path, document.Package)
+	document.PrimaryKey = document.PrimaryKey.ResolveImports(context.Resolve)
+	for i := range document.Columns {
+		document.Columns[i].Schema = document.Columns[i].Schema.ResolveImports(context.Resolve)
+	}
+	for i := range document.LocalSchema {
+		document.LocalSchema[i].Schema = document.LocalSchema[i].Schema.ResolveImports(context.Resolve)
+	}
 	return document, nil
 }
 
@@ -220,7 +228,7 @@ func LoadPublicSchema(path string) (PublicSchema, error) {
 
 	// Module errors remain compiler diagnostics; restricted document loading
 	// must still allow users to view and repair a project with a broken module.
-	importPath, _ := cuesource.PackageImportPath(path, document.Package)
+	context, _ := cuesource.ReadImportContext(path, document.Package)
 	metadata := fieldsOfStruct(requiredField(fields, "_schema").Value)
 	definitions := fieldsOfStruct(requiredField(metadata, "definitions").Value)
 	for _, metadataField := range orderedFields(definitions) {
@@ -234,7 +242,7 @@ func LoadPublicSchema(path string) (PublicSchema, error) {
 		if err != nil {
 			return PublicSchema{}, fmt.Errorf("read schema %q: %w", name, err)
 		}
-		schema = schema.WithSourcePackage(importPath)
+		schema = schema.WithSourcePackage(context.Package).ResolveImports(context.Resolve)
 		definitionMetadata := fieldsOfStruct(metadataField.Value)
 		document.Definitions = append(document.Definitions, SchemaDefinition{
 			Name:             name,

@@ -609,3 +609,28 @@ func importedReference(expression ast.Expr) string {
 	}
 	return info.ID
 }
+
+// ResolveImports attaches source-module major defaults to private bindings.
+// It does not change the lexical reference or mutate shared input slices.
+func (n Node) ResolveImports(resolve func(string) string) Node {
+	n.referenceImport = resolve(n.referenceImport)
+	if n.Requirements != nil {
+		requirements := append([]Requirement(nil), n.Requirements...)
+		for i := range requirements {
+			requirements[i].referenceImport = resolve(requirements[i].referenceImport)
+		}
+		n.Requirements = requirements
+	}
+	if n.Element != nil {
+		element := n.Element.ResolveImports(resolve)
+		n.Element = &element
+	}
+	if n.Fields != nil {
+		fields := append([]Field(nil), n.Fields...)
+		for i := range fields {
+			fields[i].Schema = fields[i].Schema.ResolveImports(resolve)
+		}
+		n.Fields = fields
+	}
+	return n
+}
