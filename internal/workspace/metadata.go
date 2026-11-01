@@ -59,6 +59,8 @@ func resolveEffectiveSchema(node schemamodel.Node, logical string, definitions m
 		return result
 	}
 	result := node
+	// Expanding a preview must not replace references in the shared source model.
+	result.Fields = append([]schemamodel.Field(nil), node.Fields...)
 	if node.Element != nil {
 		element := resolveEffectiveSchema(*node.Element, logical, definitions, resolving)
 		result.Element = &element
