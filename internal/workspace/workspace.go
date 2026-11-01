@@ -1205,25 +1205,27 @@ func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaE
 	}
 	var paths []string
 	collectSourcePaths(s.current.Tree.Root, &paths)
-	snapshot := s.snapshotFiles(paths...)
-	var result SchemaEditResult
-	if scope == "public" {
-		schema, err := document.RenamePublicSchemaDefinition(rename.Path, rename.OldName, rename.NewName, paths)
-		if err != nil {
-			s.log(logging.Error, "rename schema definition failed", map[string]any{"path": rename.Path, "name": rename.OldName, "error": err.Error()})
-			return SchemaEditResult{}, err
+	paths = append(paths, rename.Path)
+	result, view, err := editSources(s, paths, func() (SchemaEditResult, error) {
+		var result SchemaEditResult
+		if scope == "public" {
+			schema, err := document.RenamePublicSchemaDefinition(rename.Path, rename.OldName, rename.NewName, paths)
+			if err != nil {
+				s.log(logging.Error, "rename schema definition failed", map[string]any{"path": rename.Path, "name": rename.OldName, "error": err.Error()})
+				return SchemaEditResult{}, err
+			}
+			result.Schema = schema
+		} else {
+			table, err := document.RenameLocalSchemaDefinition(rename.Path, rename.OldName, rename.NewName, paths)
+			if err != nil {
+				s.log(logging.Error, "rename local schema definition failed", map[string]any{"path": rename.Path, "name": rename.OldName, "error": err.Error()})
+				return SchemaEditResult{}, err
+			}
+			result.Table = table
 		}
-		result.Schema = schema
-	} else {
-		table, err := document.RenameLocalSchemaDefinition(rename.Path, rename.OldName, rename.NewName, paths)
-		if err != nil {
-			s.log(logging.Error, "rename local schema definition failed", map[string]any{"path": rename.Path, "name": rename.OldName, "error": err.Error()})
-			return SchemaEditResult{}, err
-		}
-		result.Table = table
-	}
-	s.recordEdit(snapshot)
-	view, err := s.refreshAfterEdit()
+
+		return result, nil
+	})
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
@@ -1250,7 +1252,6 @@ func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaE
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
-	snapshot := s.snapshotFiles(delete.Path)
 	for _, definition := range s.current.Schemas.Definitions {
 		if definition.ID != id || len(definition.Usages) == 0 {
 			continue
@@ -1260,24 +1261,26 @@ func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaE
 		s.log(logging.Warn, "schema definition delete blocked", map[string]any{"path": delete.Path, "name": delete.Name, "error": err.Error()})
 		return SchemaEditResult{}, err
 	}
-	var result SchemaEditResult
-	if scope == "public" {
-		schema, err := document.DeletePublicSchemaDefinition(delete.Path, delete.Name)
-		if err != nil {
-			s.log(logging.Error, "delete schema definition failed", map[string]any{"path": delete.Path, "name": delete.Name, "error": err.Error()})
-			return SchemaEditResult{}, err
+	result, view, err := editSources(s, []string{delete.Path}, func() (SchemaEditResult, error) {
+		var result SchemaEditResult
+		if scope == "public" {
+			schema, err := document.DeletePublicSchemaDefinition(delete.Path, delete.Name)
+			if err != nil {
+				s.log(logging.Error, "delete schema definition failed", map[string]any{"path": delete.Path, "name": delete.Name, "error": err.Error()})
+				return SchemaEditResult{}, err
+			}
+			result.Schema = schema
+		} else {
+			table, err := document.DeleteLocalSchemaDefinition(delete.Path, delete.Name)
+			if err != nil {
+				s.log(logging.Error, "delete local schema definition failed", map[string]any{"path": delete.Path, "name": delete.Name, "error": err.Error()})
+				return SchemaEditResult{}, err
+			}
+			result.Table = table
 		}
-		result.Schema = schema
-	} else {
-		table, err := document.DeleteLocalSchemaDefinition(delete.Path, delete.Name)
-		if err != nil {
-			s.log(logging.Error, "delete local schema definition failed", map[string]any{"path": delete.Path, "name": delete.Name, "error": err.Error()})
-			return SchemaEditResult{}, err
-		}
-		result.Table = table
-	}
-	s.recordEdit(snapshot)
-	view, err := s.refreshAfterEdit()
+
+		return result, nil
+	})
 	if err != nil {
 		return SchemaEditResult{}, err
 	}
@@ -1732,23 +1735,26 @@ func (s *Service) CreateSchemaFile(namespace string) (SchemaFileCreateResult, er
 	if _, err := os.Stat(path); err == nil {
 		return SchemaFileCreateResult{}, s.userError("workspace.schemaNamespaceExists", namespace)
 	}
-	snapshot := s.snapshotFiles(path)
-	if err := os.MkdirAll(directory, 0o755); err != nil {
-		return SchemaFileCreateResult{}, fmt.Errorf("create schema directory: %w", err)
-	}
-	source := fmt.Sprintf("package %s\n\n_schema: {\n\tversion: 1\n\tdefinitions: {}\n}\n", namespace)
-	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
-		return SchemaFileCreateResult{}, fmt.Errorf("write schema source: %w", err)
-	}
-	schema, err := document.LoadPublicSchema(path)
-	if err != nil {
-		_ = os.Remove(path)
-		return SchemaFileCreateResult{}, fmt.Errorf("validate created schema: %w", err)
-	}
-	s.recordEdit(snapshot)
-	view, err := s.refreshAfterEdit()
+	createdDirectories, err := missingParentDirectories(directory)
 	if err != nil {
 		return SchemaFileCreateResult{}, err
+	}
+	schema, view, err := editSources(s, []string{path}, func() (document.PublicSchema, error) {
+		if err := os.MkdirAll(directory, 0755); err != nil {
+			return document.PublicSchema{}, fmt.Errorf("create schema directory: %w", err)
+		}
+		source := fmt.Sprintf("package %s\n\n_schema: {\n\tversion: 1\n\tdefinitions: {}\n}\n", namespace)
+		if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+			return document.PublicSchema{}, fmt.Errorf("write schema source: %w", err)
+		}
+		schema, err := document.LoadPublicSchema(path)
+		if err != nil {
+			return document.PublicSchema{}, fmt.Errorf("validate created schema: %w", err)
+		}
+		return schema, nil
+	})
+	if err != nil {
+		return SchemaFileCreateResult{}, errors.Join(err, removeCreatedDirectories(createdDirectories))
 	}
 	s.log(logging.Info, "schema file created", map[string]any{"namespace": namespace})
 	return SchemaFileCreateResult{Schema: schema, Workspace: view}, nil
@@ -1977,19 +1983,6 @@ func (s *Service) historyResult(table document.Table, view View) HistoryResult {
 	return HistoryResult{Table: withTableMetadata(table, view), Workspace: view, CanUndo: len(s.undoStack) > 0, CanRedo: len(s.redoStack) > 0}
 }
 
-func (s *Service) snapshotFiles(paths ...string) map[string][]byte {
-	snapshot := map[string][]byte{}
-	for _, path := range paths {
-		content, err := os.ReadFile(path)
-		if err != nil {
-			snapshot[path] = nil
-			continue
-		}
-		snapshot[path] = content
-	}
-	return snapshot
-}
-
 func (s *Service) recordEdit(snapshot map[string][]byte) {
 	s.recordHistory(historyEntry{Files: snapshot})
 }
@@ -2013,9 +2006,13 @@ func (s *Service) restoreSnapshot(snapshot map[string][]byte) error {
 }
 
 func writeFileAtomic(path string, content []byte) error {
+	return writeFileAtomicWithRename(path, content, os.Rename)
+}
+
+func writeFileAtomicWithRename(path string, content []byte, rename func(string, string) error) error {
 	mode := os.FileMode(0600)
 	if info, err := os.Stat(path); err == nil {
-		mode = info.Mode().Perm()
+		mode = sourcePermissionMode(info.Mode())
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -2024,12 +2021,17 @@ func writeFileAtomic(path string, content []byte) error {
 		return err
 	}
 	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(mode); err != nil {
+	retainRecovery := false
+	defer func() {
+		if !retainRecovery {
+			os.Remove(temporaryPath)
+		}
+	}()
+	if _, err := temporary.Write(content); err != nil {
 		temporary.Close()
 		return err
 	}
-	if _, err := temporary.Write(content); err != nil {
+	if err := temporary.Chmod(mode); err != nil {
 		temporary.Close()
 		return err
 	}
@@ -2040,7 +2042,11 @@ func writeFileAtomic(path string, content []byte) error {
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	return os.Rename(temporaryPath, path)
+	if err := rename(temporaryPath, path); err != nil {
+		retainRecovery = true
+		return fmt.Errorf("restore failed; recovery bytes retained at %q: %w", temporaryPath, err)
+	}
+	return nil
 }
 
 func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
@@ -2191,16 +2197,9 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 	for _, reference := range references {
 		paths = append(paths, reference.Path)
 	}
-	snapshot, err := snapshotRenameFiles(paths...)
-	if err != nil {
-		return RowRenameResult{}, err
-	}
-	table, err := document.RenameRow(rename.Path, rename.OldID, rename.NewID, references)
-	if err != nil {
-		return RowRenameResult{}, err
-	}
-	s.recordEdit(snapshot)
-	view, err := s.refreshAfterEdit()
+	table, view, err := editSources(s, paths, func() (document.Table, error) {
+		return document.RenameRow(rename.Path, rename.OldID, rename.NewID, references)
+	})
 	if err != nil {
 		return RowRenameResult{}, err
 	}
