@@ -199,8 +199,14 @@ func renameBoundSchemaReferences(files map[string]*ast.File, path, oldName, newN
 				if parent.Ident == id {
 					return false
 				}
-			case *ast.PostfixAlias, *ast.ForClause:
-				return false
+			case *ast.PostfixAlias:
+				if parent.Label == id || parent.Field == id {
+					return false
+				}
+			case *ast.ForClause:
+				if parent.Key == id || parent.Value == id {
+					return false
+				}
 			case *ast.LetClause:
 				if parent.Ident == id {
 					return false

@@ -387,3 +387,40 @@ _tool:{table:{namespace:"game",name:"item"}}`
 		})
 	}
 }
+
+func TestSchemaRenameRewritesComprehensionSourceNotBinders(t *testing.T) {
+	for _, local := range []bool{false, true} {
+		t.Run(map[bool]string{false: "public", true: "local"}[local], func(t *testing.T) {
+			source := `package common
+#Old:[1,2]
+#Use:[for x in #Old {x}]
+_schema:{definitions:{Old:{kind:"type",type:"array"},Use:{kind:"type",type:"array"}}}`
+			if local {
+				source = `package item
+#PrimaryKey:string
+#Row:{value:int}
+rows:{one:{value:1}}
+_local:{#Old:[1,2],#Use:[for x in #Old {x}]}
+_schema:{localDefinitions:{Old:{kind:"type",type:"array"},Use:{kind:"type",type:"array"}}}
+_tool:{table:{namespace:"game",name:"item"}}`
+			}
+			path := writeSource(t, "source.cue", source)
+			assertScopePackageCompiles(t, path)
+			var err error
+			if local {
+				_, err = RenameLocalSchemaDefinition(path, "Old", "New", nil)
+			} else {
+				_, err = RenamePublicSchemaDefinition(path, "Old", "New", nil)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertScopePackageCompiles(t, path)
+			data, _ := os.ReadFile(path)
+			compact := strings.Join(strings.Fields(string(data)), "")
+			if !strings.Contains(compact, "forxin#New{x}") || strings.Contains(compact, "#Old") {
+				t.Fatalf("comprehension: %s", data)
+			}
+		})
+	}
+}
