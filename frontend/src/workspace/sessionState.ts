@@ -18,7 +18,10 @@ export function containsPath(node: TreeNode, path: string): boolean {
     return node.path === path || (node.children ?? []).some(child => containsPath(child, path));
 }
 export function tabPath(tab: OpenTab) { return tab.kind === "table" ? tab.path : tab.state.path; }
+export function reconcilePeek(selected: SchemaDefinition | null, view: WorkspaceView | null) {
+    return selected ? view?.schemas?.definitions?.find(definition=>definition.id===selected.id) ?? null : null;
+}
 export function withTabs(state: SessionState, tabs: OpenTab[]): SessionState {
-    return {...state, tabs, activeTabId: state.activeTabId && !tabs.some(tab => tab.id === state.activeTabId) ? tabs[0]?.id ?? null : state.activeTabId};
+    return {...state, tabs, selectedSchema:reconcilePeek(state.selectedSchema,state.workspace), activeTabId: state.activeTabId && !tabs.some(tab => tab.id === state.activeTabId) ? tabs[0]?.id ?? null : state.activeTabId};
 }
 

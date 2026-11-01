@@ -599,7 +599,7 @@ function App() {
         try {
             const result = redo ? await Redo() : await Undo();
             if (!isCurrent(request)) return;
-            publishWorkspace(result.workspace as WorkspaceView);
+            if (!publishWorkspace(result.workspace as WorkspaceView, request)) return;
             await refreshOpenTabs(request, result.workspace as WorkspaceView, {table:async path => await GetTable(path) as TableDocument, schema:async path => await GetPublicSchema(path) as PublicSchemaDocument});
         } catch (reason) {
             if (!isCurrent(request)) return;
