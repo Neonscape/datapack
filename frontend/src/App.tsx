@@ -14,7 +14,7 @@ import {DisplayNameDialog} from "./tree/DisplayNameDialog";
 import {displayLabel} from "./tree/displayLabel";
 import {Tree} from "./tree/Tree";
 import {initialExpandedNodes} from "./tree/expansion";
-import {useWorkspaceSession, type OpenTab} from "./workspace/useWorkspaceSession";
+import {refreshSchemaState, useWorkspaceSession, type OpenTab} from "./workspace/useWorkspaceSession";
 import type {CellError, ExportFormat, NavRequest, NavTarget, PublicSchemaDocument, SchemaDefinition, SchemaEditorState, SchemaEditResult, SchemaNode, SchemaUsage, TableDocument, TableExportSettings as TableExportSettingsModel, TreeNode, WorkspaceView} from "./types";
 
 type StructureDialog = {
@@ -158,11 +158,11 @@ function App() {
                     const document = await GetTable(tab.state.path) as TableDocument;
                     const logical = document.namespace ? `${document.namespace}.${document.name}` : document.name;
                     const definitions = document.localSchema;
-                    refreshed.push({...tab, state: {...tab.state, logicalTable: logical, definitions, selected: definitions.some((entry) => entry.name === tab.state.selected) ? tab.state.selected : (definitions[0]?.name ?? null), creating: false}});
+                    refreshed.push({...tab, state: refreshSchemaState(tab.state, definitions, {logicalTable: logical, displayName: document.displayName})});
                 } else {
                     const document = await GetPublicSchema(tab.state.path) as PublicSchemaDocument;
                     const definitions = document.definitions ?? [];
-                    refreshed.push({...tab, state: {...tab.state, displayName: document.displayName, package: document.package, definitions, selected: definitions.some((entry) => entry.name === tab.state.selected) ? tab.state.selected : (definitions[0]?.name ?? null), creating: false}});
+                    refreshed.push({...tab, state: refreshSchemaState(tab.state, definitions, {package: document.package, displayName: document.displayName})});
                 }
             } catch {
                 continue;
