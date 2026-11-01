@@ -9,7 +9,7 @@ export function DisplayNameDialog({identity, value, onChange, onClose, onSubmit}
     const {t} = useTranslation();
     const backdrop = useRef<HTMLDivElement>(null);
     useModalBoundary(backdrop, onClose);
-    return <div ref={backdrop} className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
+    return <div ref={backdrop} className="dialog-backdrop" role="presentation" onMouseDown={(event) => { event.preventDefault(); onClose(); }}>
         <form className="structure-dialog" role="dialog" aria-modal="true" aria-labelledby="display-name-title" tabIndex={-1}
             onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
             <h2 id="display-name-title">{t("displayName.edit")}</h2>

@@ -33,6 +33,9 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
     const typeReferences = schemaTypeReferenceOptions(workspace).map((entry) => entry.value);
     const definitions = state.definitions ?? emptyDefinitions;
 
+    // Titles are presentation metadata; updating one must not discard an unapplied draft.
+    const definitionContent = JSON.stringify(definitions.map((entry) => [entry.name, entry.kind, entry.type, entry.appliesTo, entry.schema, entry.schemaExpression]));
+
     useEffect(() => {
         setCreating(false);
         setRenaming(false);
@@ -53,7 +56,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
             node: definition.schema,
             custom: false,
         } : null);
-    }, [state.selected, definitions, state.creating]);
+    }, [state.selected, definitionContent, state.creating]);
 
     function startCreate() {
         setDraft({name: "", kind: "type", type: "string", appliesTo: "", expression: "string", node: {kind: "string"}, custom: false});

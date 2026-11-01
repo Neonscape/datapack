@@ -82,7 +82,7 @@ export function ProjectSettings({onClose, onSaved}: {onClose: () => void; onSave
         }
     }
 
-    return <div ref={backdrop} className="dialog-backdrop project-settings-backdrop" role="presentation" onMouseDown={onClose}>
+    return <div ref={backdrop} className="dialog-backdrop project-settings-backdrop" role="presentation" onMouseDown={(event) => { event.preventDefault(); onClose(); }}>
         <form className="project-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="project-settings-title" tabIndex={-1} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void save(); }}>
             <header className="project-settings-header">
                 <div>

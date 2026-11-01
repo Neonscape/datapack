@@ -4,8 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
+	"cuelang.org/go/cue/cuecontext"
+	"cuelang.org/go/cue/load"
 	"datapack/internal/document"
 	"datapack/internal/projecttree"
 )
@@ -152,4 +155,135 @@ func TestTableDisplayNameSurvivesRenameDeleteAndTheirHistory(t *testing.T) {
 	if _, err := os.Stat(renamed.Table.Path); !os.IsNotExist(err) {
 		t.Fatalf("redo delete: %v", err)
 	}
+}
+
+func TestDisplayNamesKeepExportsWithMultiFileImportedPackage(t *testing.T) {
+	s, table, rules := sourceEditFixture(t)
+	second := filepath.Join(filepath.Dir(rules), "extra.cue")
+	writeFile(t, second, `package rules
+#Extra: string
+_schema: {definitions: {Extra: {kind: "type", type: "string"}}}`)
+	if _, err := s.OpenProject(s.current.Project.Path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetColumnSchema(ColumnSchemaSet{Path: table, Name: "price", SchemaExpression: "rules.#Existing"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetTableExportSettings(TableExportSettings{Path: table, Formats: map[string]document.ExportSettings{"csv": {Enabled: true, Columns: []string{"id", "name", "price"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	export := func() string {
+		t.Helper()
+		result, err := s.Export()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(result.Files[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	validatePackage := func() {
+		t.Helper()
+		instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(rules), Package: "rules"})
+		if len(instances) != 1 {
+			t.Fatal("unexpected schema package count")
+		}
+		if err := cuecontext.New().BuildInstance(instances[0]).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	validatePackage()
+	before := export()
+	for path, title := range map[string]string{rules: "规则文件甲", second: "规则文件乙"} {
+		if _, err := s.SetDisplayName(DisplayNameSet{Path: path, DisplayName: title}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	validatePackage()
+	if after := export(); after != before {
+		t.Fatal("file titles changed imported-package compilation/export")
+	}
+}
+
+func TestDisplayNamesKeepExportsWithMultiFileTablePackage(t *testing.T) {
+	s, first, _ := sourceEditFixture(t)
+	second := filepath.Join(filepath.Dir(filepath.Dir(first)), "extra", "extra.cue")
+	writeFile(t, second, `package item
+#PrimaryKey:string
+#Row:{name:string,price:int}
+rows:{two:{name:"Other",price:20}}
+_tool:{table:{namespace:"rpg",name:"extra"}}`)
+	if _, err := s.OpenProject(s.current.Project.Path); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{first, second} {
+		if _, err := s.SetTableExportSettings(TableExportSettings{Path: path, Formats: map[string]document.ExportSettings{"csv": {Enabled: true, Columns: []string{"id", "name", "price"}}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	export := func() map[string]string {
+		t.Helper()
+		result, err := s.Export()
+		if err != nil {
+			t.Fatal(err)
+		}
+		files := map[string]string{}
+		for _, path := range result.Files {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files[filepath.Base(path)] = string(data)
+		}
+		if len(files) != 2 {
+			t.Fatalf("tables: %v", files)
+		}
+		return files
+	}
+	before := export()
+	for path, title := range map[string]string{first: "道具主表", second: "同包附表"} {
+		if _, err := s.SetDisplayName(DisplayNameSet{Path: path, DisplayName: title}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !reflect.DeepEqual(before, export()) {
+		t.Fatal("table titles changed shared-package compilation/export")
+	}
+}
+
+func TestDifferentTableIdentitiesInOnePackageAreAlreadyInvalid(t *testing.T) {
+	s, table, _ := sourceEditFixture(t)
+	second := filepath.Join(filepath.Dir(table), "extra.cue")
+	writeFile(t, second, `package item
+#PrimaryKey:string
+#Row:{name:string,price:int}
+rows:{two:{name:"Other",price:20}}
+_tool:{table:{namespace:"rpg",name:"extra"}}`)
+	if _, err := s.OpenProject(s.current.Project.Path); err != nil {
+		t.Fatal(err)
+	}
+	check := func() {
+		t.Helper()
+		if _, err := s.Compile(); err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, diagnostic := range s.current.Compile.Diagnostics {
+			if strings.Contains(diagnostic.Message, "_tool.table.name") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("expected existing package identity conflict")
+		}
+	}
+	check()
+	for path, title := range map[string]string{table: "主表", second: "附表"} {
+		if _, err := s.SetDisplayName(DisplayNameSet{Path: path, DisplayName: title}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check()
 }

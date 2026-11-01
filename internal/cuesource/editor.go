@@ -8,6 +8,8 @@ import (
 
 // EditorTitles contains optional presentation metadata. It is never data identity
 // or a Schema expression; old documents simply produce empty titles.
+const FileTitleAttribute = "datapackTitle"
+
 type EditorTitles struct {
 	Table       string
 	Schema      string
@@ -16,6 +18,16 @@ type EditorTitles struct {
 
 func ReadEditorTitles(file *ast.File) EditorTitles {
 	result := EditorTitles{Definitions: map[string]string{}}
+	fileTitle, hasFileTitle := "", false
+	for _, decl := range file.Decls {
+		if attribute, ok := decl.(*ast.Attribute); ok && strings.HasPrefix(attribute.Text, "@"+FileTitleAttribute+"(") && strings.HasSuffix(attribute.Text, ")") {
+			value, err := strconv.Unquote(strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(attribute.Text, "@"+FileTitleAttribute+"("), ")")))
+			if err == nil {
+				fileTitle, hasFileTitle = strings.TrimSpace(value), true
+			}
+		}
+	}
+	result.Schema = fileTitle
 	editor := topLevelFields(file)["_editor"]
 	if editor == nil {
 		return result
@@ -40,7 +52,9 @@ func ReadEditorTitles(file *ast.File) EditorTitles {
 		return strings.TrimSpace(text)
 	}
 	result.Table = title(fields["table"])
-	result.Schema = title(fields["schema"])
+	if !hasFileTitle {
+		result.Schema = title(fields["schema"])
+	}
 	if definitions := fields["schemas"]; definitions != nil {
 		for name, field := range structFields(definitions.Value) {
 			result.Definitions[name] = title(field)

@@ -38,7 +38,7 @@ type TreeDialog =
 function App() {
     const {t, language, setLanguage} = useTranslation();
     const {preference, setPreference} = useTheme();
-    const {workspace, setWorkspace, selectedSchema, setSelectedSchema, tabs, setTabs, activeTabId, setActiveTabId, activeTab, table, schemaDocument, activateTab, closeTab, updateActiveTable, updateActiveSchema, updateSchemaTabById, addTableTab, addSchemaTab} = useWorkspaceSession();
+    const {workspace, setWorkspace, selectedSchema, setSelectedSchema, tabs, setTabs, activeTabId, setActiveTabId, activeTab, table, schemaDocument, activateTab, closeTab, updateActiveTable, updateActiveSchema, updateSchemaTabById, updateDisplayName, addTableTab, addSchemaTab} = useWorkspaceSession();
     const [cellError, setCellError] = useState<CellError | null>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
@@ -133,7 +133,7 @@ function App() {
             if (local) {
                 const document = await GetTable(path) as TableDocument;
                 const logical = document.namespace ? `${document.namespace}.${document.name}` : document.name;
-                state = {path, local: true, logicalTable: logical, definitions: document.localSchema, selected: definition ?? document.localSchema[0]?.name ?? null, creating};
+                state = {path, local: true, displayName: document.displayName, logicalTable: logical, definitions: document.localSchema, selected: definition ?? document.localSchema[0]?.name ?? null, creating};
             } else {
                 const document = await GetPublicSchema(path) as PublicSchemaDocument;
                 const definitions = document.definitions ?? [];
@@ -411,7 +411,10 @@ function App() {
                 const view = result.workspace as WorkspaceView;
                 setWorkspace(view);
                 if (selectedSchema) setSelectedSchema(schemaDefinitions(view).find((entry) => entry.id === selectedSchema.id) ?? null);
-                if (tabs.length > 0) await refreshOpenTabs();
+                const document = (result.table?.path ? result.table : result.schema) as TableDocument | PublicSchemaDocument;
+                const definitions = "localSchema" in document ? document.localSchema : document.definitions;
+                const title = treeDialog.definition ? definitions.find((entry) => entry.name === treeDialog.definition)?.displayName ?? "" : document.displayName ?? "";
+                updateDisplayName(treeDialog.path, treeDialog.definition, title);
             } else if (treeDialog.mode === "newSchema") {
                 await newDefinitionInNamespace(treeDialog.namespace);
             } else if (treeDialog.mode === "renameTable") {
@@ -743,7 +746,7 @@ function App() {
                                 const label = tab.kind === "table"
                                     ? displayLabel(tab.table.displayName, tab.table.namespace ? `${tab.table.namespace}.${tab.table.name}` : tab.table.name)
                                     : tab.state.local
-                                        ? `${tab.state.logicalTable ?? tab.state.path} ${t("common.local")}`
+                                        ? `${displayLabel(tab.state.displayName, tab.state.logicalTable ?? tab.state.path)} ${t("common.local")}`
                                         : displayLabel(tab.state.displayName, tab.state.package ?? tab.state.path);
                                 return <div key={tab.id} role="tab" aria-selected={isActive} className={`tab ${isActive ? "tab-active" : ""}`} onClick={() => activateTab(tab.id)}>
                                     <span className="tab-label">{label}</span>
