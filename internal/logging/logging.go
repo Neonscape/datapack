@@ -28,7 +28,8 @@ type Entry struct {
 	Fields  map[string]any `json:"fields,omitempty"`
 }
 
-// Sink receives an immutable log entry. A sink must not block application work.
+// Sink receives an immutable log entry outside the logger lock. A sink must
+// not block application work and must tolerate concurrent Log calls.
 type Sink func(Entry)
 
 type Logger struct {
@@ -67,6 +68,14 @@ func (l *Logger) AddSink(sink Sink) {
 
 func (l *Logger) Log(level Level, message string, fields map[string]any) {
 	entry := Entry{Time: time.Now().UTC(), Level: level, Message: message, Fields: fields}
+	for _, sink := range l.writeEntry(entry) {
+		sink(entry)
+	}
+}
+
+// writeEntry serializes output and snapshots listeners; external callbacks must
+// not execute under the writer/registration lock. New sinks observe later logs.
+func (l *Logger) writeEntry(entry Entry) []Sink {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	writer := l.writer
@@ -77,9 +86,7 @@ func (l *Logger) Log(level Level, message string, fields map[string]any) {
 			_, _ = fmt.Fprintln(writer, string(encoded))
 		}
 	}
-	for _, sink := range sinks {
-		sink(entry)
-	}
+	return sinks
 }
 
 func (l *Logger) Debug(message string, fields map[string]any) { l.Log(Debug, message, fields) }

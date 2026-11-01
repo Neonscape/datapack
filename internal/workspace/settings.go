@@ -106,7 +106,7 @@ func validateEditorSettings(settings EditorSettings) error {
 			return fmt.Errorf("auto compile debounce must be greater than zero")
 		}
 	case "manual":
-		return nil
+		// Debounce is unused, but locale and theme still require validation.
 	default:
 		return fmt.Errorf("unsupported build mode %q", settings.Build.Mode)
 	}
