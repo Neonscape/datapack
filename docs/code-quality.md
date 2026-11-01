@@ -1,149 +1,36 @@
 # Code Quality And Maintenance
 
-This document is the maintenance baseline for Datapack. It describes the current shape of the codebase, the risks worth addressing, and the order in which refactoring should happen. It is not a product specification; use `docs/design.md` and `docs/implementation-draft.md` for product and format decisions.
+本轮评估覆盖全项目。保留源文件权威、受限 CUE、显式编译结果和稳定内部 ID；重构不能改变默认值、诊断时点、允许保存业务错误、导出筛选和历史语义。以下按源码证据和回归区分已处理、无需变更与后续工作，不能把待验证风险称为缺陷。
 
-## Current Baseline
-
-The project has good domain-package boundaries and a thick test suite, but application orchestration has accumulated too many responsibilities in a few files.
-
-| Area | Representative code | Current assessment |
+| 模块 | 当前证据 / 处理 | 验证与后续优先级 |
 |---|---|---|
-| Domain packages | `compiler`, `formula`, `foreignkey`, `schemaregistry`, `exporters`, `logging` | Healthy: small interfaces and focused tests |
-| Source parsing and writing | `document`, `cuesource`, `schemamodel` | Usable: complexity mostly comes from restricted CUE AST editing |
-| Backend orchestration | `internal/workspace` | Highest maintenance risk: one Service still owns most application workflows |
-| Frontend shell | `frontend/src/App.tsx` | High maintenance risk: session state, IPC orchestration, menus, dialogs, and navigation are coupled |
-| Table interaction | `frontend/src/table/TableGrid.tsx` | High interaction risk: grid, editors, menus, comments, paste, and display-name headers share one component |
-| Model boundary | `frontend/src/types.ts` and generated `frontend/wailsjs/go/models.ts` | Duplicate DTO/view-model definitions cause type assertions and drift risk |
+| compiler / formula / foreignkey / schemaregistry | 领域职责明确：最终值、依赖状态、FK 来源与导航索引各有边界。显示名仅随 DTO 传播，不参与 ID。 | 维持包/functional/golden/race。没有重写依据。 |
+| cuesource / document / schemamodel / cueformat | 宽容树解析与严格编辑有不同用途，不能合并；CUE 格式兼容层已有测试。 | 保留边界。裸字节 staging 提到 sourcefile，语法/模型校验仍由命令负责。 |
+| sourcefile | 统一临时文件创建、权限、写入、同步、关闭及恢复副本；document 三类 writer、多文件替换和 workspace 历史写入复用。 | 测试 create/chmod/write/sync/close 故障，原字节与 mode、空文件、无效 CUE 的原样 staging。机制层不做语义校验。 |
+| workspace | 已有 Service RWMutex、历史补偿、目录快照及 FK 来源保护。旧文档“没有锁”的结论过时。新事务边界在成功刷新后发布历史，读取失败不会伪装成不存在。 | 新增刷新失败的行/Schema 命令、目录、附件、历史/revision/compile 状态回归。仍需 P1 会话生命周期与发布协议特征测试，P2 测量重复扫描后再考虑缓存。 |
+| projecttree / navigation | 固定分组与标题由 UI 呈现；内部名、路径和节点 kind 保持身份。 | 导航回归覆盖大树/小窗口、初始默认祖先、刷新保留手动展开、切换项目和语言。无需领域导航框架。 |
+| exporters / export_path | 导出只消费 compiled 包，危险路径保护与 CSV 编码已有回归。 | 维持现有安全边界，无重构依据。显示名修改前后 CSV 字节一致。 |
+| App / useWorkspaceSession | Hook 已存在，但暴露全部 setter；App 仍重复初始化和异步刷新协议，捕获旧 tabs 后全量替换。 | P1 用延迟 promise 实测切项目/并发开关标签/刷新失败；再将状态转换与 command/result 归入会话层，避免只搬 JSX。尚未重构。 |
+| TableGrid / valueCodecs | Codecs 已拆出，旧文档相反；保留选区、活动/焦点 ownership、编辑草稿与全局事件仍耦合。 | 维持真实浏览器复制/粘贴/F12/草稿/数组回归。后续明确编辑器局部状态归属，再拆受控组件；不引入新状态框架。 |
+| types / Wails bridge | 手写 UI 模型与生成 DTO 并存，断言较多。 | P2 建单一适配与契约测试；生成文件使用官方生成器，不能手写成另一套协议。 |
+| i18n / theme / logging / settings | Catalog 与主题边界清楚。固定导航文案已入中英资源；logger 调外部 sink 时持锁、settings manual 分支早返回为待验证风险。 | 不为风格重写 catalog。低优先级复现 sink 重入/错误校验边界后决定修复，未将静态疑点当确认缺陷。 |
+| tests / examples | Go 包、functional/golden 与真实 Chromium UI 各有价值；UI 只 mock Wails IPC，不证明原生窗口/序列化。云岚保留业务链与英文 ID/中文显示名。 | 产品和测试源码都做严格 TS 检查；浏览器串行并检查布局截图。真实桌面 smoke 尚未执行。 |
+| build / CI / scripts | 独立构建批次已复现干净 checkout 缺 embed 资源、打包清空输出目录。 | 独立修复分支：前端 build 前置、可移植浏览器、隔离 staging 与打包安全回归。合并前仍需最终组合 CI。 |
+| docs | 原质量文档已与锁、session、codecs 和损坏文档诊断实现不符。 | 本文纠正现状；test/README 的 API 边界说明也已更新。 |
 
-Recent features add more metadata and derived view state to the table boundary:
+## 独立的纠错与兼容边界
 
-- `Column.Schema` preserves the source Schema expression.
-- `Column.EffectiveSchema` drives the actual editor for named Schema references.
-- `Column.DisplayName` is UI metadata and must not replace the stable field name.
-- Foreign-key options are derived workspace metadata, not source field values.
+文件改写成功但视图刷新失败时，必须恢复源与权限，保留历史双栈、revision 和 compile 状态。补偿失败必须报告；只有原字节已成功暂存、最后 rename 失败时保证保留该副本，暂存阶段失败不保证存在恢复文件。这里是内存历史与已报告 I/O 失败的补偿，不能宣称崩溃原子性或阻止外部并发修改。
 
-These distinctions are correct product behavior, but they increase the need for an explicit metadata boundary instead of adding more logic to `workspace.go` and `TableGrid.tsx`.
+校验所有权仍属于领域命令。非法 CUE 不落盘；合法语法但违反业务约束的数据仍可保存并产生诊断。sourcefile 只能原样写字节，不得悄悄升级为“必须编译全项目成功才保存”。
 
-## What Is Working Well
+Schema 改名的旧遍历器会按同名 `#Name` 修改无关作用域，已在同名公共/本地定义下触发 panic。需独立修复并加别名、局部绑定与无关源零写入回归；当前 writer 重构不声称解决该问题。
 
-- The product boundary is explicit: Datapack edits a restricted CUE project, not arbitrary CUE.
-- Source files are the authoritative data; writes validate a candidate before replacing the source.
-- `compiler.CompileAll` returns diagnostics or a package, and exporters consume compiled data.
-- `cuesource` and `document` intentionally have different strictness: tree scanning can show damaged files, while editing requires strict parsing.
-- Foreign-key validation, navigation, rename propagation, and deletion protection are implemented as domain behavior.
-- Named Schema references are distinguished from table foreign keys; effective Schema metadata drives the correct editor.
-- Field display names are presentation metadata. Stable field names remain the identity used by CUE, formulas, foreign keys, diagnostics, and exports.
-- The test suite includes package tests, `test/functional`, `test/edge`, and Playwright coverage.
+## 持续维护次序
 
-Do not refactor these strengths away merely to shorten files.
+1. 先完成已复现的数据/作用域与会话竞态纠错，每项保留旧代码失败证据。
+2. 用特征测试锁定会话初始化、命令成功/失败发布及标签身份，再减少裸 setter 和重复刷新协议。
+3. 测量云岚样例 scan/load/index/compile 时间，再决定性能维护；不先引入缓存/增量编译。
+4. 整理桥接契约与编辑器状态归属。成熟小模块没有实质问题则明确不改。
 
-## Priority Risks
-
-### Correctness: Workspace concurrency
-
-`workspace.Service` has mutable state such as `current`, undo/redo stacks, revision counters, compile state, and cached settings. Unlike the logger, it has no mutex. Wails calls can arrive from different goroutines, so concurrent edits, undo, compile, export, or settings changes can race.
-
-This is a correctness issue, not a style preference. Add synchronization at public Service boundaries, then use private locked helpers to avoid recursive locking.
-
-Acceptance signals:
-
-- Concurrent `UpdateCell` and `Undo` cannot corrupt state or history.
-- Concurrent `Compile` and `Export` observe a coherent snapshot.
-- `go test -race ./...` passes.
-
-### Correctness: swallowed document-load errors
-
-Document collection currently skips `document.LoadTable` and `document.LoadPublicSchema` failures. A damaged file can therefore appear in the tree while silently disappearing from the compile/index input.
-
-Collection must preserve load failures as diagnostics with the source path and, where possible, table or Schema context. “File is damaged” must not become indistinguishable from “file does not exist.”
-
-Acceptance signals:
-
-- Damaged table and Schema files remain visible as diagnostics.
-- References to damaged documents report that the target is unavailable, not merely missing.
-- Clean projects retain identical compile and export behavior.
-
-### Maintainability: workspace orchestration
-
-The Service currently coordinates:
-
-- Project lifecycle and table lifecycle.
-- Cell, row, column, formula, comment, and paste edits.
-- Undo/Redo.
-- Schema edits, imports, and reference rewriting.
-- Compilation, export settings, and exporter dispatch.
-- Navigation, foreign-key indexes, user settings, and logging.
-
-Do not change the Wails API first. Split implementation files while preserving the Service type and public method behavior.
-
-### Maintainability: frontend session state
-
-`App.tsx` owns workspace state, tabs, errors, menus, dialogs, navigation, settings, and repeated Wails result handling. New features repeatedly add state and `try/catch` blocks there.
-
-Extract a workspace session layer before introducing a state-management framework. The session layer should own opening, refreshing, updating, closing, and synchronizing tables and Schema tabs.
-
-### Maintainability: frontend model boundary
-
-The frontend has hand-written UI types and generated Wails DTOs. Frequent `as TableDocument` and `as WorkspaceView` assertions hide drift.
-
-Keep UI-only state separate, but define explicit conversions for backend DTOs. Avoid arbitrary casts in `App.tsx`; conversion functions should be the boundary where backend shape and UI shape are checked.
-
-### Maintainability: TableGrid codecs
-
-`TableGrid.tsx` still contains hand-written array and structure expression parsing. This is a risk because CUE string escaping and structured values can become more complex than the local parser expects.
-
-Move these pure functions into a small module with direct tests first. A later backend structured-cell model can replace them without making the grid component larger.
-
-### Performance: full refresh after edits
-
-An edit currently reloads project configuration, scans the tree, reloads documents, rebuilds Schema and foreign-key indexes, and may compile the project. This is acceptable for small projects but should be measured before adding caching or incremental compilation.
-
-First record timing for scan, document loading, indexes, and compilation. Do not introduce incremental build complexity without a benchmark showing the need.
-
-## Refactoring Order
-
-The work should proceed in these vertical steps:
-
-1. Add concurrency protection to `workspace.Service`. Establish public locked boundaries and race tests without changing behavior.
-2. Preserve document-load errors in workspace collection and expose them as diagnostics.
-3. Split `internal/workspace/workspace.go` by topic while retaining the Service API:
-   - `edit.go`: cell, row, column, paste, history.
-   - `schema_edit.go`: Schema operations, imports, and reference rewriting.
-   - `metadata.go`: diagnostics, effective Schemas, display names, and foreign-key options.
-   - `project.go`: project and table lifecycle.
-   - `export.go`: project/table export settings and exporter dispatch.
-   - `navigation.go`: semantic navigation and target resolution.
-4. Extract a frontend workspace session module or hook. Keep `App.tsx` responsible for layout and composition, not every Wails state transition.
-5. Move array and structure codecs out of `TableGrid.tsx`, add pure unit tests, and leave the grid responsible for interaction and rendering.
-
-Refactor one step at a time. A physical file split should not also change a public API, data format, and UI behavior in the same commit.
-
-## Explicit Non-Goals
-
-- Do not merge `cuesource` and `document`; their strictness difference is intentional.
-- Do not add a state-management framework before extracting the session seam.
-- Do not introduce dependency injection, a service locator, or a second exporter abstraction.
-- Do not redesign the restricted CUE format during maintenance refactoring.
-- Do not implement incremental compilation before collecting performance data.
-- Do not replace stable field names with display names. Display names are UI metadata only.
-- Do not make CSV exporter behavior depend on field display names; export configuration stores stable field names.
-
-## Quality Gates
-
-Minimum gates for every refactoring step:
-
-```bash
-go test ./...
-go test -race ./...
-npm --prefix frontend run typecheck
-npm --prefix frontend run test:e2e
-npm --prefix frontend run build
-```
-
-For a production desktop change, also run:
-
-```bash
-./scripts/build.sh -clean
-```
-
-Review should focus on behavior and seams, not line count. A successful refactor means that changing one concern no longer requires opening unrelated parsing, export, navigation, or UI-session code, while the full test and race gates remain green.
+每批提交可单独审阅。Go 全测、race、vet、产品/测试类型、前端构建、真实浏览器 E2E 与适用的原生构建通过后，仍须独立复核、精确 CI 和正常合并流程。不安装依赖、不修改同步/安全设置、不部署发布来完成本轮维护。

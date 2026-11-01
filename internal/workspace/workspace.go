@@ -30,6 +30,7 @@ import (
 	"datapack/internal/projecttree"
 	"datapack/internal/schemamodel"
 	"datapack/internal/schemaregistry"
+	"datapack/internal/sourcefile"
 )
 
 type View struct {
@@ -2016,37 +2017,7 @@ func writeFileAtomicWithRename(path string, content []byte, rename func(string, 
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".datapack-restore-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	retainRecovery := false
-	defer func() {
-		if !retainRecovery {
-			os.Remove(temporaryPath)
-		}
-	}()
-	if _, err := temporary.Write(content); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Chmod(mode); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := rename(temporaryPath, path); err != nil {
-		retainRecovery = true
-		return fmt.Errorf("restore failed; recovery bytes retained at %q: %w", temporaryPath, err)
-	}
-	return nil
+	return sourcefile.Restore(path, content, mode, rename)
 }
 
 func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {

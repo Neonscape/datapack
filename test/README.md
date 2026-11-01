@@ -54,13 +54,9 @@ CSV 期望值来自样例源文件和 `docs/design.md`，不是从导出器抄�
 
 ## 已知产品缺口（测试会绕过）
 
-`workspace.Service` 目前没有设置表级 `_export.csv.columns` 或 `_tool.foreignKeys` 的方法。`CreateTable` 生成的表也不能直接导出。
+`workspace.Service.SetTableExportSettings` 已支持表级导出格式及列选择；`CreateSchemaFile` 的空公共 Schema 会进入项目树，可继续通过 `CreateSchemaDefinition` 添加定义。旧闭环测试仍保留了一些手写 fixture 步骤，它们不是当前产品 API 的限制。
 
-`mvp_loop_test.go` 在 Service 建表、加列、加行之后，用测试辅助函数把 `_export` 写进源文件，再调用 `Export()`。外键用例则通过夹具 CUE 声明 `_tool.foreignKeys`，仍然只通过 `OpenProject` / `UpdateCell` / `Export` 观察行为。
-
-`CreateSchemaFile` 生成的空 Schema 包也不会出现在工程树里，因此 `CreateSchemaDefinition` 无法以它为路径。`mvp_loop_test.go` 会先写入一个已有定义的公共 Schema 文件，再通过 Service 追加约束。
-
-这不是推荐产品用法，只是当前公开 API 的边界。
+外键声明仍可在 CUE fixture 的 `_tool.foreignKeys` 中构造，再通过 Service 的编辑/编译/导出验证；不要把尚未提供的外键结构编辑 UI 误称为底层不支持外键。
 
 ### 构建与打包守护
 
@@ -73,3 +69,4 @@ Playwright 默认使用它安装的 Chromium。若本机已有浏览器而无 bu
 打包文件按版本不可变：同一二进制可重复打包；已有不同内容、缺一份的 artifact pair、symbolic/hard link 都会在发布前明确拒绝，保留旧文件。SHA256 文件使用可移植的归档 basename，下载后在同一目录执行 `sha256sum -c <archive>.sha256`。
 
 `bash test/scripts/release-gitea.test.sh` 使用测试自有的 curl 替身，验证只上传当前版本的 Linux 归档与校验和、只替换对应旧附件、无关包与 `release.json` 链接保持不变；不会访问真实发布接口。GitHub release 配置同样列出当前版本的四个明确文件名，不消费整个输出目录。
+

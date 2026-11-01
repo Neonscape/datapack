@@ -1,6 +1,7 @@
 package document
 
 import (
+	"datapack/internal/sourcefile"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -557,27 +558,11 @@ func validatePublicSchemaAndReplace(path string, source []byte) (PublicSchema, e
 	if err != nil {
 		return PublicSchema{}, fmt.Errorf("stat schema source: %w", err)
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".datapack-*.cue")
+	temporaryPath, err := sourcefile.Stage(path, source, info.Mode())
 	if err != nil {
-		return PublicSchema{}, fmt.Errorf("create temporary schema source: %w", err)
+		return PublicSchema{}, fmt.Errorf("stage temporary schema source: %w", err)
 	}
-	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(info.Mode()); err != nil {
-		temporary.Close()
-		return PublicSchema{}, fmt.Errorf("set temporary schema permissions: %w", err)
-	}
-	if _, err := temporary.Write(source); err != nil {
-		temporary.Close()
-		return PublicSchema{}, fmt.Errorf("write temporary schema source: %w", err)
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return PublicSchema{}, fmt.Errorf("sync temporary schema source: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return PublicSchema{}, fmt.Errorf("close temporary schema source: %w", err)
-	}
 	schema, err := LoadPublicSchema(temporaryPath)
 	if err != nil {
 		return PublicSchema{}, fmt.Errorf("validate updated schema: %w", err)
@@ -642,27 +627,11 @@ func replaceSource(path string, candidate []byte) error {
 	if err != nil {
 		return fmt.Errorf("stat source: %w", err)
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".datapack-*.cue")
+	temporaryPath, err := sourcefile.Stage(path, candidate, info.Mode())
 	if err != nil {
-		return fmt.Errorf("create temporary source: %w", err)
+		return fmt.Errorf("stage temporary source source: %w", err)
 	}
-	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(info.Mode()); err != nil {
-		temporary.Close()
-		return fmt.Errorf("set temporary source permissions: %w", err)
-	}
-	if _, err := temporary.Write(candidate); err != nil {
-		temporary.Close()
-		return fmt.Errorf("write temporary source: %w", err)
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return fmt.Errorf("sync temporary source: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close temporary source: %w", err)
-	}
 	if err := os.Rename(temporaryPath, path); err != nil {
 		return fmt.Errorf("replace source: %w", err)
 	}
