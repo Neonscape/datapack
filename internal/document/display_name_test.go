@@ -2,6 +2,7 @@ package document
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -30,7 +31,7 @@ _editor: {table: {title: "旧标题", note: "keep"}, columns: {name: {width: 200
 	if table.DisplayName != "道具 \"名\"\n说明" || table.LocalSchema[0].DisplayName != table.DisplayName || table.Name != "item" || table.Namespace != "rpg" || table.Rows[0].ID != "one" || table.Columns[0].Width != 200 {
 		t.Fatalf("table = %#v", table)
 	}
-	if info, _ := os.Stat(path); info.Mode().Perm() != 0600 {
+	if info, _ := os.Stat(path); runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatalf("mode = %v", info.Mode())
 	}
 	if err := SetDisplayName(path, "", " \t "); err != nil {
