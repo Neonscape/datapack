@@ -62,6 +62,7 @@ jobs:
         run: |
           bash test/scripts/package-linux-release.test.sh
           bash test/scripts/release-gitea.test.sh
+          bash test/scripts/release-alpha.test.sh
 
       - name: Check frontend types
         run: npm --prefix frontend run typecheck
@@ -156,6 +157,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out alpha release notes
+        if: contains(github.ref_name, '-alpha.')
+        uses: actions/checkout@v4
+
       - name: Download release candidates
         uses: actions/download-artifact@v4
         with:
@@ -163,11 +168,38 @@ jobs:
           path: release
           merge-multiple: true
 
-      - name: Publish release
+      - name: Validate alpha checksums
+        if: contains(github.ref_name, '-alpha.')
+        shell: bash
+        run: |
+          cd release
+          sha256sum --check --strict "datapack-${GITHUB_REF_NAME}-linux-amd64.tar.gz.sha256"
+          sha256sum --check --strict "datapack-${GITHUB_REF_NAME}-windows-amd64.zip.sha256"
+
+      - name: Publish stable release
+        if: ${{ !contains(github.ref_name, '-alpha.') }}
         uses: softprops/action-gh-release@v3
         with:
           name: ${{ github.ref_name }}
           generate_release_notes: true
+          files: |
+            release/datapack-${{ github.ref_name }}-linux-amd64.tar.gz
+            release/datapack-${{ github.ref_name }}-linux-amd64.tar.gz.sha256
+            release/datapack-${{ github.ref_name }}-windows-amd64.zip
+            release/datapack-${{ github.ref_name }}-windows-amd64.zip.sha256
+          fail_on_unmatched_files: true
+
+      - name: Publish alpha prerelease
+        if: contains(github.ref_name, '-alpha.')
+        uses: softprops/action-gh-release@v3
+        with:
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: true
+          make_latest: false
+          overwrite_files: false
+          generate_release_notes: false
+          body_path: docs/releases/alpha.md
           files: |
             release/datapack-${{ github.ref_name }}-linux-amd64.tar.gz
             release/datapack-${{ github.ref_name }}-linux-amd64.tar.gz.sha256

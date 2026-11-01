@@ -20,6 +20,7 @@ url="${!#}"
 method=GET
 for ((i=1;i<=$#;i++)); do
     if [[ "${!i}" == --request ]]; then j=$((i+1)); method="${!j}"; fi
+    if [[ "${!i}" == --data ]]; then j=$((i+1)); printf '%s\n' "${!j}" > "$DATAPACK_TEST_PAYLOAD"; fi
     if [[ "${!i}" == attachment=@* ]]; then value="${!i}"; printf 'UPLOAD %s\n' "$(basename "${value#attachment=@}")" >> "$DATAPACK_TEST_LOG"; fi
 done
 if [[ "$method" == DELETE ]]; then printf 'DELETE %s\n' "$url" >> "$DATAPACK_TEST_LOG"; fi
@@ -32,8 +33,9 @@ MOCK
 chmod +x mock-bin/curl
 export PATH="$fixture/mock-bin:$PATH" TMPDIR="$fixture/tmp"
 export GITEA_SERVER_URL=https://mock.invalid GITEA_REPOSITORY=fixture/repo GITEA_REF_NAME=vtest GITEA_TOKEN=fixture-only-token
-export DATAPACK_TEST_LOG="$fixture/requests.log"
+export DATAPACK_TEST_LOG="$fixture/requests.log" DATAPACK_TEST_PAYLOAD="$fixture/payload.json"
 bash "$repository/scripts/release-gitea.sh" output >/dev/null
+jq -e '.name=="vtest" and .prerelease==false and .draft==false' "$DATAPACK_TEST_PAYLOAD" >/dev/null
 sort "$DATAPACK_TEST_LOG" > actual
 cat > expected <<'EXPECTED'
 DELETE https://mock.invalid/api/v1/repos/fixture/repo/releases/1/assets/3
