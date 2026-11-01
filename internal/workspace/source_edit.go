@@ -20,13 +20,16 @@ func editSource[T any](s *Service, path string, operation func() (T, error)) (re
 	if err != nil {
 		return result, View{}, fmt.Errorf("record edit source: %w", err)
 	}
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return result, View{}, fmt.Errorf("record edit permissions: %w", err)
 	}
+	if !info.Mode().IsRegular() {
+		return result, View{}, fmt.Errorf("source %q is not a regular file; symlinks are unsupported", path)
+	}
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, restoreSourceFile(path, before, info.Mode().Perm()))
+			err = errors.Join(err, restoreSourceFile(path, before, sourcePermissionMode(info.Mode())))
 		}
 	}()
 	result, err = operation()
@@ -35,7 +38,7 @@ func editSource[T any](s *Service, path string, operation func() (T, error)) (re
 		var zero T
 		return zero, View{}, err
 	}
-	if err = preserveSourceMode(path, info.Mode().Perm()); err != nil {
+	if err = preserveSourceMode(path, sourcePermissionMode(info.Mode())); err != nil {
 		var zero T
 		return zero, View{}, err
 	}
@@ -70,7 +73,7 @@ func preserveSourceMode(path string, mode os.FileMode) error {
 	if err != nil {
 		return fmt.Errorf("inspect source permissions %q: %w", path, err)
 	}
-	if info.Mode().Perm() != mode {
+	if sourcePermissionMode(info.Mode()) != sourcePermissionMode(mode) {
 		if err := os.Chmod(path, mode); err != nil {
 			return fmt.Errorf("preserve source permissions %q: %w", path, err)
 		}
@@ -82,6 +85,15 @@ func preserveSourceMode(path string, mode os.FileMode) error {
 // workspace refresh succeed. On reported failure it restores bytes and modes;
 // the Service lock remains owned by the command. No crash/concurrent FS claim.
 func editSources[T any](s *Service, paths []string, operation func() (T, error)) (result T, view View, err error) {
+	return editSourcesWithOps(s, paths, operation, sourceCommandOps{refresh: s.refreshAfterEdit, restore: writeFileAtomic})
+}
+
+type sourceCommandOps struct {
+	refresh func() (View, error)
+	restore func(string, []byte) error
+}
+
+func editSourcesWithOps[T any](s *Service, paths []string, operation func() (T, error), ops sourceCommandOps) (result T, view View, err error) {
 	snapshot, err := snapshotRenameFiles(paths...)
 	if err != nil {
 		return result, View{}, err
@@ -90,6 +102,7 @@ func editSources[T any](s *Service, paths []string, operation func() (T, error))
 	if err != nil {
 		return result, View{}, err
 	}
+	transaction.restore = ops.restore
 	defer func() {
 		if err != nil {
 			err = errors.Join(err, transaction.rollback())
@@ -106,7 +119,7 @@ func editSources[T any](s *Service, paths []string, operation func() (T, error))
 			return zero, View{}, err
 		}
 	}
-	view, err = s.refreshAfterEdit()
+	view, err = ops.refresh()
 	if err != nil {
 		var zero T
 		return zero, View{}, err
@@ -147,4 +160,8 @@ func removeCreatedDirectories(paths []string) error {
 		}
 	}
 	return errors.Join(failures...)
+}
+
+func sourcePermissionMode(mode os.FileMode) os.FileMode {
+	return mode & (os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky)
 }

@@ -39,10 +39,10 @@ func stage(path string, source []byte, mode os.FileMode, create func(string, str
 			}
 		}
 	}()
-	if err = file.Chmod(mode.Perm()); err != nil {
+	if _, err = file.Write(source); err != nil {
 		return temporaryPath, err
 	}
-	if _, err = file.Write(source); err != nil {
+	if err = file.Chmod(mode & (os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky)); err != nil {
 		return temporaryPath, err
 	}
 	if err = file.Sync(); err != nil {

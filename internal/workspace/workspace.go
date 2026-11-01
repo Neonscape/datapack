@@ -1206,6 +1206,7 @@ func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaE
 	}
 	var paths []string
 	collectSourcePaths(s.current.Tree.Root, &paths)
+	paths = append(paths, rename.Path)
 	result, view, err := editSources(s, paths, func() (SchemaEditResult, error) {
 		var result SchemaEditResult
 		if scope == "public" {
@@ -2006,18 +2007,17 @@ func (s *Service) restoreSnapshot(snapshot map[string][]byte) error {
 }
 
 func writeFileAtomic(path string, content []byte) error {
+	return writeFileAtomicWithRename(path, content, os.Rename)
+}
+
+func writeFileAtomicWithRename(path string, content []byte, rename func(string, string) error) error {
 	mode := os.FileMode(0600)
 	if info, err := os.Stat(path); err == nil {
-		mode = info.Mode().Perm()
+		mode = sourcePermissionMode(info.Mode())
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	temporaryPath, err := sourcefile.Stage(path, content, mode)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(temporaryPath)
-	return os.Rename(temporaryPath, path)
+	return sourcefile.Restore(path, content, mode, rename)
 }
 
 func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
