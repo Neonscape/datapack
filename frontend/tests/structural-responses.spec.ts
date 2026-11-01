@@ -27,6 +27,7 @@ async function boot(page:Page,fixture:Fixture,raw=false){
    DeleteRow:async({rowID}:{rowID:string})=>{state.calls.push({method:"DeleteRow",rowID});table=fixture.Result.table;return structuredClone(fixture.Result);},
    Undo:async()=>{state.calls.push({method:"Undo"});table=fixture.UndoTable;return structuredClone(fixture.Undo);},Redo:async()=>{state.calls.push({method:"Redo"});table=fixture.RedoTable;return structuredClone(fixture.Redo);},
    SetColumnWidth:async()=>{state.calls.push({method:"Width"});return await new Promise<Result>(resolve=>{state.resolveWidth=resolve;});},
+   SetCellFormula:async(argument:{rowID:string;column:string;expression:string})=>{state.calls.push({method:"SetCellFormula",...argument});return structuredClone({table,workspace:fixture.View});},
    ClearCell:async(argument:{rowID:string;column:string;expression:string})=>{state.calls.push({method:"ClearCell",...argument});return structuredClone({table,workspace:fixture.View});},
    SetLanguage:async(language:string)=>({language,theme:"light"}),
   }}};
@@ -54,4 +55,19 @@ test("an untouched blank formula editor does not clear an expression arriving fr
  await expect(input).toBeFocused();await expect(input).toHaveValue("");await page.mouse.click(100,50);
  expect(await page.evaluate(()=>window.__structuralResponse.calls.some(c=>c.method==="ClearCell"))).toBe(false);
  await expect(input).toHaveValue("=amount * 2");
+});
+
+test("explicitly clearing a formula still sends exactly one intentional clear",async({page})=>{
+ const fixture=fixtures.find(f=>f.Mode==="manual"&&f.Deleted==="b")!;await boot(page,fixture);
+ await expectFormula(page);const input=page.locator(".formula-bar-input");await input.click();await input.fill("");await input.blur();
+ expect(await page.evaluate(()=>window.__structuralResponse.calls.filter(c=>c.method==="ClearCell"))).toEqual([{method:"ClearCell",path:fixture.Before.path,rowID:"a",column:"total",expression:""}]);
+});
+test("a refresh removing the edited row cannot retarget its draft onto the next row",async({page})=>{
+ const fixture=fixtures.find(f=>f.Mode==="manual"&&f.Deleted==="a")!;await boot(page,fixture);
+ const box=await page.locator(".tab-panel:visible canvas").first().boundingBox();await page.mouse.move(box!.x+361,box!.y+17);await page.mouse.down();await page.mouse.move(box!.x+381,box!.y+17,{steps:5});await page.mouse.up();
+ await expect.poll(()=>page.evaluate(()=>typeof window.__structuralResponse.resolveWidth)).toBe("function");
+ await expectFormula(page);const input=page.locator(".formula-bar-input");await input.click();await input.fill("=amount * 3");
+ await page.evaluate(()=>window.__structuralResponse.resolveWidth!(window.__structuralResponse.fixture.Result));
+ await expect(page.locator(".table-document-header")).toContainText("2 rows");await input.blur();
+ expect(await page.evaluate(()=>window.__structuralResponse.calls.some(c=>c.method==="SetCellFormula"||c.method==="ClearCell"))).toBe(false);
 });

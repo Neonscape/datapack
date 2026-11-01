@@ -49,6 +49,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
     const [commentError, setCommentError] = useState("");
     const [selectedCellState, setSelectedCell] = useState<{column: number; row: number} | null>(null);
     const [formulaEditing, setFormulaEditing] = useState(false);
+    const formulaEditRef = useRef<{rowID:string;column:string;draft:boolean;initial:string;dirty:boolean}|null>(null);
     const [formulaValue, setFormulaValue] = useState("");
     const editorRef = useRef<HTMLTextAreaElement | null>(null);
     const foreignKeyEditorRef = useRef<HTMLSelectElement | null>(null);
@@ -390,20 +391,31 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
                 disabled={!selectedCell}
                  readOnly={!formulaBarEditable || !formulaEditing}
                 placeholder={t("grid.selectCell")}
-                onChange={(event) => setFormulaValue(event.target.value)}
+                onChange={(event) => {
+                    const value=event.target.value;setFormulaValue(value);
+                    if(formulaEditRef.current)formulaEditRef.current.dirty=value!==formulaEditRef.current.initial;
+                }}
                 onClick={() => {
                      if (!formulaBarEditable || formulaEditing) return;
                     setInlineEditor(null);
+                    const initial=rawCellValue(selectedCell!.column,selectedCell!.row);
+                    formulaEditRef.current={rowID:rowFor(selectedCell!.row).id,column:cellColumnName(selectedCell!.column),draft:isDraft(selectedCell!.row),initial,dirty:false};
+                    setFormulaValue(initial);
                     setFormulaEditing(true);
                     window.requestAnimationFrame(() => formulaBarRef.current?.select());
                 }}
                 onBlur={() => {
-                    if (!formulaEditing || !selectedCell) return;
-                    const target = selectedCell;
+                    const edit=formulaEditRef.current;formulaEditRef.current=null;
+                    if(!formulaEditing||!edit)return;
                     setFormulaEditing(false);
-                    const value = formulaValue.trim();
-                    if (value === rawCellValue(target.column, target.row).trim()) return;
-                    void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: value, displayData: value});
+                    const value=formulaValue.trim();
+                    // A refresh can fill a previously blank preview while focused.
+                    // Only explicit input is a save, bound to the original row/field.
+                    if(!edit.dirty||value===edit.initial.trim())return;
+                    const column=edit.column==="id"?0:table.columns.findIndex(entry=>entry.name===edit.column)+1;
+                    const row=edit.draft?table.rows.length:table.rows.findIndex(entry=>entry.id===edit.rowID);
+                    if(row<0||(column===0&&edit.column!=="id")||(edit.draft&&draft.id!==edit.rowID))return;
+                    void editCell([column,row],{kind:GridCellKind.Text,allowOverlay:true,data:value,displayData:value});
                 }}
                 onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -411,6 +423,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
                         event.currentTarget.blur();
                     }
                     if (event.key === "Escape" && selectedCell) {
+                        formulaEditRef.current=null;
                         setFormulaValue(rawCellValue(selectedCell.column, selectedCell.row));
                         setFormulaEditing(false);
                         formulaBarRef.current?.blur();

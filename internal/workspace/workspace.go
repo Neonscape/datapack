@@ -1998,7 +1998,7 @@ func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
 	if err != nil {
 		return RowAddResult{}, err
 	}
-	return RowAddResult{Table: table, Workspace: view}, nil
+	return RowAddResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
@@ -2027,7 +2027,7 @@ func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
 	if err != nil {
 		return RowDeleteResult{}, err
 	}
-	return RowDeleteResult{Table: table, Workspace: view}, nil
+	return RowDeleteResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
@@ -2069,7 +2069,7 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 	if err != nil {
 		return RowRenameResult{}, err
 	}
-	return RowRenameResult{Table: table, Workspace: view}, nil
+	return RowRenameResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 // Export writes configured CSV files only when the current workspace has no
@@ -2199,7 +2199,7 @@ func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 	if err != nil {
 		return ColumnAddResult{}, err
 	}
-	return ColumnAddResult{Table: table, Workspace: view}, nil
+	return ColumnAddResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 func (s *Service) SetColumnSchema(set ColumnSchemaSet) (ColumnSchemaSetResult, error) {
@@ -2242,7 +2242,7 @@ func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) 
 	if err != nil {
 		return ColumnDeleteResult{}, err
 	}
-	return ColumnDeleteResult{Table: table, Workspace: view}, nil
+	return ColumnDeleteResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) {
@@ -2260,7 +2260,7 @@ func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) 
 	if err != nil {
 		return ColumnRenameResult{}, err
 	}
-	return ColumnRenameResult{Table: table, Workspace: view}, nil
+	return ColumnRenameResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 func (s *Service) MoveColumn(move ColumnMove) (ColumnMoveResult, error) {
@@ -2278,7 +2278,7 @@ func (s *Service) MoveColumn(move ColumnMove) (ColumnMoveResult, error) {
 	if err != nil {
 		return ColumnMoveResult{}, err
 	}
-	return ColumnMoveResult{Table: table, Workspace: view}, nil
+	return ColumnMoveResult{Table: withTableMetadata(table, view), Workspace: view}, nil
 }
 
 func foreignKeyUsage(tree projecttree.Tree, target document.Table, rowID string) (*foreignkey.Usage, error) {
