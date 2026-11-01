@@ -48,6 +48,11 @@ export const en: Record<string, string> = {
     "schemaDetail.appliesTo": "AppliesTo",
     "schemaDetail.references": "References",
 
+    "tree.tables": "Tables",
+    "tree.schemas": "Schemas",
+    "tree.localSchema": "Local schemas",
+    "tree.expand": "Expand {name}",
+    "tree.collapse": "Collapse {name}",
     "tree.actions": "Project tree actions",
     "tree.renameTable": "Rename table",
     "tree.deleteTable": "Delete table",
