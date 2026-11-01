@@ -3,6 +3,7 @@ package workspace
 import (
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -56,7 +57,7 @@ func TestAutoPublicationCompilesEachSuccessfulEdit(t *testing.T) {
 }
 
 func TestFailedRefreshDoesNotPublishLifecycleAndReopenResetsHistory(t *testing.T) {
-	s, _, _ := sourceEditFixture(t)
+	s, table, _ := sourceEditFixture(t)
 	if _, err := s.SetCompileMode("manual"); err != nil {
 		t.Fatal(err)
 	}
@@ -75,11 +76,25 @@ func TestFailedRefreshDoesNotPublishLifecycleAndReopenResetsHistory(t *testing.T
 	if err := os.WriteFile(s.current.Project.Path, original, 0644); err != nil {
 		t.Fatal(err)
 	}
+	// Change a real source outside the Service before reopening. Nonempty
+	// timestamps alone cannot distinguish a compile from a cached result.
+	data, err := os.ReadFile(table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(string(data), "price: 10", "price: \"wrong\"", 1)
+	if changed == string(data) || len(s.compileState.Diagnostics) != 0 {
+		t.Fatal("reopen fixture needs a newly introduced source error")
+	}
+	writeFile(t, table, changed)
 	result, err := s.OpenProject(s.current.Project.Path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if s.revision != 0 || s.compiledRevision != 0 || result.CanUndo || result.CanRedo || result.Compile.Pending || result.Compile.Mode != "manual" || result.Compile.CompiledAt == "" {
 		t.Fatalf("reopen protocol: %#v", result.Compile)
+	}
+	if len(result.Compile.Diagnostics) == 0 {
+		t.Fatal("reopen reused the old successful compilation after external source change")
 	}
 }
