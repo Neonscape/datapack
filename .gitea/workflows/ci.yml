@@ -67,7 +67,9 @@ jobs:
         run: go vet ./...
 
       - name: Test Linux packaging safety
-        run: bash test/scripts/package-linux-release.test.sh
+        run: |
+          bash test/scripts/package-linux-release.test.sh
+          bash test/scripts/release-gitea.test.sh
 
       - name: Check frontend types
         run: npm --prefix frontend run typecheck
