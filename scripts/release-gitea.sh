@@ -18,7 +18,20 @@ request() {
         "$@"
 }
 
-release_json="${release_directory}/release.json"
+if [[ ! "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    printf 'invalid release tag\n' >&2; exit 1
+fi
+archive_name="datapack-${tag}-linux-amd64.tar.gz"
+checksum_name="${archive_name}.sha256"
+artifacts=("${release_directory}/${archive_name}" "${release_directory}/${checksum_name}")
+# Validate the exact two artifacts before making any remote change.
+for asset in "${artifacts[@]}"; do
+    if [[ ! -f "$asset" || -L "$asset" || "$(stat -c %h -- "$asset")" != 1 ]]; then
+        printf 'unsafe or missing release artifact: %s\n' "$asset" >&2; exit 1
+    fi
+done
+release_json="$(mktemp "${TMPDIR:-/tmp}/datapack-release.XXXXXX")"
+trap 'rm -f -- "$release_json"' EXIT
 if request "${api}/repos/${repository}/releases/tags/${tag}" > "$release_json" 2>/dev/null; then
     release_id="$(jq -r '.id' "$release_json")"
     request --request PATCH --data "$(jq -n --arg name "$tag" --arg body "Automated release for $tag" '{name:$name,body:$body,draft:false,prerelease:false}')" \
@@ -36,7 +49,7 @@ fi
 
 # Make rerunning the same tag idempotent by removing assets from the previous run.
 request "${api}/repos/${repository}/releases/${release_id}/assets" \
-    | jq -r '.[].id' \
+    | jq -r --arg archive "$archive_name" --arg checksum "$checksum_name" '.[] | select(.name == $archive or .name == $checksum) | .id' \
     | while IFS= read -r asset_id; do
         [[ -z "$asset_id" ]] && continue
         curl --fail-with-body --silent --show-error \
@@ -46,8 +59,7 @@ request "${api}/repos/${repository}/releases/${release_id}/assets" \
             > /dev/null
     done
 
-while IFS= read -r asset; do
-    [[ -z "$asset" ]] && continue
+for asset in "${artifacts[@]}"; do
     asset_name="$(basename "$asset")"
     curl --fail-with-body --silent --show-error \
         --request POST \
@@ -55,6 +67,6 @@ while IFS= read -r asset; do
         --form "attachment=@${asset}" \
         "${api}/repos/${repository}/releases/${release_id}/assets?name=${asset_name}" \
         > /dev/null
-done < <(find "$release_directory" -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.sha256' \) -print | sort)
+done
 
 printf 'Gitea release %s is ready\n' "$tag"
