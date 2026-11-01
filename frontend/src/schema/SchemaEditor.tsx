@@ -1,3 +1,4 @@
+import {schemaDefinitionContent} from "./definitionContent";
 import {displayLabel} from "../tree/displayLabel";
 import {useEffect, useState} from "react";
 import {PrintSchema} from "../../wailsjs/go/main/App";
@@ -34,7 +35,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
     const definitions = state.definitions ?? emptyDefinitions;
 
     // Titles are presentation metadata; updating one must not discard an unapplied draft.
-    const definitionContent = JSON.stringify(definitions.map((entry) => [entry.name, entry.kind, entry.type, entry.appliesTo, entry.schema, entry.schemaExpression]));
+    const definitionContent = schemaDefinitionContent(definitions);
 
     useEffect(() => {
         setCreating(false);

@@ -238,3 +238,13 @@ func TestWorkspaceRefreshCompensationFailureRetainsOriginalBytes(t *testing.T) {
 		t.Fatal("failed compensation published history/view")
 	}
 }
+
+func TestSingleSourceEditRejectsNonRegularBeforeReading(t *testing.T) {
+	s, _, _ := sourceEditFixture(t)
+	directory := t.TempDir()
+	called := false
+	_, _, err := editSource(s, directory, func() (bool, error) { called = true; return true, nil })
+	if called || err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("nonregular edit: called=%v err=%v", called, err)
+	}
+}

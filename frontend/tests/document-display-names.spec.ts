@@ -2,25 +2,31 @@ import {expect, test, type Page} from "@playwright/test";
 
 test.beforeEach(async ({page}) => {
     await page.addInitScript(() => {
-        const table = (name: string) => ({path: `/project/${name}.cue`, namespace: "game", name, displayName: "相同显示名", columns: [{name: "label", schemaExpression: "string", schema: {kind: "string"}}], rows: [{id: "one", values: {label: {expression: '"文本"', display: "文本"}}}], localSchema: [], diagnostics: []});
+        const table = (name: string) => ({path: `/project/${name}.cue`, namespace: "game", name, displayName: "相同显示名", columns: [{name: "label", schemaExpression: "string", schema: {kind: "string"}}], rows: [{id: "one", values: {label: {expression: '"文本"', display: "文本"}}}], localSchema: [{name:"LocalID",displayName:"本地标识",kind:"type",type:"string",schema:{kind:"string"},schemaExpression:"string"}], diagnostics: []});
         const tables = [table("item"), table("hero")];
         const schema = {path: "/project/common.cue", package: "common", displayName: "公共规则", definitions: ["ID", "Label"].map((name) => ({name, displayName: "相同定义名", kind: "type", type: "string", schema: {kind: "string"}, schemaExpression: "string"}))};
+        type HistoryEntry={target:{displayName:string};before:string;after:string};
+        const history:HistoryEntry[]=[];
+        const redo:HistoryEntry[]=[];
         const view = () => ({
             project: {path: "/project/game.dtproj", root: "/project"}, settings: {build: {mode: "manual"}},
             tree: {root: {kind: "project", name: "game.dtproj", children: [
-                ...tables.map((table) => ({kind: "table", name: table.name, path: table.path, displayName: table.displayName})),
+                ...tables.map((table) => ({kind: "table", name: table.name, path: table.path, displayName: table.displayName, children:[{kind:"localSchema",name:"local_schema",path:table.path,children:[{kind:"localSchema",name:"#LocalID",path:table.path}]}]})),
                 {kind: "schemaFile", name: "common.cue", path: schema.path, displayName: schema.displayName, children: schema.definitions.map((def) => ({kind: "schemaDefinition", name: `#${def.name}`, path: schema.path, displayName: def.displayName}))},
             ]}},
             schemas: {definitions: schema.definitions.map((def) => ({id: `common.#${def.name}`, kind: "type", path: schema.path, displayName: def.displayName, usages: []})), diagnostics: []},
-            foreignKeys: {diagnostics: []}, compile: {mode: "manual", pending: false, diagnostics: []}, canUndo: false, canRedo: false,
+            foreignKeys: {diagnostics: []}, compile: {mode: "manual", pending: false, diagnostics: []}, canUndo: history.length>0, canRedo: redo.length>0,
         });
         const calls: {path: string; definition?: string; displayName: string}[] = [];
         const api = {
             GetSettings: async () => ({language: "en", theme: "light"}), GetExportFormats: async () => [], SetLanguage: async () => ({}), SetTheme: async () => ({}),
             SelectProject: async () => view(), GetTable: async (path: string) => tables.find((table) => table.path === path), GetPublicSchema: async () => schema,
+            Undo: async () => {const entry=history.pop();if(entry){entry.target.displayName=entry.before;redo.push(entry)};return {table:tables[0],workspace:view()};},
+            Redo: async () => {const entry=redo.pop();if(entry){entry.target.displayName=entry.after;history.push(entry)};return {table:tables[0],workspace:view()};},
             SetDisplayName: async (update: {path: string; definition?: string; displayName: string}) => {
                 calls.push(update);
                 const target = update.path === schema.path ? (update.definition ? schema.definitions.find((def) => def.name === update.definition)! : schema) : tables.find((table) => table.path === update.path)!;
+                history.push({target,before:target.displayName,after:update.displayName.trim()});redo.length=0;
                 target.displayName = update.displayName.trim();
                 return {table: tables.find((table) => table.path === update.path), schema, workspace: view()};
             },
@@ -114,4 +120,21 @@ test("long display titles stay inside a small workbench", async ({page},info) =>
     const footer=await page.locator(".log-panel").boundingBox();
     expect(footer!.y+footer!.height).toBeLessThanOrEqual(580);
     await page.screenshot({path:info.outputPath("long-display-title.png")});
+});
+
+test("local-schema title follows Undo/Redo without resetting an unapplied new definition", async ({page}) => {
+    await page.getByRole("button",{name:"Expand 相同显示名 (item)",exact:true}).click();
+    await page.getByRole("button",{name:"Local schemas",exact:true}).click({button:"right"});
+    await page.getByRole("button",{name:"New definition",exact:true}).click();
+    await page.getByRole("textbox",{name:"Name",exact:true}).fill("UnappliedLocalDraft");
+    await editTitle(page,"相同显示名 (item)","表标题B");
+    await expect(page.locator(".tab-bar .tab")).toContainText(["表标题B (game.item) (local)"]);
+    await page.getByRole("button",{name:"Edit",exact:true}).click();
+    await page.getByRole("button",{name:"Undo",exact:false}).click();
+    await expect(page.locator(".tab-bar .tab")).toContainText(["相同显示名 (game.item) (local)"]);
+    await expect(page.getByRole("textbox",{name:"Name",exact:true})).toHaveValue("UnappliedLocalDraft");
+    await page.getByRole("button",{name:"Edit",exact:true}).click();
+    await page.getByRole("button",{name:"Redo",exact:false}).click();
+    await expect(page.locator(".tab-bar .tab")).toContainText(["表标题B (game.item) (local)"]);
+    await expect(page.getByRole("textbox",{name:"Name",exact:true})).toHaveValue("UnappliedLocalDraft");
 });
