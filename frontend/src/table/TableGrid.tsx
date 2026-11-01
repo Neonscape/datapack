@@ -1,6 +1,6 @@
 import {displayLabel} from "../tree/displayLabel";
 import {useEffect, useRef, useState} from "react";
-import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type DrawCellCallback, type GridCell, type GridColumn, type GridMouseEventArgs, type GridSelection, type Item} from "@glideapps/glide-data-grid";
+import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type DrawCellCallback, type GridCell, type GridColumn, type GridMouseEventArgs, type GridSelection, type Item, type ProvideEditorComponent} from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import {useTranslation} from "../i18n";
 import {useTheme} from "../theme";
@@ -11,7 +11,23 @@ import {cellWithinBounds, rangeWithinBounds, clipboardRange} from "./selection";
 import {ownsGridEvent} from "./eventOwnership";
 import {arrayEntries, structValues} from "./valueCodecs";
 
-type EnumCell = CustomCell<{kind: "enum"; value: string; options: string[]}>;
+type EnumCell = CustomCell<{kind: "enum"; value: string; display: string; label: string; options: {expression: string; label: string}[]}>;
+function enumLabel(expression:string):string {
+    try { const value:unknown=JSON.parse(expression);return typeof value==="string"?value:String(value); }
+    catch { return expression; } // Preserve valid CUE spellings beyond JSON literals.
+}
+const EnumEditor:ProvideEditorComponent<EnumCell> = (props) => {
+    const finished=useRef(false);
+    const finish=(value?:EnumCell)=>{if(finished.current)return;finished.current=true;props.onFinishedEditing(value);};
+    return <select autoFocus aria-label={props.value.data.label} value={props.value.data.value}
+        onChange={(event)=>{const value=event.target.value;const next={...props.value,data:{...props.value.data,value,display:enumLabel(value)}};props.onChange(next);finish(next);}}
+        onBlur={()=>finish()}
+        onKeyDown={(event)=>{if(event.key==="Escape"){event.stopPropagation();finish();}}}>
+        {!props.value.data.options.some(option=>option.expression===props.value.data.value)&&<option value={props.value.data.value} disabled>{props.value.data.display}</option>}
+        {props.value.data.options.map(option=><option key={option.expression} value={option.expression}>{option.label}</option>)}
+    </select>;
+};
+const enumEditorProvider={editor:EnumEditor,disablePadding:true};
 type InlineEditor = { column: number; row: number; value: string; bounds: {x: number; y: number; width: number; height: number} };
 type ForeignKeyEditor = InlineEditor & {options: string[]; target: string};
 type ArrayEditor = {column: number; row: number; entries: string[]; pasted: string; options: string[]};
@@ -22,11 +38,10 @@ type CommentTooltip = {text: string; left: number; top: number};
 const enumRenderer: CustomRenderer<EnumCell> = {
     kind: GridCellKind.Custom,
     isMatch: (cell): cell is EnumCell => (cell as EnumCell).data.kind === "enum",
-    draw: (args, cell) => drawTextCell(args, cell.data.value),
-    provideEditor: (cell) => ({editor: (props) => <select autoFocus value={props.value.data.value} onChange={(event) => props.onChange({...props.value, data: {...props.value.data, value: event.target.value}})} onBlur={() => props.onFinishedEditing(props.value)}>
-        {cell.data.options.map((option) => <option key={option} value={option}>{option}</option>)}
-    </select>, disablePadding: true}),
+    draw: (args, cell) => drawTextCell(args, cell.data.display),
+    provideEditor: () => enumEditorProvider,
 };
+const gridRenderers=[enumRenderer];
 
 export function TableGrid({active, table, formats, onAddColumn, onSetColumnDisplayName, onSetColumnWidth, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveComment, onSaveExportSettings, onNavigate, onOpenSchemaReference, focusTarget, onFocusDone}: { active: boolean; table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onSetColumnDisplayName: (column: string) => void; onSetColumnWidth: (column: string, width: number) => Promise<void>; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveComment: (rowID: string, column: string, comment: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; onOpenSchemaReference: (reference: string) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
     const {t} = useTranslation();
@@ -126,7 +141,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         return effectiveSchemaFor(column)?.kind === "string" ? cell?.display ?? "" : cell?.expression ?? "";
     };
     const selectedCellLabel = selectedCell ? `${selectedCell.column === 0 ? "id" : table.columns[selectedCell.column - 1].name} · ${rowFor(selectedCell.row).id || t("grid.draft")}` : "";
-    const formulaBarEditable = selectedCell !== null && (selectedCell.column === 0 || (!table.columns[selectedCell.column - 1]?.foreignKeyTable && !["array", "struct", "reference", "enum", "boolean"].includes(effectiveSchemaFor(selectedCell.column)?.kind ?? "")));
+    const formulaBarEditable = selectedCell !== null && (selectedCell.column === 0 || rowFor(selectedCell.row).values[table.columns[selectedCell.column - 1]?.name]?.formula === true || (!table.columns[selectedCell.column - 1]?.foreignKeyTable && !["array", "struct", "reference", "enum", "boolean"].includes(effectiveSchemaFor(selectedCell.column)?.kind ?? "")));
     useEffect(() => {
         if (formulaEditing || !selectedCell) return;
         setFormulaValue(rawCellValue(selectedCell.column, selectedCell.row));
@@ -242,8 +257,9 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
             return {kind: GridCellKind.Text, data: cell?.expression ?? "", displayData: cell?.display ?? "", allowOverlay: false, themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined};
         }
         if (column !== 0 && effectiveSchema?.kind === "enum" && !cell?.formula) {
-            const options = effectiveSchema.enumValues?.map((entry) => entry.expression.replace(/^"|"$/g, "")) ?? [];
-            return {kind: GridCellKind.Custom, allowOverlay: true, copyData: cell?.display ?? "", data: {kind: "enum", value: cell?.display ?? options[0] ?? "", options}, themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined} as EnumCell;
+            const options = effectiveSchema.enumValues?.map(entry=>({expression:entry.expression,label:enumLabel(entry.expression)})) ?? [];
+            if(effectiveSchema.nullable&&!options.some(option=>option.expression==="null"))options.push({expression:"null",label:"null"});
+            return {kind: GridCellKind.Custom, allowOverlay: true, copyData: cell?.display ?? "", data: {kind: "enum", value: cell?.expression ?? options[0]?.expression ?? "", display: cell?.display ?? options[0]?.label ?? "", label: columnDefinition.displayName || columnDefinition.name, options}, themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined} as EnumCell;
         }
         if (column !== 0 && effectiveSchema?.kind === "boolean" && !cell?.formula) {
             return {kind: GridCellKind.Boolean, allowOverlay: false, data: cell?.expression === "true", themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined};
@@ -266,7 +282,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
     const editCell = async ([column, row]: Item, value: GridCell) => {
         if (!cellInBounds(column, row)) return;
         const enumValue = value as EnumCell;
-        const input = value.kind === GridCellKind.Custom && enumValue.data.kind === "enum" ? JSON.stringify(enumValue.data.value) : value.kind === GridCellKind.Boolean ? value.data ? "true" : "false" : value.kind === GridCellKind.Text ? value.data.trim() : null;
+        const input = value.kind === GridCellKind.Custom && enumValue.data.kind === "enum" ? enumValue.data.value : value.kind === GridCellKind.Boolean ? value.data ? "true" : "false" : value.kind === GridCellKind.Text ? value.data.trim() : null;
         if (input === null) return;
         if (isDraft(row)) {
             await editDraft(column===0 ? {kind:"id"} : {kind:"cell",name:table.columns[column-1].name},input);
@@ -306,7 +322,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
             window.requestAnimationFrame(() => setForeignKeyEditor({column, row, value: cell?.expression.replace(/^"|"$/g, "") ?? "", bounds, options: columnDefinition.foreignKeyOptions ?? [], target: columnDefinition.foreignKeyTable!}));
             return;
         }
-        if (column !== 0 && ["enum", "boolean", "reference"].includes(effectiveSchema?.kind ?? "")) return;
+        if (column !== 0 && !cell?.formula && ["enum", "boolean", "reference"].includes(effectiveSchema?.kind ?? "")) return;
         window.setTimeout(() => setInlineEditor({column, row, value: isDraft(row) ? cell?.expression ?? "" : rawCellValue(column, row), bounds}), 0);
     };
     const finishForeignKeyEdit = (value: string) => {
@@ -439,7 +455,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
                 onCellEdited={editCell}
                 // Avoid Glide's competing window paste for ranges; retain its ID/draft-cell fallback.
                 keybindings={{paste: active && selectedRange() === null}}
-                customRenderers={[enumRenderer]}
+                customRenderers={gridRenderers}
                 gridSelection={gridSelection}
                 onGridSelectionChange={(selection) => {
                     setGridSelection(selection);
