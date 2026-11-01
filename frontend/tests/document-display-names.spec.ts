@@ -1,0 +1,140 @@
+import {expect, test, type Page} from "@playwright/test";
+
+test.beforeEach(async ({page}) => {
+    await page.addInitScript(() => {
+        const table = (name: string) => ({path: `/project/${name}.cue`, namespace: "game", name, displayName: "相同显示名", columns: [{name: "label", schemaExpression: "string", schema: {kind: "string"}}], rows: [{id: "one", values: {label: {expression: '"文本"', display: "文本"}}}], localSchema: [{name:"LocalID",displayName:"本地标识",kind:"type",type:"string",schema:{kind:"string"},schemaExpression:"string"}], diagnostics: []});
+        const tables = [table("item"), table("hero")];
+        const schema = {path: "/project/common.cue", package: "common", displayName: "公共规则", definitions: ["ID", "Label"].map((name) => ({name, displayName: "相同定义名", kind: "type", type: "string", schema: {kind: "string"}, schemaExpression: "string"}))};
+        type HistoryEntry={target:{displayName:string};before:string;after:string};
+        const history:HistoryEntry[]=[];
+        const redo:HistoryEntry[]=[];
+        const view = () => ({
+            project: {path: "/project/game.dtproj", root: "/project"}, settings: {build: {mode: "manual"}},
+            tree: {root: {kind: "project", name: "game.dtproj", children: [
+                ...tables.map((table) => ({kind: "table", name: table.name, path: table.path, displayName: table.displayName, children:[{kind:"localSchema",name:"local_schema",path:table.path,children:[{kind:"localSchema",name:"#LocalID",path:table.path}]}]})),
+                {kind: "schemaFile", name: "common.cue", path: schema.path, displayName: schema.displayName, children: schema.definitions.map((def) => ({kind: "schemaDefinition", name: `#${def.name}`, path: schema.path, displayName: def.displayName}))},
+            ]}},
+            schemas: {definitions: schema.definitions.map((def) => ({id: `common.#${def.name}`, kind: "type", path: schema.path, displayName: def.displayName, usages: []})), diagnostics: []},
+            foreignKeys: {diagnostics: []}, compile: {mode: "manual", pending: false, diagnostics: []}, canUndo: history.length>0, canRedo: redo.length>0,
+        });
+        const calls: {path: string; definition?: string; displayName: string}[] = [];
+        const api = {
+            GetSettings: async () => ({language: "en", theme: "light"}), GetExportFormats: async () => [], SetLanguage: async () => ({}), SetTheme: async () => ({}),
+            SelectProject: async () => view(), GetTable: async (path: string) => tables.find((table) => table.path === path), GetPublicSchema: async () => schema,
+            Undo: async () => {const entry=history.pop();if(entry){entry.target.displayName=entry.before;redo.push(entry)};return {table:tables[0],workspace:view()};},
+            Redo: async () => {const entry=redo.pop();if(entry){entry.target.displayName=entry.after;history.push(entry)};return {table:tables[0],workspace:view()};},
+            SetDisplayName: async (update: {path: string; definition?: string; displayName: string}) => {
+                calls.push(update);
+                const target = update.path === schema.path ? (update.definition ? schema.definitions.find((def) => def.name === update.definition)! : schema) : tables.find((table) => table.path === update.path)!;
+                history.push({target,before:target.displayName,after:update.displayName.trim()});redo.length=0;
+                target.displayName = update.displayName.trim();
+                return {table: tables.find((table) => table.path === update.path), schema, workspace: view()};
+            },
+        };
+        Object.assign(window, {go: {main: {App: api}}, __titles: {calls}});
+    });
+    await page.goto("/");
+    await openProject(page);
+});
+async function openProject(page: Page) {
+    await page.getByRole("button", {name: "File", exact: true}).click();
+    await page.getByRole("navigation", {name: "Application menu"}).getByRole("button", {name: "Open project", exact: true}).click();
+}
+async function editTitle(page: Page, label: string, value: string) {
+    await page.locator(".tree-label").filter({hasText: label}).click({button: "right"});
+    await page.getByRole("button", {name: "Edit display name", exact: true}).click();
+    await page.getByLabel("Display name", {exact: true}).fill(value);
+    await page.getByRole("dialog").getByRole("button", {name: "Apply", exact: true}).click();
+    await expect(page.getByRole("heading", {name: "Edit display name", exact: true})).toHaveCount(0);
+}
+
+test("duplicate titles keep distinct table tabs and stable internal identities", async ({page}) => {
+    for (const name of ["item", "hero"]) await page.getByRole("button", {name: `相同显示名 (${name})`, exact: true}).click();
+    await expect(page.locator(".tab-bar .tab")).toHaveCount(2);
+    await expect(page.getByRole("heading", {name: "相同显示名 (game.hero)", exact: true})).toBeVisible();
+    await page.getByRole("tab", {name: "相同显示名 (game.item) ×", exact: true}).click();
+    await expect(page.getByRole("heading", {name: "相同显示名 (game.item)", exact: true})).toBeVisible();
+});
+
+test("table title saves, reopens and falls back when cleared without changing its path", async ({page}) => {
+    await page.getByRole("button", {name: "相同显示名 (item)", exact: true}).click();
+    await editTitle(page, "相同显示名 (item)", " 道具总表 ");
+    await expect(page.getByRole("heading", {name: "道具总表 (game.item)", exact: true})).toBeVisible();
+    await openProject(page);
+    await expect(page.getByRole("button", {name: "道具总表 (item)", exact: true})).toBeVisible();
+    await editTitle(page, "道具总表 (item)", " ");
+    await expect(page.getByRole("button", {name: "item", exact: true})).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as {__titles: {calls: unknown[]}}).__titles.calls)).toEqual([
+        {path: "/project/item.cue", definition: "", displayName: " 道具总表 "},
+        {path: "/project/item.cue", definition: "", displayName: " "},
+    ]);
+});
+
+test("schema file and definition titles appear in the tree, editor, peek and tabs", async ({page}) => {
+    await editTitle(page, "公共规则 (common.cue)", "共享校验规则");
+    await editTitle(page, "相同定义名 (#ID)", "稳定标识");
+    await expect(page.locator(".schema-detail-head h1")).toHaveText("稳定标识 (common.#ID)");
+    await page.getByRole("button", {name: "稳定标识 (#ID)", exact: true}).click();
+    await expect(page.locator(".tab-bar .tab")).toContainText(["共享校验规则 (common)"]);
+    await expect(page.locator(".schema-definition-row").filter({hasText: "稳定标识 (#ID)"})).toBeVisible();
+    await page.getByRole("button", {name: "相同定义名 (#Label)", exact: true}).first().click();
+    await expect(page.locator(".schema-editor-form input").first()).toHaveValue("Label");
+    await editTitle(page, "稳定标识 (#ID)", "");
+    await expect(page.getByRole("button", {name: "#ID", exact: true}).first()).toBeVisible();
+});
+
+test("language changes preserve custom titles and expanded definition identities", async ({page}) => {
+    await page.getByRole("button", {name: "Settings", exact: true}).click();
+    await page.locator(".structure-dialog select").first().selectOption("zh-CN");
+    await page.getByRole("button", {name: "应用", exact: true}).click();
+    await expect(page.getByRole("button", {name: "公共规则 (common.cue)", exact: true})).toBeVisible();
+    await expect(page.getByRole("button", {name: "相同定义名 (#ID)", exact: true})).toBeVisible();
+    await page.getByRole("button", {name: "相同显示名 (item)", exact: true}).click({button: "right"});
+    await expect(page.getByRole("button", {name: "编辑显示名", exact: true})).toBeVisible();
+});
+
+test("metadata-only title updates preserve unapplied schema edits and new definitions", async ({page}) => {
+    await page.getByRole("button",{name:"相同定义名 (#ID)",exact:true}).click();
+    await page.getByRole("button",{name:"Custom expression",exact:true}).click();
+    const expression=page.locator(".schema-editor-form textarea");
+    await expression.fill('string & =~"draft"');
+    await editTitle(page,"相同显示名 (item)","无关表标题");
+    await expect(expression).toHaveValue('string & =~"draft"');
+    await editTitle(page,"相同定义名 (#ID)","定义新标题");
+    await expect(expression).toHaveValue('string & =~"draft"');
+    await page.getByRole("button",{name:"New definition",exact:true}).click();
+    await page.getByRole("textbox",{name:"Name",exact:true}).fill("UnappliedDraft");
+    await editTitle(page,"公共规则 (common.cue)","文件新标题");
+    await expect(page.getByRole("textbox",{name:"Name",exact:true})).toHaveValue("UnappliedDraft");
+    await expect(page.locator(".schema-editor-form").getByRole("button",{name:"Create",exact:true})).toBeVisible();
+});
+
+test("long display titles stay inside a small workbench", async ({page},info) => {
+    await page.setViewportSize({width:980,height:580});
+    const title="较长的中文显示名和StableIdentifier".repeat(25);
+    await editTitle(page,"相同显示名 (item)",title);
+    await page.getByRole("button",{name:`${title} (item)`,exact:true}).click();
+    const bounds=await page.locator(".table-document-header").evaluate((header)=>({height:header.clientHeight,width:header.clientWidth,contentWidth:header.scrollWidth}));
+    expect(bounds.height).toBeLessThan(90);
+    expect(bounds.contentWidth).toBeLessThanOrEqual(bounds.width);
+    const footer=await page.locator(".log-panel").boundingBox();
+    expect(footer!.y+footer!.height).toBeLessThanOrEqual(580);
+    await page.screenshot({path:info.outputPath("long-display-title.png")});
+});
+
+test("local-schema title follows Undo/Redo without resetting an unapplied new definition", async ({page}) => {
+    await page.getByRole("button",{name:"Expand 相同显示名 (item)",exact:true}).click();
+    await page.getByRole("button",{name:"Local schemas",exact:true}).click({button:"right"});
+    await page.getByRole("button",{name:"New definition",exact:true}).click();
+    await page.getByRole("textbox",{name:"Name",exact:true}).fill("UnappliedLocalDraft");
+    await editTitle(page,"相同显示名 (item)","表标题B");
+    await expect(page.locator(".tab-bar .tab")).toContainText(["表标题B (game.item) (local)"]);
+    await page.getByRole("button",{name:"Edit",exact:true}).click();
+    await page.getByRole("button",{name:"Undo",exact:false}).click();
+    await expect(page.locator(".tab-bar .tab")).toContainText(["相同显示名 (game.item) (local)"]);
+    await expect(page.getByRole("textbox",{name:"Name",exact:true})).toHaveValue("UnappliedLocalDraft");
+    await page.getByRole("button",{name:"Edit",exact:true}).click();
+    await page.getByRole("button",{name:"Redo",exact:false}).click();
+    await expect(page.locator(".tab-bar .tab")).toContainText(["表标题B (game.item) (local)"]);
+    await expect(page.getByRole("textbox",{name:"Name",exact:true})).toHaveValue("UnappliedLocalDraft");
+});

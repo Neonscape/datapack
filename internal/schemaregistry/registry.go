@@ -18,12 +18,13 @@ const (
 type ID string
 
 type Definition struct {
-	ID        ID               `json:"id"`
-	Kind      string           `json:"kind"`
-	AppliesTo []string         `json:"appliesTo,omitempty"`
-	Schema    schemamodel.Node `json:"schema"`
-	Path      string           `json:"path"`
-	Table     string           `json:"table,omitempty"`
+	DisplayName string           `json:"displayName,omitempty"`
+	ID          ID               `json:"id"`
+	Kind        string           `json:"kind"`
+	AppliesTo   []string         `json:"appliesTo,omitempty"`
+	Schema      schemamodel.Node `json:"schema"`
+	Path        string           `json:"path"`
+	Table       string           `json:"table,omitempty"`
 }
 
 type Usage struct {
@@ -56,13 +57,14 @@ type Index struct {
 }
 
 type IndexedDefinition struct {
-	ID        ID               `json:"id"`
-	Kind      string           `json:"kind"`
-	AppliesTo []string         `json:"appliesTo,omitempty"`
-	Schema    schemamodel.Node `json:"schema"`
-	Path      string           `json:"path"`
-	Table     string           `json:"table,omitempty"`
-	Usages    []Usage          `json:"usages,omitempty"`
+	DisplayName string           `json:"displayName,omitempty"`
+	ID          ID               `json:"id"`
+	Kind        string           `json:"kind"`
+	AppliesTo   []string         `json:"appliesTo,omitempty"`
+	Schema      schemamodel.Node `json:"schema"`
+	Path        string           `json:"path"`
+	Table       string           `json:"table,omitempty"`
+	Usages      []Usage          `json:"usages,omitempty"`
 }
 
 func Build(publicSchemas []document.PublicSchema, tables []document.Table) Registry {
@@ -74,11 +76,12 @@ func Build(publicSchemas []document.PublicSchema, tables []document.Table) Regis
 		for _, definition := range schema.Definitions {
 			id := publicID(schema.Package, definition.Name)
 			registry.addDefinition(Definition{
-				ID:        id,
-				Kind:      definition.Kind,
-				AppliesTo: definition.AppliesTo,
-				Schema:    definition.Schema,
-				Path:      schema.Path,
+				ID:          id,
+				DisplayName: definition.DisplayName,
+				Kind:        definition.Kind,
+				AppliesTo:   definition.AppliesTo,
+				Schema:      definition.Schema,
+				Path:        schema.Path,
 			})
 		}
 	}
@@ -87,12 +90,13 @@ func Build(publicSchemas []document.PublicSchema, tables []document.Table) Regis
 		for _, definition := range table.LocalSchema {
 			id := localID(logicalName, definition.Name)
 			registry.addDefinition(Definition{
-				ID:        id,
-				Kind:      definition.Kind,
-				AppliesTo: definition.AppliesTo,
-				Schema:    definition.Schema,
-				Path:      table.Path,
-				Table:     logicalName,
+				ID:          id,
+				DisplayName: definition.DisplayName,
+				Kind:        definition.Kind,
+				AppliesTo:   definition.AppliesTo,
+				Schema:      definition.Schema,
+				Path:        table.Path,
+				Table:       logicalName,
 			})
 		}
 	}
@@ -136,13 +140,14 @@ func (r Registry) Index() Index {
 	for _, id := range ids {
 		definition := r.Definitions[id]
 		definitions = append(definitions, IndexedDefinition{
-			ID:        id,
-			Kind:      definition.Kind,
-			AppliesTo: definition.AppliesTo,
-			Schema:    definition.Schema,
-			Path:      definition.Path,
-			Table:     definition.Table,
-			Usages:    r.Usages[id],
+			ID:          id,
+			DisplayName: definition.DisplayName,
+			Kind:        definition.Kind,
+			AppliesTo:   definition.AppliesTo,
+			Schema:      definition.Schema,
+			Path:        definition.Path,
+			Table:       definition.Table,
+			Usages:      r.Usages[id],
 		})
 	}
 	diagnostics := r.Diagnostics

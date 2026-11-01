@@ -170,6 +170,10 @@ export function SetCompileMode(arg1) {
   return window['go']['main']['App']['SetCompileMode'](arg1);
 }
 
+export function SetDisplayName(arg1) {
+  return window['go']['main']['App']['SetDisplayName'](arg1);
+}
+
 export function SetLanguage(arg1) {
   return window['go']['main']['App']['SetLanguage'](arg1);
 }

@@ -10,6 +10,7 @@ import (
 	"cuelang.org/go/cue/parser"
 	"cuelang.org/go/cue/token"
 	"datapack/internal/cueformat"
+	"datapack/internal/cuesource"
 	"datapack/internal/schemamodel"
 )
 
@@ -25,9 +26,11 @@ func LoadTable(path string) (Table, error) {
 	if err != nil {
 		return Table{}, fmt.Errorf("parse table source: %w", err)
 	}
+	titles := cuesource.ReadEditorTitles(file)
 	fields := fieldsOfFile(file)
 	document := Table{
 		Path:         path,
+		DisplayName:  titles.Table,
 		Columns:      []Column{},
 		Rows:         []Row{},
 		ForeignKeys:  []ForeignKey{},
@@ -181,6 +184,7 @@ func LoadTable(path string) (Table, error) {
 			}
 			document.LocalSchema = append(document.LocalSchema, SchemaDefinition{
 				Name:             name[1:],
+				DisplayName:      titles.Definitions[name[1:]],
 				Kind:             localDefinitions[name[1:]].Kind,
 				Type:             localDefinitions[name[1:]].Type,
 				AppliesTo:        localDefinitions[name[1:]].AppliesTo,
@@ -204,8 +208,9 @@ func LoadPublicSchema(path string) (PublicSchema, error) {
 	if err != nil {
 		return PublicSchema{}, fmt.Errorf("parse schema source: %w", err)
 	}
+	titles := cuesource.ReadEditorTitles(file)
 	fields := fieldsOfFile(file)
-	document := PublicSchema{Path: path, Definitions: []SchemaDefinition{}}
+	document := PublicSchema{Path: path, DisplayName: titles.Schema, Definitions: []SchemaDefinition{}}
 	if packageDecl := packageOfFile(file); packageDecl != nil && packageDecl.Name != nil {
 		document.Package = packageDecl.Name.Name
 	}
@@ -226,6 +231,7 @@ func LoadPublicSchema(path string) (PublicSchema, error) {
 		definitionMetadata := fieldsOfStruct(metadataField.Value)
 		document.Definitions = append(document.Definitions, SchemaDefinition{
 			Name:             name,
+			DisplayName:      titles.Definitions[name],
 			Kind:             stringOf(requiredField(definitionMetadata, "kind").Value),
 			Type:             optionalString(definitionMetadata["type"]),
 			AppliesTo:        stringListOf(definitionMetadata["appliesTo"]),

@@ -1,3 +1,5 @@
+import {schemaDefinitionContent} from "./definitionContent";
+import {displayLabel} from "../tree/displayLabel";
 import {useEffect, useState} from "react";
 import {PrintSchema} from "../../wailsjs/go/main/App";
 import {schemamodel} from "../../wailsjs/go/models";
@@ -32,6 +34,9 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
     const typeReferences = schemaTypeReferenceOptions(workspace).map((entry) => entry.value);
     const definitions = state.definitions ?? emptyDefinitions;
 
+    // Titles are presentation metadata; updating one must not discard an unapplied draft.
+    const definitionContent = schemaDefinitionContent(definitions);
+
     useEffect(() => {
         setCreating(false);
         setRenaming(false);
@@ -52,7 +57,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
             node: definition.schema,
             custom: false,
         } : null);
-    }, [state.selected, definitions, state.creating]);
+    }, [state.selected, definitionContent, state.creating]);
 
     function startCreate() {
         setDraft({name: "", kind: "type", type: "string", appliesTo: "", expression: "string", node: {kind: "string"}, custom: false});
@@ -107,7 +112,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
                         key={definition.name}
                         onClick={() => onSelect(definition.name)}
                     >
-                        <span>#{definition.name}</span>
+                        <span>{displayLabel(definition.displayName, `#${definition.name}`)}</span>
                         <span className={`schema-kind-dot schema-kind-${definition.kind}`} aria-hidden="true"/>
                     </button>)}
                     {definitions.length === 0 && <div className="schema-editor-empty">{t("schemaEditor.noDefinitions")}</div>}

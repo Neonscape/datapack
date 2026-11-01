@@ -4,6 +4,7 @@ package document
 import "datapack/internal/schemamodel"
 
 type Table struct {
+	DisplayName  string                       `json:"displayName,omitempty"`
 	Path         string                       `json:"path"`
 	Package      string                       `json:"package"`
 	Namespace    string                       `json:"namespace"`
@@ -73,6 +74,7 @@ type ExportSettings struct {
 }
 
 type SchemaDefinition struct {
+	DisplayName      string           `json:"displayName,omitempty"`
 	Name             string           `json:"name"`
 	Kind             string           `json:"kind"`
 	Type             string           `json:"type,omitempty"`
@@ -82,6 +84,7 @@ type SchemaDefinition struct {
 }
 
 type PublicSchema struct {
+	DisplayName string             `json:"displayName,omitempty"`
 	Path        string             `json:"path"`
 	Package     string             `json:"package"`
 	Definitions []SchemaDefinition `json:"definitions"`

@@ -1,5 +1,6 @@
 import type {TreeNode} from "../types";
 import {useTranslation} from "../i18n";
+import {displayLabel} from "./displayLabel";
 import {treeNodeKey} from "./expansion";
 
 export function Tree({node, depth = 0, namespace = "", parentKey = "", expanded, onToggleCollapse, onOpenTable, onOpenSchema, onOpenProjectSettings, onContextMenu}: { node: TreeNode; depth?: number; namespace?: string; parentKey?: string; expanded: Set<string>; onToggleCollapse: (key: string) => void; onOpenTable: (path: string) => void; onOpenSchema: (node: TreeNode) => void; onOpenProjectSettings: () => void; onContextMenu: (node: TreeNode, position: {x: number; y: number}, namespace: string) => void }) {
@@ -7,7 +8,7 @@ export function Tree({node, depth = 0, namespace = "", parentKey = "", expanded,
     const key = treeNodeKey(node, parentKey);
     const label = node.kind === "group" && node.name === "Tables" ? t("tree.tables")
         : node.kind === "group" && node.name === "Schemas" ? t("tree.schemas")
-        : node.kind === "localSchema" && node.name === "local_schema" ? t("tree.localSchema") : node.name;
+        : node.kind === "localSchema" && node.name === "local_schema" ? t("tree.localSchema") : displayLabel(node.displayName, node.name);
     const isFile = node.kind === "table" || node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "damaged";
     const isSchemaNode = node.kind === "schemaFile" || node.kind === "schemaDefinition" || node.kind === "localSchema";
     const openTable = node.kind === "table" && node.path ? () => onOpenTable(node.path!) : undefined;
