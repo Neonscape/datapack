@@ -41,6 +41,18 @@ export function useWorkspaceSession() {
         setTabs((current) => current.map((tab) => tab.id === id && tab.kind === "schema" ? {...tab, state} : tab));
     }
 
+    function updateDisplayName(path: string, definition: string, displayName: string) {
+        const definitions = (entries: TableDocument["localSchema"]) => entries.map((entry) => entry.name === definition ? {...entry, displayName} : entry);
+        setTabs((current) => current.map((tab) => {
+            if (tab.kind === "table") {
+                if (tab.path !== path) return tab;
+                return {...tab, table: definition ? {...tab.table, localSchema: definitions(tab.table.localSchema)} : {...tab.table, displayName}};
+            }
+            if (tab.state.path !== path) return tab;
+            return {...tab, state: definition ? {...tab.state, definitions: definitions(tab.state.definitions)} : {...tab.state, displayName}};
+        }));
+    }
+
     function applyProjectView(view: WorkspaceView) {
         setWorkspace(view);
         setTabs([]);
@@ -63,7 +75,7 @@ export function useWorkspaceSession() {
     return {
         workspace, setWorkspace, tabs, setTabs, activeTabId, setActiveTabId, selectedSchema, setSelectedSchema,
         activeTab, table, schemaDocument, activateTab, closeTab, updateActiveTable, updateActiveSchema,
-        updateSchemaTabById, applyProjectView, addTableTab, addSchemaTab,
+        updateSchemaTabById, updateDisplayName, applyProjectView, addTableTab, addSchemaTab,
     };
 }
 

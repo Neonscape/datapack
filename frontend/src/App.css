@@ -489,7 +489,13 @@
     border-bottom: 1px solid var(--border);
 }
 
+.table-document-header > div { min-width: 0; flex: 1 1 auto; }
+
 .table-document-header h1 {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
     margin: 3px 0 0;
     color: var(--text-strong);
     font-size: 18px;
@@ -497,6 +503,8 @@
 }
 
 .table-document-header > span {
+    flex-shrink: 0;
+    white-space: nowrap;
     color: var(--text-muted);
     font-size: 12px;
 }
@@ -1788,3 +1796,14 @@
         display: none;
     }
 }
+
+/* Optional titles must not push stable IDs/actions beyond their panels. */
+.schema-definition-row > span:first-child,
+.schema-row > span:not(.schema-kind-dot):not(.usage-count),
+.schema-detail-head h1 {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.schema-kind-dot, .usage-count, .table-actions { flex-shrink: 0; }
