@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"cuelang.org/go/cue/ast"
+	"datapack/internal/cuesource"
 	"datapack/internal/document"
 	"datapack/internal/schemamodel"
 )
@@ -179,11 +181,11 @@ func (r *Registry) validateDefinition(id ID, path, table string) {
 
 func (r *Registry) validateNode(node schemamodel.Node, path, table, field, currentTable, currentPackage string, constraintContext bool) {
 	if node.Kind == schemamodel.KindReference {
-		r.validateReference(node.Reference, path, table, field, currentTable, currentPackage, constraintContext)
+		r.validateReference(node.Reference, node.ReferenceImport(), path, table, field, currentTable, currentPackage, constraintContext)
 	}
 	for _, requirement := range node.Requirements {
 		if requirement.Reference != "" {
-			r.validateReference(requirement.Reference, path, table, field, currentTable, currentPackage, true, node.Kind)
+			r.validateReference(requirement.Reference, requirement.ReferenceImport(), path, table, field, currentTable, currentPackage, true, node.Kind)
 		}
 	}
 	if node.Element != nil {
@@ -194,8 +196,8 @@ func (r *Registry) validateNode(node schemamodel.Node, path, table, field, curre
 	}
 }
 
-func (r *Registry) validateReference(reference, path, table, field, currentTable, currentPackage string, constraintContext bool, sourceKind ...schemamodel.Kind) {
-	id, err := resolve(reference, currentTable, currentPackage)
+func (r *Registry) validateReference(reference, importPath, path, table, field, currentTable, currentPackage string, constraintContext bool, sourceKind ...schemamodel.Kind) {
+	id, err := r.resolveReference(reference, importPath, currentTable, currentPackage)
 	if err != nil {
 		r.error(path, table, field, err.Error())
 		return
@@ -235,7 +237,7 @@ func appliesTo(applicable []string, kind schemamodel.Kind) bool {
 func (r *Registry) detectCycles() {
 	graph := map[ID][]ID{}
 	for id, definition := range r.Definitions {
-		graph[id] = references(definition.Schema, definition.Table, packageOf(id))
+		graph[id] = r.references(definition.Schema, definition.Table, packageOf(id))
 	}
 	state := map[ID]int{}
 	stack := []ID{}
@@ -265,32 +267,28 @@ func (r *Registry) visit(id ID, graph map[ID][]ID, state map[ID]int, stack *[]ID
 	state[id] = 2
 }
 
-func references(node schemamodel.Node, table, packageName string) []ID {
+func (r Registry) references(node schemamodel.Node, table, packageName string) []ID {
 	references := []ID{}
-	add := func(reference string) {
-		if id, err := resolve(reference, table, packageName); err == nil {
+	add := func(reference, importPath string) {
+		if id, err := r.resolveReference(reference, importPath, table, packageName); err == nil {
 			references = append(references, id)
 		}
 	}
 	if node.Kind == schemamodel.KindReference {
-		add(node.Reference)
+		add(node.Reference, node.ReferenceImport())
 	}
 	for _, requirement := range node.Requirements {
 		if requirement.Reference != "" {
-			add(requirement.Reference)
+			add(requirement.Reference, requirement.ReferenceImport())
 		}
 	}
 	if node.Element != nil {
-		references = append(references, referencesForNode(*node.Element, table, packageName)...)
+		references = append(references, r.references(*node.Element, table, packageName)...)
 	}
 	for _, field := range node.Fields {
-		references = append(references, referencesForNode(field.Schema, table, packageName)...)
+		references = append(references, r.references(field.Schema, table, packageName)...)
 	}
 	return references
-}
-
-func referencesForNode(node schemamodel.Node, table, packageName string) []ID {
-	return references(node, table, packageName)
 }
 
 func (r *Registry) error(path, table, field, message string) {
@@ -350,4 +348,23 @@ func joinIDs(ids []ID) string {
 		parts[index] = string(id)
 	}
 	return strings.Join(parts, " -> ")
+}
+
+// Import aliases are source spellings. Resolve them only to the project package
+// with the matching full CUE import identity, never just a matching qualifier.
+func (r Registry) resolveReference(reference, importPath, table, packageName string) (ID, error) {
+	if importPath == "" {
+		return resolve(reference, table, packageName)
+	}
+	marker := strings.LastIndex(reference, ".#")
+	if marker < 1 || marker == len(reference)-2 {
+		return resolve(reference, table, packageName)
+	}
+	parts := ast.ParseImportPath(importPath)
+	id := publicID(parts.Qualifier, reference[marker+2:])
+	definition, ok := r.Definitions[id]
+	if !ok || cuesource.CanonicalImport(definition.Schema.SourcePackage()) != cuesource.CanonicalImport(importPath) {
+		return "", nil
+	}
+	return id, nil
 }

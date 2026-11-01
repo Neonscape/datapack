@@ -20,6 +20,7 @@ import (
 	"cuelang.org/go/cue/token"
 	"datapack/internal/compiler"
 	"datapack/internal/cueformat"
+	"datapack/internal/cuesource"
 	"datapack/internal/document"
 	"datapack/internal/exporters"
 	"datapack/internal/foreignkey"
@@ -316,6 +317,20 @@ func (s *Service) navigateSchemaReference(request navigation.Request) (navigatio
 		id = schema.Package + ".#" + name
 	default:
 		id = reference
+		if marker := strings.LastIndex(reference, ".#"); marker > 0 {
+			bindings, err := cuesource.ReadImportBindings(request.Path)
+			if err != nil {
+				return navigation.Target{}, err
+			}
+			if importPath, imported := bindings[reference[:marker]]; imported {
+				id = ast.ParseImportPath(importPath).Qualifier + ".#" + name
+				for _, definition := range s.current.Schemas.Definitions {
+					if string(definition.ID) == id && cuesource.CanonicalImport(definition.Schema.SourcePackage()) != importPath {
+						return navigation.Target{}, s.userError("schema.referenceNotFound", reference)
+					}
+				}
+			}
+		}
 	}
 	for _, definition := range s.current.Schemas.Definitions {
 		if string(definition.ID) == id {
@@ -1454,11 +1469,18 @@ func referencedSchemaPackages(expression string) ([]string, error) {
 // ensureSchemaImports makes sure the source file imports every public Schema
 // package referenced by the expression.
 func (s *Service) ensureSchemaImports(path, expression, excludePackage string) error {
+	bindings, err := cuesource.ReadImportBindings(path)
+	if err != nil {
+		return err
+	}
 	packages, err := referencedSchemaPackages(expression)
 	if err != nil {
 		return err
 	}
 	for _, pkg := range packages {
+		if _, imported := bindings[pkg]; imported {
+			continue
+		}
 		if pkg == excludePackage || !s.knownSchemaPackage(pkg) {
 			continue
 		}
