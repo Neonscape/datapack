@@ -211,8 +211,15 @@ func validateCandidate(path string, source []byte) (Table, error) {
 	return table, nil
 }
 
-func replaceAll(paths []string, candidates, originals map[string][]byte) (err error) {
+type sourceReplaceOps struct{ rename func(string, string) error }
+
+func replaceAll(paths []string, candidates, originals map[string][]byte) error {
+	return replaceAllWithOps(paths, candidates, originals, sourceReplaceOps{rename: os.Rename})
+}
+
+func replaceAllWithOps(paths []string, candidates, originals map[string][]byte, ops sourceReplaceOps) (err error) {
 	temporary := map[string]string{}
+	modes := map[string]os.FileMode{}
 	defer func() {
 		for _, path := range temporary {
 			if cleanupErr := os.Remove(path); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
@@ -221,30 +228,25 @@ func replaceAll(paths []string, candidates, originals map[string][]byte) (err er
 		}
 	}()
 	for _, path := range paths {
-		file, err := os.CreateTemp(filepath.Dir(path), ".datapack-rename-*.cue")
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("stat renamed table: %w", err)
+		}
+		modes[path] = info.Mode().Perm()
+		staged, err := stageSource(path, candidates[path], modes[path])
 		if err != nil {
 			return fmt.Errorf("stage renamed table: %w", err)
 		}
-		temporary[path] = file.Name()
-		if _, err := file.Write(candidates[path]); err != nil {
-			file.Close()
-			return fmt.Errorf("write renamed table: %w", err)
-		}
-		if err := file.Sync(); err != nil {
-			file.Close()
-			return fmt.Errorf("sync renamed table: %w", err)
-		}
-		if err := file.Close(); err != nil {
-			return fmt.Errorf("close renamed table: %w", err)
-		}
+		temporary[path] = staged
 	}
 	committed := []string{}
 	for _, path := range paths {
-		if err := os.Rename(temporary[path], path); err != nil {
+		if err := ops.rename(temporary[path], path); err != nil {
 			failures := []error{fmt.Errorf("replace renamed table: %w", err)}
-			for _, committedPath := range committed {
-				if restoreErr := os.WriteFile(committedPath, originals[committedPath], 0o644); restoreErr != nil {
-					failures = append(failures, fmt.Errorf("restore renamed table %q: %w", committedPath, restoreErr))
+			for index := len(committed) - 1; index >= 0; index-- {
+				previous := committed[index]
+				if restoreErr := restoreStagedSource(previous, originals[previous], modes[previous], ops.rename); restoreErr != nil {
+					failures = append(failures, fmt.Errorf("restore renamed table %q: %w", previous, restoreErr))
 				}
 			}
 			return errors.Join(failures...)

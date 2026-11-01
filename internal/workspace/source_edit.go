@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"datapack/internal/logging"
@@ -75,4 +76,75 @@ func preserveSourceMode(path string, mode os.FileMode) error {
 		}
 	}
 	return nil
+}
+
+// editSources publishes a multi-file command only after all source writes and
+// workspace refresh succeed. On reported failure it restores bytes and modes;
+// the Service lock remains owned by the command. No crash/concurrent FS claim.
+func editSources[T any](s *Service, paths []string, operation func() (T, error)) (result T, view View, err error) {
+	snapshot, err := snapshotRenameFiles(paths...)
+	if err != nil {
+		return result, View{}, err
+	}
+	transaction, err := newTableRenameTransaction(snapshot, os.Rename)
+	if err != nil {
+		return result, View{}, err
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, transaction.rollback())
+		}
+	}()
+	result, err = operation()
+	if err != nil {
+		var zero T
+		return zero, View{}, err
+	}
+	for path, mode := range transaction.modes {
+		if err = preserveSourceMode(path, mode); err != nil {
+			var zero T
+			return zero, View{}, err
+		}
+	}
+	view, err = s.refreshAfterEdit()
+	if err != nil {
+		var zero T
+		return zero, View{}, err
+	}
+	s.recordEdit(snapshot)
+	view.CanUndo, view.CanRedo = true, false
+	s.current = &view
+	return result, view, nil
+}
+
+// Missing directories are owned only until the command succeeds. os.Remove
+// refuses a nonempty directory, so compensation cannot remove another file.
+func missingParentDirectories(directory string) ([]string, error) {
+	var missing []string
+	for current := directory; ; current = filepath.Dir(current) {
+		info, err := os.Stat(current)
+		if err == nil {
+			if !info.IsDir() {
+				return nil, fmt.Errorf("source parent %q is not a directory", current)
+			}
+			return missing, nil
+		}
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+		missing = append(missing, current)
+		if filepath.Dir(current) == current {
+			return nil, fmt.Errorf("source parent has no existing ancestor")
+		}
+	}
+}
+
+func removeCreatedDirectories(paths []string) error {
+	var failures []error
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			failures = append(failures, fmt.Errorf("rollback created directory %q: %w", path, err))
+		}
+	}
+	return errors.Join(failures...)
 }
