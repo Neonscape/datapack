@@ -1,7 +1,6 @@
 import {useEffect, useState} from 'react';
 import './App.css';
-import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellComment, SetCellFormula, SetCellText, SetColumnDisplayName, SetDisplayName, SetColumnSchema, SetColumnWidth, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
-import {schemamodel, workspace as workspaceModel} from "../wailsjs/go/models";
+import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellComment, SetCellFormula, SetCellText, SetColumnDisplayName, SetDisplayName, SetColumnSchema, SetColumnWidth, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "./bridge";
 import {useTranslation, type Language} from "./i18n";
 import {useTheme, type ThemePreference} from "./theme";
 import {LogPanel} from "./LogPanel";
@@ -58,7 +57,7 @@ function App() {
     useEffect(() => {
         void (async () => {
             try {
-                const [settings, formats] = await Promise.all([GetSettings() as Promise<{language?: string; theme?: string}>, GetExportFormats() as Promise<ExportFormat[]>]);
+                const [settings, formats] = await Promise.all([GetSettings(), GetExportFormats()]);
                 setExportFormats(formats);
                 if (settings.language === "en" || settings.language === "zh-CN") setLanguage(settings.language);
                 if (settings.theme === "system" || settings.theme === "light" || settings.theme === "dark") setPreference(settings.theme);
@@ -108,7 +107,7 @@ function App() {
         setError("");
         const request = beginRequest(`open:${id}`);
         try {
-            const document = await GetTable(path) as TableDocument;
+            const document = await GetTable(path);
             if (!isCurrent(request)) return;
             addTableTab(path, document, request);
             setCellError(null);
@@ -135,11 +134,11 @@ function App() {
         try {
             let state: SchemaEditorState;
             if (local) {
-                const document = await GetTable(path) as TableDocument;
+                const document = await GetTable(path);
                 const logical = document.namespace ? `${document.namespace}.${document.name}` : document.name;
                 state = {path, local: true, displayName: document.displayName, logicalTable: logical, definitions: document.localSchema, selected: definition ?? document.localSchema[0]?.name ?? null, creating};
             } else {
-                const document = await GetPublicSchema(path) as PublicSchemaDocument;
+                const document = await GetPublicSchema(path);
                 const definitions = document.definitions ?? [];
                 state = {path, local: false, displayName: document.displayName, package: document.package, definitions, selected: definition ?? definitions[0]?.name ?? null, creating};
             }
@@ -168,8 +167,8 @@ function App() {
         setError("");
         try {
             const result = await Paste({path: table.path, rowIDs, columns, values});
-            updateTable(result.table as TableDocument);
-            publishWorkspace(result.workspace as WorkspaceView);
+            updateTable(result.table);
+            publishWorkspace(result.workspace);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         }
@@ -212,7 +211,7 @@ function App() {
     async function selectProject() {
         setError("");
         try {
-            const view = await SelectProject() as WorkspaceView;
+            const view = await SelectProject();
             applyProjectView(view);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
@@ -230,7 +229,7 @@ function App() {
     async function createProject() {
         setError("");
         try {
-            applyProjectView(await NewProject() as WorkspaceView);
+            applyProjectView(await NewProject());
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         }
@@ -239,7 +238,7 @@ function App() {
     async function saveProjectAs() {
         setError("");
         try {
-            applyProjectView(await SaveProjectAs() as WorkspaceView);
+            applyProjectView(await SaveProjectAs());
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         }
@@ -266,7 +265,7 @@ function App() {
     async function navigateTo(request: NavRequest, position: {x: number; y: number}) {
         setError("");
         try {
-            const target = await Navigate(request) as NavTarget;
+            const target = await Navigate(request);
             applyNavigationTarget(target, position);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
@@ -368,7 +367,7 @@ function App() {
                 await openSchemaByPath(definition.path, null, false, true);
                 return;
             }
-            const result = await CreateSchemaFile(namespace) as {schema: PublicSchemaDocument; workspace: WorkspaceView};
+            const result = await CreateSchemaFile(namespace);
             publishWorkspace(result.workspace);
             await openSchemaByPath(result.schema.path, null, false, true);
         } catch (reason) {
@@ -382,29 +381,29 @@ function App() {
         try {
             if (treeDialog.mode === "displayName") {
                 const result = await SetDisplayName({path: treeDialog.path, definition: treeDialog.definition, displayName: treeDialog.value});
-                const view = result.workspace as WorkspaceView;
+                const view = result.workspace;
                 publishWorkspace(view);
                 if (selectedSchema) selectSchema(schemaDefinitions(view).find((entry) => entry.id === selectedSchema.id) ?? null);
-                const document = (result.table?.path ? result.table : result.schema) as TableDocument | PublicSchemaDocument;
+                const document = (result.table?.path ? result.table : result.schema);
                 const definitions = "localSchema" in document ? document.localSchema : document.definitions;
                 const title = treeDialog.definition ? definitions.find((entry) => entry.name === treeDialog.definition)?.displayName ?? "" : document.displayName ?? "";
                 updateDisplayName(treeDialog.path, treeDialog.definition, title);
             } else if (treeDialog.mode === "newSchema") {
                 await newDefinitionInNamespace(treeDialog.namespace);
             } else if (treeDialog.mode === "renameTable") {
-                const result = await RenameTable({path: treeDialog.path, namespace: treeDialog.namespace, name: treeDialog.name}) as {table: TableDocument; workspace: WorkspaceView};
+                const result = await RenameTable({path: treeDialog.path, namespace: treeDialog.namespace, name: treeDialog.name});
                 publishWorkspace(result.workspace);
                 renameSessionTable(treeDialog.path, result.table);
             } else if (treeDialog.mode === "deleteTable") {
-                const result = await DeleteTable({path: treeDialog.path}) as {workspace: WorkspaceView};
+                const result = await DeleteTable({path: treeDialog.path});
                 publishWorkspace(result.workspace);
                 closeDocument(treeDialog.path);
             } else if (treeDialog.mode === "renameDefinition") {
-                const result = await RenameSchemaDefinition({path: treeDialog.path, oldName: treeDialog.name, newName: treeDialog.newName}) as SchemaEditResult;
+                const result = await RenameSchemaDefinition({path: treeDialog.path, oldName: treeDialog.name, newName: treeDialog.newName});
                 publishWorkspace(result.workspace);
                 applyDefinitionResult(treeDialog.path, result.table?.localSchema ?? [], result.schema?.definitions ?? [], treeDialog.newName);
             } else {
-                const result = await DeleteSchemaDefinition({path: treeDialog.path, name: treeDialog.name}) as SchemaEditResult;
+                const result = await DeleteSchemaDefinition({path: treeDialog.path, name: treeDialog.name});
                 publishWorkspace(result.workspace);
                 applyDefinitionResult(treeDialog.path, result.table?.localSchema ?? [], result.schema?.definitions ?? []);
             }
@@ -429,22 +428,22 @@ function App() {
         setError("");
         const payload = {path: schemaDocument.path, name, kind, type, appliesTo, schemaExpression: expression};
         const result = create
-            ? await CreateSchemaDefinition(payload) as SchemaEditResult
-            : await SetSchemaDefinition(payload) as SchemaEditResult;
+            ? await CreateSchemaDefinition(payload)
+            : await SetSchemaDefinition(payload);
         applySchemaResult(result, name);
     }
 
     async function renameSchemaDefinition(oldName: string, newName: string) {
         if (!schemaDocument) return;
         setError("");
-        const result = await RenameSchemaDefinition({path: schemaDocument.path, oldName, newName}) as SchemaEditResult;
+        const result = await RenameSchemaDefinition({path: schemaDocument.path, oldName, newName});
         applySchemaResult(result, newName);
     }
 
     async function deleteSchemaDefinition(name: string) {
         if (!schemaDocument) return;
         setError("");
-        const result = await DeleteSchemaDefinition({path: schemaDocument.path, name}) as SchemaEditResult;
+        const result = await DeleteSchemaDefinition({path: schemaDocument.path, name});
         applySchemaResult(result, null);
     }
 
@@ -466,21 +465,21 @@ function App() {
             if (column === "__create__") {
                 const {values, formulas} = JSON.parse(input);
                 const result = await CreateRow({path: table.path, rowID, values, formulas});
-                updateTable(result.table as TableDocument);
-                publishWorkspace(result.workspace as WorkspaceView);
+                updateTable(result.table);
+                publishWorkspace(result.workspace);
                 return;
             }
             if (column === "id") {
                 if (!input) throw new Error(t("error.idEmpty"));
                 const result = await RenameRow({path: table.path, oldID: rowID, newID: input});
-                updateTable(result.table as TableDocument);
-                publishWorkspace(result.workspace as WorkspaceView);
+                updateTable(result.table);
+                publishWorkspace(result.workspace);
                 return;
             }
             if (input === "") {
                 const result = await ClearCell({path: table.path, rowID, column, expression: ""});
-                updateTable(result.table as TableDocument);
-                publishWorkspace(result.workspace as WorkspaceView);
+                updateTable(result.table);
+                publishWorkspace(result.workspace);
                 return;
             }
             const columnDefinition = table.columns.find((entry) => entry.name === column);
@@ -489,8 +488,8 @@ function App() {
                 : !columnDefinition?.foreignKeyTable && (columnDefinition?.effectiveSchema ?? columnDefinition?.schema)?.kind === "string"
                     ? await SetCellText({path: table.path, rowID, column, expression: input})
                     : await UpdateCell({path: table.path, rowID, column, expression: input});
-            updateTable(result.table as TableDocument);
-            publishWorkspace(result.workspace as WorkspaceView);
+            updateTable(result.table);
+            publishWorkspace(result.workspace);
         } catch (reason) {
             // The draft editor owns creation errors and must keep its unsaved row.
             // Ordinary cell edits continue to report their error through the app toast.
@@ -504,7 +503,7 @@ function App() {
     async function saveTableExportSettings(settings: TableExportSettingsModel) {
         setError("");
         try {
-            const result = await SetTableExportSettings(new workspaceModel.TableExportSettings(settings)) as {table: TableDocument; workspace: WorkspaceView};
+            const result = await SetTableExportSettings(settings);
             updateTable(result.table);
             publishWorkspace(result.workspace);
         } catch (reason) {
@@ -517,7 +516,7 @@ function App() {
     async function saveCellComment(rowID: string, column: string, comment: string) {
         setError("");
         try {
-            const result = await SetCellComment({path: table!.path, rowID, column, comment}) as {table: TableDocument; workspace: WorkspaceView};
+            const result = await SetCellComment({path: table!.path, rowID, column, comment});
             updateTable(result.table);
             publishWorkspace(result.workspace);
         } catch (reason) {
@@ -533,7 +532,7 @@ function App() {
         setCellError(null);
         try {
             if (dialog.mode === "displayName") {
-                const result = await SetColumnDisplayName({path: table.path, column: dialog.name, displayName: dialog.second}) as {table: TableDocument; workspace: WorkspaceView};
+                const result = await SetColumnDisplayName({path: table.path, column: dialog.name, displayName: dialog.second});
                 updateTable(result.table);
                 publishWorkspace(result.workspace);
                 setDialog(null);
@@ -541,7 +540,7 @@ function App() {
             }
             let schemaExpression = dialog.schema;
             if ((dialog.mode === "add" || dialog.mode === "schema") && !dialog.custom) {
-                schemaExpression = await PrintSchema((dialog.node ?? {kind: "string"}) as unknown as schemamodel.Node);
+                schemaExpression = await PrintSchema(dialog.node ?? {kind: "string"});
             }
             let result;
             if (dialog.mode === "add") {
@@ -557,8 +556,8 @@ function App() {
             } else {
                 result = await DeleteColumn({path: table.path, name: dialog.name});
             }
-            updateTable(result.table as TableDocument);
-            publishWorkspace(result.workspace as WorkspaceView);
+            updateTable(result.table);
+            publishWorkspace(result.workspace);
             setDialog(null);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
@@ -573,8 +572,8 @@ function App() {
         setCellError(null);
         try {
             const result = await DeleteRow({path: table.path, rowID});
-            updateTable(result.table as TableDocument);
-            publishWorkspace(result.workspace as WorkspaceView);
+            updateTable(result.table);
+            publishWorkspace(result.workspace);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         }
@@ -585,8 +584,8 @@ function App() {
         setError("");
         try {
             const result = await CreateTable(tableDialog);
-            publishWorkspace(result.workspace as WorkspaceView);
-            addTableTab(result.table.path, result.table as TableDocument);
+            publishWorkspace(result.workspace);
+            addTableTab(result.table.path, result.table);
             setTableDialog(null);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
@@ -599,8 +598,8 @@ function App() {
         try {
             const result = redo ? await Redo() : await Undo();
             if (!isCurrent(request)) return;
-            if (!publishWorkspace(result.workspace as WorkspaceView, request)) return;
-            await refreshOpenTabs(request, result.workspace as WorkspaceView, {table:async path => await GetTable(path) as TableDocument, schema:async path => await GetPublicSchema(path) as PublicSchemaDocument});
+            if (!publishWorkspace(result.workspace, request)) return;
+            await refreshOpenTabs(request, result.workspace, {table:async path => await GetTable(path), schema:async path => await GetPublicSchema(path)});
         } catch (reason) {
             if (!isCurrent(request)) return;
             setError(reason instanceof Error ? reason.message : String(reason));
@@ -611,7 +610,7 @@ function App() {
         setError("");
         setNotice("");
         try {
-            const result = await Export() as {directory: string; files: string[]};
+            const result = await Export();
             setExportResult(result);
             void OpenPath(result.directory).catch(() => undefined);
         } catch (reason) {
@@ -624,7 +623,7 @@ function App() {
         setError("");
         try {
             const mode = workspace.compile.mode === "auto" ? "manual" : "auto";
-            const view = await SetCompileMode(mode) as WorkspaceView;
+            const view = await SetCompileMode(mode);
             publishWorkspace(view);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
@@ -635,10 +634,10 @@ function App() {
         if (!workspace) return;
         setError("");
         try {
-            const result = await Compile() as {workspace: WorkspaceView};
+            const result = await Compile();
             publishWorkspace(result.workspace);
             if (table) {
-                updateTable(await GetTable(table.path) as TableDocument);
+                updateTable(await GetTable(table.path));
             }
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
@@ -716,7 +715,7 @@ function App() {
                         {tabs.map((tab) => (
                             <div key={tab.id} className="tab-panel" style={{display: tab.id === activeTabId && !selectedSchema ? "flex" : "none"}}>
                                 {tab.kind === "table"
-                                     ? <TableGrid key={tab.id} active={tab.id === activeTabId && !selectedSchema} table={tab.table} formats={exportFormats} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", node: {kind: "string"}, custom: false})} onSetColumnDisplayName={(name) => setDialog({mode: "displayName", name, second: tab.table.columns.find((column) => column.name === name)?.displayName ?? "", schema: ""})} onSetColumnWidth={async (column, width) => { const result = await SetColumnWidth({path: tab.table.path, column, width}); updateTable(result.table as TableDocument); publishWorkspace(result.workspace as WorkspaceView); }} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), node: tab.table.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onSaveComment={saveCellComment} onSaveExportSettings={saveTableExportSettings} onNavigate={navigateTo} onOpenSchemaReference={(reference) => { const localName = reference.startsWith("_local.#") ? reference.slice("_local.".length) : ""; const definition = schemaDefinitions(workspace).find((entry) => entry.id === reference || (localName && entry.id.endsWith("._local." + localName))); if (definition) void openSchemaByPath(definition.path, definition.id.split(".#")[1], !!definition.table); }} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/>
+                                     ? <TableGrid key={tab.id} active={tab.id === activeTabId && !selectedSchema} table={tab.table} formats={exportFormats} onAddColumn={(position) => setDialog({mode: "add", name: "", second: String(position), schema: "string", node: {kind: "string"}, custom: false})} onSetColumnDisplayName={(name) => setDialog({mode: "displayName", name, second: tab.table.columns.find((column) => column.name === name)?.displayName ?? "", schema: ""})} onSetColumnWidth={async (column, width) => { const result = await SetColumnWidth({path: tab.table.path, column, width}); updateTable(result.table); publishWorkspace(result.workspace); }} onDeleteColumn={(name) => setDialog({mode: "delete", name, second: "", schema: ""})} onDeleteRow={deleteRow} onEditColumnSchema={(name, schemaExpression) => setDialog({mode: "schema", name, second: "", schema: schemaExpression.replaceAll("_local.#", "#"), node: tab.table.columns.find((column) => column.name === name)?.schema ?? {kind: "string"}, custom: false})} onMoveColumn={(name) => setDialog({mode: "move", name, second: "0", schema: ""})} onRenameColumn={(name) => setDialog({mode: "rename", name, second: "", schema: ""})} onPaste={pasteCells} onSaveInput={saveCellInput} onSaveComment={saveCellComment} onSaveExportSettings={saveTableExportSettings} onNavigate={navigateTo} onOpenSchemaReference={(reference) => { const localName = reference.startsWith("_local.#") ? reference.slice("_local.".length) : ""; const definition = schemaDefinitions(workspace).find((entry) => entry.id === reference || (localName && entry.id.endsWith("._local." + localName))); if (definition) void openSchemaByPath(definition.path, definition.id.split(".#")[1], !!definition.table); }} focusTarget={focusTarget} onFocusDone={() => setFocusTarget(null)}/>
                                      : <SchemaEditor key={tab.id} state={tab.state} usages={schemaUsages} onOpenUsage={openUsage} workspace={workspace} onSelect={(name) => updateSchemaTabById(tab.id, {...tab.state, selected: name, creating: false})} onCreate={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(true, name, kind, type, appliesTo, expression)} onApply={(name, kind, type, appliesTo, expression) => saveSchemaDefinition(false, name, kind, type, appliesTo, expression)} onRename={renameSchemaDefinition} onDelete={deleteSchemaDefinition} onOpenSchemaReference={(reference) => { const localName = reference.startsWith("_local.#") ? reference.slice("_local.".length) : ""; const definition = schemaDefinitions(workspace).find((entry) => entry.id === reference || (localName && entry.id.endsWith("._local." + localName))); if (definition) void openSchemaByPath(definition.path, definition.id.split(".#")[1], !!definition.table); }}/>}
                             </div>
                         ))}
