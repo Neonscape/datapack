@@ -33,6 +33,13 @@ func snapshotRenameFiles(paths ...string) (map[string][]byte, error) {
 		if _, exists := snapshot[path]; exists {
 			continue
 		}
+		info, inspectErr := os.Lstat(path)
+		if inspectErr != nil && !os.IsNotExist(inspectErr) {
+			return nil, fmt.Errorf("inspect snapshot source %q: %w", path, inspectErr)
+		}
+		if inspectErr == nil && !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("snapshot source %q is not a regular file; symlinks are unsupported", path)
+		}
 		content, err := os.ReadFile(path)
 		if err != nil && !os.IsNotExist(err) {
 			return nil, fmt.Errorf("snapshot rename source %q: %w", path, err)
@@ -59,10 +66,11 @@ type tableRenameTransaction struct {
 	modes    map[string]os.FileMode
 	rename   func(string, string) error
 	moves    []renameMove
+	restore  func(string, []byte) error
 }
 
 func newTableRenameTransaction(snapshot map[string][]byte, rename func(string, string) error) (*tableRenameTransaction, error) {
-	t := &tableRenameTransaction{snapshot: snapshot, modes: map[string]os.FileMode{}, rename: rename}
+	t := &tableRenameTransaction{snapshot: snapshot, modes: map[string]os.FileMode{}, rename: rename, restore: writeFileAtomic}
 	for path, content := range snapshot {
 		if content == nil {
 			continue
@@ -71,7 +79,7 @@ func newTableRenameTransaction(snapshot map[string][]byte, rename func(string, s
 		if err != nil {
 			return nil, fmt.Errorf("snapshot rename permissions %q: %w", path, err)
 		}
-		t.modes[path] = info.Mode().Perm()
+		t.modes[path] = sourcePermissionMode(info.Mode())
 	}
 	return t, nil
 }
@@ -105,10 +113,10 @@ func (t *tableRenameTransaction) rollback() error {
 			err = os.Remove(path)
 		} else {
 			if err != nil || !bytes.Equal(current, before) {
-				err = writeFileAtomic(path, before)
+				err = t.restore(path, before)
 			}
 			if err == nil {
-				err = os.Chmod(path, t.modes[path])
+				err = preserveSourceMode(path, t.modes[path])
 			}
 		}
 		if err != nil {

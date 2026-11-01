@@ -228,11 +228,14 @@ func replaceAllWithOps(paths []string, candidates, originals map[string][]byte, 
 		}
 	}()
 	for _, path := range paths {
-		info, err := os.Stat(path)
+		info, err := os.Lstat(path)
 		if err != nil {
 			return fmt.Errorf("stat renamed table: %w", err)
 		}
-		modes[path] = info.Mode().Perm()
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("rename source %q is not a regular file; symlinks are unsupported", path)
+		}
+		modes[path] = info.Mode() & (os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky)
 		staged, err := stageSource(path, candidates[path], modes[path])
 		if err != nil {
 			return fmt.Errorf("stage renamed table: %w", err)

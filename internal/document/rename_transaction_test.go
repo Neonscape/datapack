@@ -109,3 +109,29 @@ func TestReplaceAllReportsRollbackFailureAndRetainsOriginalBytes(t *testing.T) {
 		t.Fatal("uncommitted source changed")
 	}
 }
+
+func TestReplaceAllKeepsSpecialPermissionBits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "source.cue")
+	if err := os.WriteFile(path, []byte("original"), 0640); err != nil {
+		t.Fatal(err)
+	}
+	wanted := os.FileMode(0640) | os.ModeSetgid | os.ModeSticky
+	if err := os.Chmod(path, wanted); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mask := os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky
+	if info.Mode()&mask != wanted {
+		t.Skip("filesystem does not retain tested special mode")
+	}
+	if err := replaceAll([]string{path}, map[string][]byte{path: []byte("candidate")}, map[string][]byte{path: []byte("original")}); err != nil {
+		t.Fatal(err)
+	}
+	info, err = os.Stat(path)
+	if err != nil || info.Mode()&mask != wanted {
+		t.Fatalf("special mode lost: %v %v", info, err)
+	}
+}

@@ -1205,6 +1205,7 @@ func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaE
 	}
 	var paths []string
 	collectSourcePaths(s.current.Tree.Root, &paths)
+	paths = append(paths, rename.Path)
 	result, view, err := editSources(s, paths, func() (SchemaEditResult, error) {
 		var result SchemaEditResult
 		if scope == "public" {
@@ -2005,9 +2006,13 @@ func (s *Service) restoreSnapshot(snapshot map[string][]byte) error {
 }
 
 func writeFileAtomic(path string, content []byte) error {
+	return writeFileAtomicWithRename(path, content, os.Rename)
+}
+
+func writeFileAtomicWithRename(path string, content []byte, rename func(string, string) error) error {
 	mode := os.FileMode(0600)
 	if info, err := os.Stat(path); err == nil {
-		mode = info.Mode().Perm()
+		mode = sourcePermissionMode(info.Mode())
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -2016,12 +2021,17 @@ func writeFileAtomic(path string, content []byte) error {
 		return err
 	}
 	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(mode); err != nil {
+	retainRecovery := false
+	defer func() {
+		if !retainRecovery {
+			os.Remove(temporaryPath)
+		}
+	}()
+	if _, err := temporary.Write(content); err != nil {
 		temporary.Close()
 		return err
 	}
-	if _, err := temporary.Write(content); err != nil {
+	if err := temporary.Chmod(mode); err != nil {
 		temporary.Close()
 		return err
 	}
@@ -2032,7 +2042,11 @@ func writeFileAtomic(path string, content []byte) error {
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	return os.Rename(temporaryPath, path)
+	if err := rename(temporaryPath, path); err != nil {
+		retainRecovery = true
+		return fmt.Errorf("restore failed; recovery bytes retained at %q: %w", temporaryPath, err)
+	}
+	return nil
 }
 
 func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
