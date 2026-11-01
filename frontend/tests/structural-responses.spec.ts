@@ -9,7 +9,7 @@ import type {TableDocument,WorkspaceView,PublicSchemaDocument} from "../src/type
 type Result={table:TableDocument;workspace:WorkspaceView};
 type History={workspace:WorkspaceView};
 type Fixture={Mode:"manual"|"auto";Deleted:string;Before:TableDocument;RawBefore:TableDocument;View:WorkspaceView;Schema:PublicSchemaDocument;Result:Result;Fresh:TableDocument;Undo:History;UndoTable:TableDocument;Redo:History;RedoTable:TableDocument;Width:Result;SourceAfter:string};
-type State={calls:{method:string;rowID?:string;column?:string;expression?:string}[];resolveWidth?:(value:Result)=>void;fixture:Fixture};
+type State={draws:{text:string;x:number;y:number}[];calls:{method:string;rowID?:string;column?:string;expression?:string}[];resolveWidth?:(value:Result)=>void;fixture:Fixture};
 declare global{interface Window{__structuralResponse:State}}
 declare const process:{cwd():string;env:Record<string,string|undefined>};
 let fixtures:Fixture[];
@@ -22,7 +22,12 @@ test.beforeAll(()=>{
 async function point(page:Page,column:number,row=0){const box=await page.locator(".tab-panel:visible canvas").first().boundingBox();expect(box).not.toBeNull();return{x:box!.x+(column===0?85:225+170*(column-1)),y:box!.y+50+30*row};}
 async function boot(page:Page,fixture:Fixture,raw=false){
  await page.addInitScript(({fixture,raw})=>{
-  let table=raw?fixture.RawBefore:fixture.Before;const state:State={calls:[],fixture};window.__structuralResponse=state;
+  let table=raw?fixture.RawBefore:fixture.Before;const state:State={draws:[],calls:[],fixture};window.__structuralResponse=state;
+  const draw=CanvasRenderingContext2D.prototype.fillText;
+  CanvasRenderingContext2D.prototype.fillText=function(text,x,y,maxWidth){
+   if(this.canvas instanceof HTMLCanvasElement&&this.canvas.isConnected){const rect=this.canvas.getBoundingClientRect();if(rect.width&&rect.height){const matrix=this.getTransform();state.draws.push({text,x:rect.x+(matrix.a*x+matrix.c*y+matrix.e)/(this.canvas.width/rect.width),y:rect.y+(matrix.b*x+matrix.d*y+matrix.f)/(this.canvas.height/rect.height)});}}
+   if(maxWidth===undefined)draw.call(this,text,x,y);else draw.call(this,text,x,y,maxWidth);
+  };
   (window as unknown as Window&{go:unknown}).go={main:{App:{GetSettings:async()=>({language:"en",theme:"light"}),GetExportFormats:async()=>[],SelectProject:async()=>fixture.View,GetTable:async()=>structuredClone(table),GetPublicSchema:async()=>fixture.Schema,
    DeleteRow:async({rowID}:{rowID:string})=>{state.calls.push({method:"DeleteRow",rowID});table=fixture.Result.table;return structuredClone(fixture.Result);},
    Undo:async()=>{state.calls.push({method:"Undo"});table=fixture.UndoTable;return structuredClone(fixture.Undo);},Redo:async()=>{state.calls.push({method:"Redo"});table=fixture.RedoTable;return structuredClone(fixture.Redo);},
@@ -35,11 +40,14 @@ async function boot(page:Page,fixture:Fixture,raw=false){
  await page.goto("/");await page.getByRole("button",{name:"File",exact:true}).click();await page.getByLabel("Application menu").getByRole("button",{name:"Open project",exact:true}).click();
  await page.getByRole("button",{name:"Expand game",exact:true}).click();await page.getByRole("button",{name:"Expand Tables",exact:true}).click();await page.getByRole("button",{name:"items",exact:true}).click();
 }
-async function expectFormula(page:Page){const p=await point(page,2);await page.mouse.click(p.x,p.y);await expect(page.locator(".formula-bar-input")).toHaveValue("=amount * 2");}
+async function expectFormula(page:Page,row=0){const p=await point(page,2,row);await page.mouse.click(p.x,p.y);await expect(page.locator(".formula-bar-input")).toHaveValue("=amount * 2");}
 for(const mode of ["manual","auto"] as const)for(const deleted of ["a","b","c"])test(`deleting ${deleted} retains actual Service formula cells in ${mode}`,async({page})=>{
  const fixture=fixtures.find(f=>f.Mode===mode&&f.Deleted===deleted)!;await boot(page,fixture);
  const row=fixture.Before.rows.findIndex(r=>r.id===deleted);const p=await point(page,0,row);const canvas=await page.locator(".tab-panel:visible canvas").first().boundingBox();await page.mouse.click(canvas!.x+16,p.y,{button:"right"});await page.getByRole("button",{name:"Delete row",exact:true}).click();
- await expect(page.locator(".table-document-header")).toContainText("2 rows");await expectFormula(page);
+ await expect(page.locator(".table-document-header")).toContainText("2 rows");
+ const targetRow=deleted==="b"?1:0;await page.evaluate(()=>window.__structuralResponse.draws=[]);await expectFormula(page,targetRow);
+ const drawn=await point(page,2,targetRow);const expected=fixture.Fresh.rows[targetRow].values.total.display;
+ await expect.poll(()=>page.evaluate(({expected,drawn})=>window.__structuralResponse.draws.some(d=>d.text===expected&&Math.abs(d.x-drawn.x)<85&&Math.abs(d.y-drawn.y)<16),{expected,drawn})).toBe(true);
  await page.getByRole("button",{name:"Settings",exact:true}).click();await page.locator(".structure-dialog select").first().selectOption("zh-CN");await page.getByRole("button",{name:"应用",exact:true}).click();await expectFormula(page);
  for(const action of ["撤销","重做"]){await page.getByRole("button",{name:"编辑",exact:true}).click();await page.getByRole("button",{name:new RegExp(`^${action}`)}).click();await expectFormula(page);}
  expect(await page.evaluate(()=>window.__structuralResponse.calls.some(c=>c.method==="ClearCell"))).toBe(false);
