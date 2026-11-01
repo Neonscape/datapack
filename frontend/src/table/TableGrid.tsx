@@ -6,9 +6,11 @@ import {useTranslation} from "../i18n";
 import {useTheme} from "../theme";
 import {TableExportSettings as TableExportSettingsPanel} from "./TableExportSettings";
 import type {ExportFormat, NavRequest, TableDocument, TableExportSettings as TableExportSettingsModel} from "../types";
+import {useRowDraft} from "./useRowDraft";
+import {cellWithinBounds, rangeWithinBounds, clipboardRange} from "./selection";
+import {ownsGridEvent} from "./eventOwnership";
 import {arrayEntries, structValues} from "./valueCodecs";
 
-type DraftRow = { id: string; values: Record<string, string> };
 type EnumCell = CustomCell<{kind: "enum"; value: string; options: string[]}>;
 type InlineEditor = { column: number; row: number; value: string; bounds: {x: number; y: number; width: number; height: number} };
 type ForeignKeyEditor = InlineEditor & {options: string[]; target: string};
@@ -29,8 +31,9 @@ const enumRenderer: CustomRenderer<EnumCell> = {
 export function TableGrid({active, table, formats, onAddColumn, onSetColumnDisplayName, onSetColumnWidth, onDeleteColumn, onDeleteRow, onEditColumnSchema, onMoveColumn, onRenameColumn, onPaste, onSaveInput, onSaveComment, onSaveExportSettings, onNavigate, onOpenSchemaReference, focusTarget, onFocusDone}: { active: boolean; table: TableDocument; formats: ExportFormat[]; onAddColumn: (position: number) => void; onSetColumnDisplayName: (column: string) => void; onSetColumnWidth: (column: string, width: number) => Promise<void>; onDeleteColumn: (column: string) => void; onDeleteRow: (rowID: string) => void; onEditColumnSchema: (column: string, schemaExpression: string) => void; onMoveColumn: (column: string) => void; onRenameColumn: (column: string) => void; onPaste: (row: number, column: number, text: string) => Promise<void>; onSaveInput: (rowID: string, column: string, input: string) => Promise<void>; onSaveComment: (rowID: string, column: string, comment: string) => Promise<void>; onSaveExportSettings: (settings: TableExportSettingsModel) => Promise<void>; onNavigate: (request: NavRequest, position: {x: number; y: number}) => void; onOpenSchemaReference: (reference: string) => void; focusTarget: {path: string; rowID: string; column: string; nonce: number} | null; onFocusDone: () => void }) {
     const {t} = useTranslation();
     const {grid, dataGridTheme} = useTheme();
-    const [draft, setDraft] = useState<DraftRow>({id: "", values: {}});
-    const [draftError, setDraftError] = useState("");
+    const {draft,error:draftError,edit:editDraft} = useRowDraft(id=>table.rows.some(row=>row.id===id),
+        (id,values,formulas)=>onSaveInput(id,"__create__",JSON.stringify({values,formulas})),
+        {duplicate:t("grid.idExists"),invalid:t("grid.idInvalid")});
     const [contextRow, setContextRow] = useState<number | null>(null);
     const [contextCell, setContextCell] = useState<{column: number; row: number} | null>(null);
     const [menu, setMenu] = useState<{x: number; y: number; fixed?: boolean} | null>(null);
@@ -58,7 +61,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         ...table.columns.map((column) => ({id: column.name, title: column.displayName ? `${column.displayName} (${column.name})` : column.name, width: columnWidths[column.name] ?? column.width ?? 170})),
     ];
     const isDraft = (row: number) => row === table.rows.length;
-    const cellInBounds = (column: number, row: number) => column >= 0 && column < columns.length && row >= 0 && row <= table.rows.length;
+    const cellInBounds = (column: number, row: number) => cellWithinBounds(column,row,columns.length,table.rows.length);
     // A structure edit can invalidate a retained coordinate before effects run.
     const selectedCell = selectedCellState && cellInBounds(selectedCellState.column, selectedCellState.row) ? selectedCellState : null;
     useEffect(() => {
@@ -70,8 +73,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         setGridSelection((selection) => {
             const current = selection.current;
             const validCurrent = !current || (cellInBounds(...current.cell)
-                && cellInBounds(current.range.x, current.range.y)
-                && cellInBounds(current.range.x + current.range.width - 1, current.range.y + current.range.height - 1));
+                && rangeWithinBounds(current.range,columns.length,table.rows.length));
             const validColumns = selection.columns.toArray().filter((column) => column >= 0 && column < columns.length);
             const validRows = selection.rows.toArray().filter((row) => row >= 0 && row <= table.rows.length);
             if (validCurrent && validColumns.length === selection.columns.length && validRows.length === selection.rows.length) return selection;
@@ -175,9 +177,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         const element = gridRef.current;
         if (!active || !element) return;
         const navigateShortcut = (event: KeyboardEvent) => {
-            if (event.key !== "F12" || event.defaultPrevented || !selectedCell || !element.contains(document.activeElement)) return;
-            const target = event.target;
-            if (!(target instanceof Element) || target.closest("textarea, input, select") || (target instanceof HTMLElement && target.isContentEditable)) return;
+            if (event.key !== "F12" || !selectedCell || !ownsGridEvent(active,element,event,document.activeElement)) return;
             const request = navigationRequestForCell(selectedCell.column, selectedCell.row);
             if (!request) return;
             event.preventDefault();
@@ -269,34 +269,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         const input = value.kind === GridCellKind.Custom && enumValue.data.kind === "enum" ? JSON.stringify(enumValue.data.value) : value.kind === GridCellKind.Boolean ? value.data ? "true" : "false" : value.kind === GridCellKind.Text ? value.data.trim() : null;
         if (input === null) return;
         if (isDraft(row)) {
-            const next = column === 0 ? {id: input, values: draft.values} : {id: draft.id, values: {...draft.values, [table.columns[column - 1].name]: input}};
-            if (column !== 0 && input === "") delete next.values[table.columns[column - 1].name];
-            const duplicate = table.rows.some((existing) => existing.id === next.id);
-            if (next.id !== "" && (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(next.id) || duplicate)) {
-                setDraft(next);
-                setDraftError(duplicate ? t("grid.idExists") : t("grid.idInvalid"));
-                return;
-            }
-            const hasValues = Object.values(next.values).some((entry) => entry !== "");
-            if (next.id !== "" && hasValues) {
-                const values: Record<string, string> = {};
-                const formulas: Record<string, string> = {};
-                for (const [name, expression] of Object.entries(next.values)) {
-                    if (expression.startsWith("=")) formulas[name] = expression.slice(1).trim();
-                    else values[name] = expression;
-                }
-                try {
-                    await onSaveInput(next.id, "__create__", JSON.stringify({values, formulas}));
-                    setDraft({id: "", values: {}});
-                    setDraftError("");
-                } catch (reason) {
-                    setDraft(next);
-                    setDraftError(reason instanceof Error ? reason.message : String(reason));
-                }
-                return;
-            }
-            setDraft(next);
-            setDraftError("");
+            await editDraft(column===0 ? {kind:"id"} : {kind:"cell",name:table.columns[column-1].name},input);
             return;
         }
         const source = table.rows[row];
@@ -358,25 +331,13 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         setStructEditor(null);
         void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: `{${entries.join(", ")}}`, displayData: ""});
     };
-    const selectedRange = () => {
-        const current = gridSelection.current?.cell;
-        if (!current || current[0] === 0 || current[1] >= table.rows.length) return null;
-        const range = gridSelection.current?.range;
-        const x = range?.x ?? current[0];
-        const y = range?.y ?? current[1];
-        const width = range?.width ?? 1;
-        const height = range?.height ?? 1;
-        if (x === 0 || x + width > table.columns.length + 1 || y + height > table.rows.length) return null;
-        return {x, y, width, height};
-    };
+    const selectedRange = () => clipboardRange(gridSelection.current,columns.length,table.rows.length);
     useEffect(() => {
         const element = gridRef.current;
         // Inactive tabs stay mounted to preserve their selections, but never own the clipboard.
         if (!active || !element) return;
         const clipboard = (event: ClipboardEvent) => {
-            if (event.defaultPrevented || !element.contains(document.activeElement)) return;
-            const target = event.target;
-            if (!(target instanceof Element) || target.closest("textarea, input, select") || (target instanceof HTMLElement && target.isContentEditable)) return;
+            if (!ownsGridEvent(active,element,event,document.activeElement)) return;
             const range = selectedRange();
             if (!range) return;
             if (event.type === "copy") {
