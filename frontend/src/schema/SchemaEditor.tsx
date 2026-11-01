@@ -1,8 +1,7 @@
 import {schemaDefinitionContent} from "./definitionContent";
 import {displayLabel} from "../tree/displayLabel";
 import {useEffect, useState} from "react";
-import {PrintSchema} from "../../wailsjs/go/main/App";
-import {schemamodel} from "../../wailsjs/go/models";
+import {PrintSchema} from "../bridge";
 import {useTranslation} from "../i18n";
 import type {SchemaEditorState, SchemaNode, SchemaUsage, WorkspaceView} from "../types";
 import {schemaTypeReferenceOptions} from "./refs";
@@ -73,7 +72,7 @@ export function SchemaEditor({state, usages, onOpenUsage, onSelect, workspace, o
         setEditorError("");
         try {
             const appliesTo = draft.appliesTo.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
-            const expression = draft.custom ? draft.expression : await PrintSchema(draft.node as unknown as schemamodel.Node);
+            const expression = draft.custom ? draft.expression : await PrintSchema(draft.node);
             if (creating) await onCreate(draft.name, draft.kind, draft.type, appliesTo, expression);
             else await onApply(draft.name, draft.kind, draft.type, appliesTo, expression);
         } catch (reason) {
