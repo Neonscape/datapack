@@ -352,3 +352,38 @@ _local:{#Other:#Old}`)
 		t.Fatal("rejected split scope changed source")
 	}
 }
+
+func TestSchemaRenameRejectsSplitDeclarationInOneFile(t *testing.T) {
+	for _, local := range []bool{false, true} {
+		t.Run(map[bool]string{false: "public", true: "local"}[local], func(t *testing.T) {
+			source := `package common
+#Old:int
+#Old:>=0
+_schema:{definitions:{Old:{kind:"type",type:"integer"}}}`
+			if local {
+				source = `package item
+#PrimaryKey:string
+#Row:{value:_local.#Old}
+rows:{one:{value:1}}
+_local:{#Old:int,#Old:>=0}
+_schema:{localDefinitions:{Old:{kind:"type",type:"integer"}}}
+_tool:{table:{namespace:"game",name:"item"}}`
+			}
+			path := writeSource(t, "source.cue", source)
+			assertScopePackageCompiles(t, path)
+			var err error
+			if local {
+				_, err = RenameLocalSchemaDefinition(path, "Old", "New", nil)
+			} else {
+				_, err = RenamePublicSchemaDefinition(path, "Old", "New", nil)
+			}
+			if err == nil || !strings.Contains(err.Error(), "split") {
+				t.Fatalf("split declaration accepted: %v", err)
+			}
+			after, _ := os.ReadFile(path)
+			if string(after) != source {
+				t.Fatal("split declaration changed source")
+			}
+		})
+	}
+}

@@ -24,6 +24,28 @@ func renameBoundSchemaReferences(files map[string]*ast.File, path, oldName, newN
 		localValue = fields["_local"].Value
 		declaration = fieldsOfStruct(localValue)["#"+oldName]
 	}
+	declarations := target.Decls
+	if local {
+		declarations = localValue.(*ast.StructLit).Elts
+		localDeclarations := 0
+		for _, decl := range target.Decls {
+			if field, ok := decl.(*ast.Field); ok && labelOf(field) == "_local" {
+				localDeclarations++
+			}
+		}
+		if localDeclarations != 1 {
+			return fmt.Errorf("cannot rename a local Schema in a split _local declaration")
+		}
+	}
+	declarationCount := 0
+	for _, decl := range declarations {
+		if field, ok := decl.(*ast.Field); ok && labelOf(field) == "#"+oldName {
+			declarationCount++
+		}
+	}
+	if declarationCount != 1 {
+		return fmt.Errorf("cannot rename a Schema with split declarations")
+	}
 	packageDecl := packageOfFile(target)
 	if packageDecl == nil || packageDecl.Name == nil {
 		return fmt.Errorf("Schema source must declare a package")
