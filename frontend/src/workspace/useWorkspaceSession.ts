@@ -1,92 +1,167 @@
-import {schemaDefinitionContent} from "../schema/definitionContent";
-import {useState} from "react";
-import type {PublicSchemaDocument, SchemaDefinition, SchemaEditorState, TableDocument, WorkspaceView} from "../types";
+import {useRef, useState} from "react";
+import type {SchemaDefinition, SchemaEditorState, TableDocument, WorkspaceView} from "../types";
+import {containsPath, tabPath, withTabs, reconcilePeek, type OpenTab, type SessionState} from "./sessionState";
+import {readTab, type TabReader} from "./tabRead";
+export {refreshSchemaState} from "./sessionState";
+export type {OpenTab} from "./sessionState";
 
-export type OpenTab =
-    | {id: string; kind: "table"; path: string; table: TableDocument}
-    | {id: string; kind: "schema"; state: SchemaEditorState};
-
-// A metadata-only refresh keeps selection and creation state, as well as the
-// editor's local draft. Semantic changes still reconcile a removed selection.
-export function refreshSchemaState(state: SchemaEditorState, definitions: SchemaEditorState["definitions"], metadata: Pick<SchemaEditorState, "displayName" | "logicalTable" | "package">): SchemaEditorState {
-    const unchanged = schemaDefinitionContent(state.definitions) === schemaDefinitionContent(definitions);
-    return {...state, ...metadata, definitions,
-        selected: unchanged ? state.selected : definitions.some((entry) => entry.name === state.selected) ? state.selected : definitions[0]?.name ?? null,
-        creating: unchanged ? state.creating : false};
-}
+type SessionRequest = {project: number; scope: string; serial: number; focus: number; view: number};
 
 export function useWorkspaceSession() {
-    const [workspace, setWorkspace] = useState<WorkspaceView | null>(null);
-    const [tabs, setTabs] = useState<OpenTab[]>([]);
-    const [activeTabId, setActiveTabId] = useState<string | null>(null);
-    const [selectedSchema, setSelectedSchema] = useState<SchemaDefinition | null>(null);
-    const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
+    const [state, setState] = useState<SessionState>({workspace:null,tabs:[],activeTabId:null,selectedSchema:null});
+    const generation = useRef(0);
+    const requests = useRef(new Map<string, number>());
+    const focus = useRef(0);
+    const publication = useRef(0);
+    const projectPath = useRef("");
+    const {workspace, tabs, activeTabId, selectedSchema} = state;
+    const activeTab = tabs.find(tab => tab.id === activeTabId) ?? null;
     const table = activeTab?.kind === "table" ? activeTab.table : null;
     const schemaDocument = activeTab?.kind === "schema" ? activeTab.state : null;
 
-    function activateTab(id: string) {
-        setActiveTabId(id);
-        setSelectedSchema(null);
+    function beginRequest(scope: string): SessionRequest {
+        const serial = (requests.current.get(scope) ?? 0) + 1;
+        requests.current.set(scope, serial);
+        return {project:generation.current,scope,serial,view:publication.current,focus:scope.startsWith("open:") ? ++focus.current : focus.current};
     }
-
+    function isCurrent(request: SessionRequest) {
+        return request.project === generation.current && request.serial === requests.current.get(request.scope)
+            && (request.scope !== "history" || request.view === publication.current);
+    }
+    function publishWorkspace(view: WorkspaceView, request?: SessionRequest) {
+        if (request && !isCurrent(request)) return false;
+        if (projectPath.current && view.project?.path && projectPath.current !== view.project.path) return false;
+        const project = generation.current;
+        ++publication.current;
+        if (request) request.view = publication.current;
+        setState(current => {
+            if (project !== generation.current || request && !isCurrent(request)) return current;
+            return {...current,workspace:view,selectedSchema:reconcilePeek(current.selectedSchema,view)};
+        });
+        return true;
+    }
+    function invalidateDocument(path: string) {
+        for (const kind of ["table","schema"]) {
+            const scope = `open:${kind}:${path}`;
+            requests.current.set(scope,(requests.current.get(scope) ?? 0)+1);
+        }
+    }
+    function selectSchema(value: SchemaDefinition | null) {
+        ++focus.current;
+        setState(current => ({...current,selectedSchema:value}));
+    }
+    function activateTab(id: string) {
+        ++focus.current;
+        setState(current => current.tabs.some(tab => tab.id === id) ? {...current,activeTabId:id,selectedSchema:null} : current);
+    }
     function closeTab(id: string) {
-        setTabs((current) => {
-            const index = current.findIndex((tab) => tab.id === id);
+        requests.current.set(`open:${id}`, (requests.current.get(`open:${id}`) ?? 0) + 1);
+        setState(current => {
+            const index = current.tabs.findIndex(tab => tab.id === id);
             if (index < 0) return current;
-            const next = current.filter((tab) => tab.id !== id);
-            if (id === activeTabId) setActiveTabId(next[Math.min(index, next.length - 1)]?.id ?? null);
-            return next;
+            const next = current.tabs.filter(tab => tab.id !== id);
+            return {...current,tabs:next,activeTabId:current.activeTabId === id ? next[Math.min(index,next.length-1)]?.id ?? null : current.activeTabId};
         });
     }
-
-    function updateActiveTable(document: TableDocument) {
-        setTabs((current) => current.map((tab) => tab.id === activeTabId && tab.kind === "table" ? {...tab, table: document} : tab));
+    function updateTable(document: TableDocument) {
+        invalidateDocument(document.path);
+        setState(current => ({...current,tabs:current.tabs.map(tab => tab.kind === "table" && tab.path === document.path ? {...tab,table:document} : tab)}));
     }
-
-    function updateActiveSchema(state: SchemaEditorState) {
-        setTabs((current) => current.map((tab) => tab.id === activeTabId && tab.kind === "schema" ? {...tab, state} : tab));
+    function updateSchema(value: SchemaEditorState) {
+        updateSchemaTabById(`schema:${value.path}`,value);
     }
-
-    function updateSchemaTabById(id: string, state: SchemaEditorState) {
-        setTabs((current) => current.map((tab) => tab.id === id && tab.kind === "schema" ? {...tab, state} : tab));
+    function updateSchemaTabById(id: string, value: SchemaEditorState) {
+        setState(current => ({...current,tabs:current.tabs.map(tab => tab.id === id && tab.kind === "schema" ? {...tab,state:value} : tab)}));
     }
-
     function updateDisplayName(path: string, definition: string, displayName: string) {
-        const definitions = (entries: TableDocument["localSchema"]) => entries.map((entry) => entry.name === definition ? {...entry, displayName} : entry);
-        setTabs((current) => current.map((tab) => {
-            if (tab.kind === "table") {
-                if (tab.path !== path) return tab;
-                return {...tab, table: definition ? {...tab.table, localSchema: definitions(tab.table.localSchema)} : {...tab.table, displayName}};
+        invalidateDocument(path);
+        const definitions = (entries: TableDocument["localSchema"]) => entries.map(entry => entry.name === definition ? {...entry,displayName} : entry);
+        setState(current => ({...current,tabs:current.tabs.map(tab => {
+            if (tabPath(tab) !== path) return tab;
+            if (tab.kind === "table") return {...tab,table:definition ? {...tab.table,localSchema:definitions(tab.table.localSchema)} : {...tab.table,displayName}};
+            return {...tab,state:definition ? {...tab.state,definitions:definitions(tab.state.definitions)} : {...tab.state,displayName}};
+        })}));
+    }
+    function applyProjectView(view: WorkspaceView, selected: SchemaDefinition | null) {
+        ++generation.current;
+        ++publication.current;
+        projectPath.current = view.project.path;
+        requests.current.clear();
+        ++focus.current;
+        setState({workspace:view,tabs:[],activeTabId:null,selectedSchema:selected});
+    }
+    function addTab(tab: OpenTab, request?: SessionRequest) {
+        if (request && !isCurrent(request)) return;
+        const activate = !request || request.focus === focus.current;
+        if (!request) ++focus.current;
+        setState(current => {
+            if (request && !isCurrent(request)) return current;
+            const next = current.tabs.some(entry => entry.id === tab.id) ? current.tabs : [...current.tabs,tab];
+            return {...current,tabs:next,...activate ? {activeTabId:tab.id,selectedSchema:null} : {}};
+        });
+    }
+    function addTableTab(path: string, document: TableDocument, request?: SessionRequest) {
+        addTab({id:`table:${path}`,kind:"table",path,table:document},request);
+    }
+    function addSchemaTab(path: string, value: SchemaEditorState, request?: SessionRequest) {
+        addTab({id:`schema:${path}`,kind:"schema",state:value},request);
+    }
+    function applyRefresh(request: SessionRequest, opened: OpenTab[], refreshed: OpenTab[], view: WorkspaceView) {
+        if (!isCurrent(request)) return;
+        const originals = new Map(opened.map(tab => [tab.id,tab]));
+        const results = new Map(refreshed.map(tab => [tab.id,tab]));
+        setState(current => {
+            if (!isCurrent(request)) return current;
+            const next = current.tabs.flatMap(tab => {
+                // A close/reopen, edit, selection, rename or new tab after the
+                // read started owns its state; a stale snapshot cannot replace it.
+                if (originals.get(tab.id) !== tab) return [tab];
+                if (!containsPath(view.tree.root,tabPath(tab))) return [];
+                return [results.get(tab.id) ?? tab];
+            });
+            return withTabs(current,next);
+        });
+    }
+    async function refreshOpenTabs(request: SessionRequest, view: WorkspaceView, reader: TabReader) {
+        const opened = tabs;
+        const refreshed: OpenTab[] = [];
+        for (const tab of opened) {
+            if (!isCurrent(request)) return;
+            try {
+                refreshed.push(await readTab(tab, reader));
+            } catch {
+                // A read failure does not prove deletion. applyRefresh closes a
+                // tab only when its source is absent from the new project tree.
             }
-            if (tab.state.path !== path) return tab;
-            return {...tab, state: definition ? {...tab.state, definitions: definitions(tab.state.definitions)} : {...tab.state, displayName}};
-        }));
+        }
+        applyRefresh(request, opened, refreshed, view);
     }
-
-    function applyProjectView(view: WorkspaceView) {
-        setWorkspace(view);
-        setTabs([]);
-        setActiveTabId(null);
-        setSelectedSchema(null);
+    function renameTable(path: string, document: TableDocument) {
+        invalidateDocument(path);
+        if (document.path !== path) invalidateDocument(document.path);
+        setState(current => {
+            const next = current.tabs.map(tab => {
+                if (tabPath(tab) !== path) return tab;
+                if (tab.kind === "table") return {id:`table:${document.path}`,kind:"table" as const,path:document.path,table:document};
+                return {...tab,id:`schema:${document.path}`,state:{...tab.state,path:document.path,displayName:document.displayName,logicalTable:document.namespace ? `${document.namespace}.${document.name}` : document.name}};
+            });
+            const active = current.tabs.findIndex(tab => tab.id === current.activeTabId);
+            return {...current,tabs:next,activeTabId:active < 0 ? current.activeTabId : next[active].id};
+        });
     }
-
-    function addTableTab(path: string, document: TableDocument) {
-        const id = `table:${path}`;
-        setTabs((current) => current.some((tab) => tab.id === id) ? current : [...current, {id, kind: "table", path, table: document}]);
-        activateTab(id);
+    function closeDocument(path: string) {
+        invalidateDocument(path);
+        setState(current => withTabs(current,current.tabs.filter(tab => tabPath(tab) !== path)));
     }
-
-    function addSchemaTab(path: string, state: SchemaEditorState) {
-        const id = `schema:${path}`;
-        setTabs((current) => current.some((tab) => tab.id === id) ? current : [...current, {id, kind: "schema", state}]);
-        activateTab(id);
+    function applyDefinitionResult(path: string, tableDefinitions: SchemaEditorState["definitions"], publicDefinitions: SchemaEditorState["definitions"], selected?: string) {
+        invalidateDocument(path);
+        setState(current => ({...current,tabs:current.tabs.map(tab => {
+            if (tab.kind !== "schema" || tab.state.path !== path) return tab;
+            const definitions = tab.state.local ? tableDefinitions : publicDefinitions;
+            return {...tab,state:{...tab.state,definitions,selected:selected ?? definitions[0]?.name ?? null,creating:false}};
+        })}));
     }
-
-    return {
-        workspace, setWorkspace, tabs, setTabs, activeTabId, setActiveTabId, selectedSchema, setSelectedSchema,
-        activeTab, table, schemaDocument, activateTab, closeTab, updateActiveTable, updateActiveSchema,
-        updateSchemaTabById, updateDisplayName, applyProjectView, addTableTab, addSchemaTab,
-    };
+    return {workspace,tabs,activeTabId,selectedSchema,activeTab,table,schemaDocument,publishWorkspace,selectSchema,activateTab,closeTab,updateTable,updateSchema,updateSchemaTabById,updateDisplayName,applyProjectView,addTableTab,addSchemaTab,beginRequest,isCurrent,refreshOpenTabs,renameTable,closeDocument,applyDefinitionResult};
 }
 
 export type WorkspaceSession = ReturnType<typeof useWorkspaceSession>;
