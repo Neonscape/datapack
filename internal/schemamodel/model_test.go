@@ -189,3 +189,14 @@ func MustParse(t *testing.T, expression ast.Expr) Node {
 	}
 	return node
 }
+
+func TestSourcePackageContextDoesNotMutateSharedFields(t *testing.T) {
+	original := Node{Kind: KindStruct, Fields: []Field{{Name: "value", Schema: Node{Kind: KindReference, Reference: "#Value"}}}}
+	bound := original.WithSourcePackage("example.com/game/schema/common@v0:common")
+	if original.Fields[0].Schema.SourcePackage() != "" {
+		t.Fatal("source context mutated original fields")
+	}
+	if bound.Fields[0].Schema.ReferenceID() != "common.#Value" {
+		t.Fatalf("bound reference: %#v", bound.Fields[0].Schema)
+	}
+}

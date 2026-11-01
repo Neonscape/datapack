@@ -8,4 +8,4 @@
 
 没有变化的文件保留原始字节，不顺手格式化或删 import。发生变化的候选先做结构与编辑模型校验，再走现有多文件替换与 workspace 成功刷新后记历史的协议。正常 Undo/Redo 包括所有受影响的源与标题；I/O 补偿、权限与恢复副本的边界见 `source-transactions.md`。这不是崩溃恢复或外部并发事务。
 
-注意：CUE 本身支持 import alias；当前应用的 Schema 索引仍按 package ID 识别部分引用，带别名的表达式可能产生“Schema reference ... does not exist”诊断。改名能够按真实 import 改写，并不代表该索引兼容性缺口已经解决。
+Schema 索引现在也按实际 import 身份识别别名，保留源码表达式，覆盖有效类型、导航、反向引用及删除保护；详见 `schema-imports.md`。仍不宣称支持任意动态/组合的 CUE package 访问。

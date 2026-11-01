@@ -3,6 +3,7 @@ package workspace
 import (
 	"strings"
 
+	"datapack/internal/cuesource"
 	"datapack/internal/document"
 	"datapack/internal/projecttree"
 	"datapack/internal/schemamodel"
@@ -37,7 +38,7 @@ func withForeignKeyOptions(table document.Table, tree projecttree.Tree) document
 // while preserving the original reference in the document model.
 func resolveEffectiveSchema(node schemamodel.Node, logical string, definitions map[string]schemamodel.Node, resolving map[string]bool) schemamodel.Node {
 	if node.Kind == schemamodel.KindReference {
-		id := node.Reference
+		id := node.ReferenceID()
 		if strings.HasPrefix(id, "_local.#") {
 			id = logical + "." + id
 		}
@@ -45,7 +46,7 @@ func resolveEffectiveSchema(node schemamodel.Node, logical string, definitions m
 			return node
 		}
 		resolved, ok := definitions[id]
-		if !ok {
+		if !ok || node.ReferenceImport() != "" && cuesource.CanonicalImport(node.ReferenceImport()) != cuesource.CanonicalImport(resolved.SourcePackage()) {
 			return node
 		}
 		resolving[id] = true
