@@ -10,13 +10,15 @@ import (
 )
 
 type SchemaDefinition struct {
-	Name      string   `json:"name"`
-	Kind      string   `json:"kind"`
-	Type      string   `json:"type,omitempty"`
-	AppliesTo []string `json:"appliesTo,omitempty"`
+	DisplayName string   `json:"displayName,omitempty"`
+	Name        string   `json:"name"`
+	Kind        string   `json:"kind"`
+	Type        string   `json:"type,omitempty"`
+	AppliesTo   []string `json:"appliesTo,omitempty"`
 }
 
 type SchemaFile struct {
+	DisplayName string             `json:"displayName,omitempty"`
 	Path        string             `json:"path"`
 	Package     string             `json:"package"`
 	Definitions []SchemaDefinition `json:"definitions"`
@@ -49,6 +51,8 @@ func ParseSchema(path string, source []byte) SchemaFile {
 		schema.Package = packageDecl.Name.Name
 	}
 
+	titles := ReadEditorTitles(file)
+	schema.DisplayName = titles.Schema
 	fields := topLevelFields(file)
 	if fields["rows"] != nil || fields["_tool"] != nil {
 		schema.errorAt(token.NoPos, "public schema file cannot declare rows or _tool")
@@ -77,6 +81,7 @@ func ParseSchema(path string, source []byte) SchemaFile {
 	declarations := topLevelDefinitions(file)
 	for name, declaration := range registered {
 		definition := schema.readDefinition(name, declaration)
+		definition.DisplayName = titles.Definitions[name]
 		if _, exists := declarations[name]; !exists {
 			schema.errorAt(declaration.Pos(), "_schema.definitions."+name+" has no matching #"+name+" definition")
 			continue

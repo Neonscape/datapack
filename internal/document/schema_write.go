@@ -210,6 +210,9 @@ func DeletePublicSchemaDefinition(path, name string) (PublicSchema, error) {
 	if !removeNamedField(definitionsField.Value, name) {
 		return PublicSchema{}, fmt.Errorf("Schema definition %q is not registered in _schema.definitions", name)
 	}
+	if err := deleteDefinitionTitle(file, name); err != nil {
+		return PublicSchema{}, err
+	}
 	pruneUnusedImports(file)
 	candidate, err := cueformat.Node(file)
 	if err != nil {
@@ -249,6 +252,9 @@ func RenamePublicSchemaDefinition(path, oldName, newName string, referencePaths 
 		}
 		if !renameNamedField(definitionsField.Value, oldName, newName) {
 			return fmt.Errorf("Schema definition %q is not registered in _schema.definitions", oldName)
+		}
+		if err := renameDefinitionTitle(target, oldName, newName); err != nil {
+			return err
 		}
 		for _, file := range files {
 			renameSchemaReferences(file, oldName, newName)
@@ -405,6 +411,9 @@ func DeleteLocalSchemaDefinition(path, name string) (Table, error) {
 			removeNamedField(localDefinitions.Value, name)
 		}
 	}
+	if err := deleteDefinitionTitle(file, name); err != nil {
+		return Table{}, err
+	}
 	pruneUnusedImports(file)
 	candidate, err := cueformat.Node(file)
 	if err != nil {
@@ -436,6 +445,9 @@ func RenameLocalSchemaDefinition(path, oldName, newName string, referencePaths [
 			if localDefinitions := fieldsOfStruct(schemaField.Value)["localDefinitions"]; localDefinitions != nil {
 				renameNamedField(localDefinitions.Value, oldName, newName)
 			}
+		}
+		if err := renameDefinitionTitle(target, oldName, newName); err != nil {
+			return err
 		}
 		for _, file := range files {
 			renameSchemaReferences(file, oldName, newName)

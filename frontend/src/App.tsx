@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import './App.css';
-import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellComment, SetCellFormula, SetCellText, SetColumnDisplayName, SetColumnSchema, SetColumnWidth, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
+import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellComment, SetCellFormula, SetCellText, SetColumnDisplayName, SetDisplayName, SetColumnSchema, SetColumnWidth, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "../wailsjs/go/main/App";
 import {schemamodel, workspace as workspaceModel} from "../wailsjs/go/models";
 import {useTranslation, type Language} from "./i18n";
 import {useTheme, type ThemePreference} from "./theme";
@@ -10,6 +10,8 @@ import {SchemaEditor} from "./schema/SchemaEditor";
 import {SchemaForm} from "./schema/SchemaForm";
 import {ProjectSettings} from "./project/ProjectSettings";
 import {TableGrid} from "./table/TableGrid";
+import {DisplayNameDialog} from "./tree/DisplayNameDialog";
+import {displayLabel} from "./tree/displayLabel";
 import {Tree} from "./tree/Tree";
 import {initialExpandedNodes} from "./tree/expansion";
 import {useWorkspaceSession, type OpenTab} from "./workspace/useWorkspaceSession";
@@ -30,7 +32,8 @@ type TreeDialog =
     | {mode: "deleteTable"; path: string; label: string}
     | {mode: "renameDefinition"; path: string; name: string; newName: string}
     | {mode: "deleteDefinition"; path: string; name: string}
-    | {mode: "newSchema"; namespace: string};
+    | {mode: "newSchema"; namespace: string}
+    | {mode: "displayName"; path: string; definition: string; identity: string; value: string};
 
 function App() {
     const {t, language, setLanguage} = useTranslation();
@@ -134,7 +137,7 @@ function App() {
             } else {
                 const document = await GetPublicSchema(path) as PublicSchemaDocument;
                 const definitions = document.definitions ?? [];
-                state = {path, local: false, package: document.package, definitions, selected: definition ?? definitions[0]?.name ?? null, creating};
+                state = {path, local: false, displayName: document.displayName, package: document.package, definitions, selected: definition ?? definitions[0]?.name ?? null, creating};
             }
             addSchemaTab(path, state);
             setCellError(null);
@@ -159,7 +162,7 @@ function App() {
                 } else {
                     const document = await GetPublicSchema(tab.state.path) as PublicSchemaDocument;
                     const definitions = document.definitions ?? [];
-                    refreshed.push({...tab, state: {...tab.state, package: document.package, definitions, selected: definitions.some((entry) => entry.name === tab.state.selected) ? tab.state.selected : (definitions[0]?.name ?? null), creating: false}});
+                    refreshed.push({...tab, state: {...tab.state, displayName: document.displayName, package: document.package, definitions, selected: definitions.some((entry) => entry.name === tab.state.selected) ? tab.state.selected : (definitions[0]?.name ?? null), creating: false}});
                 }
             } catch {
                 continue;
@@ -197,7 +200,7 @@ function App() {
 
     useEffect(() => {
         const historyShortcut = (event: KeyboardEvent) => {
-            if (projectSettingsOpen || !activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select")) return;
+            if (projectSettingsOpen || !activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select, [role=dialog]")) return;
             const redo = event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z");
             if (event.key.toLowerCase() !== "z" && !redo) return;
             if (redo ? !workspace?.canRedo : !workspace?.canUndo) return;
@@ -403,7 +406,13 @@ function App() {
         if (!treeDialog) return;
         setError("");
         try {
-            if (treeDialog.mode === "newSchema") {
+            if (treeDialog.mode === "displayName") {
+                const result = await SetDisplayName({path: treeDialog.path, definition: treeDialog.definition, displayName: treeDialog.value});
+                const view = result.workspace as WorkspaceView;
+                setWorkspace(view);
+                if (selectedSchema) setSelectedSchema(schemaDefinitions(view).find((entry) => entry.id === selectedSchema.id) ?? null);
+                if (tabs.length > 0) await refreshOpenTabs();
+            } else if (treeDialog.mode === "newSchema") {
                 await newDefinitionInNamespace(treeDialog.namespace);
             } else if (treeDialog.mode === "renameTable") {
                 const result = await RenameTable({path: treeDialog.path, namespace: treeDialog.namespace, name: treeDialog.name}) as {table: TableDocument; workspace: WorkspaceView};
@@ -732,10 +741,10 @@ function App() {
                             {tabs.map((tab) => {
                                 const isActive = tab.id === activeTabId && !selectedSchema;
                                 const label = tab.kind === "table"
-                                    ? `${tab.table.namespace}.${tab.table.name}`
+                                    ? displayLabel(tab.table.displayName, tab.table.namespace ? `${tab.table.namespace}.${tab.table.name}` : tab.table.name)
                                     : tab.state.local
                                         ? `${tab.state.logicalTable ?? tab.state.path} ${t("common.local")}`
-                                        : tab.state.package ?? tab.state.path;
+                                        : displayLabel(tab.state.displayName, tab.state.package ?? tab.state.path);
                                 return <div key={tab.id} role="tab" aria-selected={isActive} className={`tab ${isActive ? "tab-active" : ""}`} onClick={() => activateTab(tab.id)}>
                                     <span className="tab-label">{label}</span>
                                     <button className="tab-close" type="button" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }}>×</button>
@@ -752,7 +761,7 @@ function App() {
                         {selectedSchema && <section className="schema-detail">
                             <div className="schema-detail-head">
                                 <span className={`schema-kind-dot schema-kind-${selectedSchema.kind}`} aria-hidden="true"/>
-                                <h1>{selectedSchema.id}</h1>
+                                <h1>{displayLabel(selectedSchema.displayName, selectedSchema.id)}</h1>
                                 <button className="peek-close" type="button" aria-label={t("schemaDetail.close")} onClick={closePeek}>×</button>
                             </div>
                             <div className="schema-detail-row"><span>{t("schemaDetail.kind")}</span><code>{selectedSchema.kind}</code></div>
@@ -802,7 +811,7 @@ function App() {
                                     onClick={() => { setCellError(null); setSelectedSchema((current) => current?.id === definition.id ? null : definition); }}
                                 >
                                     <span className={`schema-kind-dot schema-kind-${definition.kind}`} aria-hidden="true"/>
-                                    <span>{definition.id}</span>
+                                    <span>{displayLabel(definition.displayName, definition.id)}</span>
                                     <span className="usage-count">{definition.usages?.length ?? 0}</span>
                                 </button>)}
                             </div>
@@ -832,6 +841,10 @@ function App() {
                     <button onClick={() => { setTableDialog({namespace: "game", name: ""}); setTreeMenu(null); }}>{t("menu.newTable")}</button>
                     <button onClick={() => { setTreeDialog({mode: "newSchema", namespace: ""}); setTreeMenu(null); }}>{t("tree.newSchema")}</button>
                 </>}
+                {(treeMenu.node.kind === "table" || treeMenu.node.kind === "schemaFile" || treeMenu.node.kind === "schemaDefinition" || (treeMenu.node.kind === "localSchema" && treeMenu.node.name.startsWith("#"))) && <button onClick={() => {
+                    setTreeDialog({mode: "displayName", path: treeMenu.node.path!, definition: treeMenu.node.name.startsWith("#") ? treeMenu.node.name.slice(1) : "", identity: treeMenu.node.name, value: treeMenu.node.displayName ?? ""});
+                    setTreeMenu(null);
+                }}>{t("displayName.edit")}</button>}
                 {treeMenu.node.kind === "table" && <>
                     <button onClick={() => { renameTableAt(treeMenu.node.path!, treeMenu.node.name, treeMenu.namespace); setTreeMenu(null); }}>{t("tree.renameTable")}</button>
                     <button className="tree-context-danger" onClick={() => { deleteTableAt(treeMenu.node.path!, treeMenu.namespace ? `${treeMenu.namespace}.${treeMenu.node.name}` : treeMenu.node.name); setTreeMenu(null); }}>{t("tree.deleteTable")}</button>
@@ -893,7 +906,9 @@ function App() {
                     <div className="dialog-actions"><button type="button" onClick={() => setTableDialog(null)}>{t("common.cancel")}</button><button type="submit">{t("common.create")}</button></div>
                 </form>
             </div>}
-            {treeDialog && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setTreeDialog(null)}>
+            {treeDialog?.mode === "displayName" && <DisplayNameDialog identity={treeDialog.identity} value={treeDialog.value}
+                onChange={(value) => setTreeDialog({...treeDialog, value})} onClose={() => setTreeDialog(null)} onSubmit={() => void submitTreeDialog()}/>}
+            {treeDialog && treeDialog.mode !== "displayName" && <div className="dialog-backdrop" role="presentation" onMouseDown={() => setTreeDialog(null)}>
                 <form className="structure-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); submitTreeDialog(); }}>
                     {treeDialog.mode === "renameTable" && <>
                         <h2>{t("table.rename")}</h2>

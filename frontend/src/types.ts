@@ -6,6 +6,7 @@ export type LogEntry = {
 };
 
 export type TreeNode = {
+    displayName?: string;
     kind: "project" | "namespace" | "group" | "table" | "schemaFile" | "localSchema" | "schemaDefinition" | "damaged";
     name: string;
     path?: string;
@@ -93,6 +94,7 @@ export type SchemaUsage = {
 };
 
 export type SchemaDefinition = {
+    displayName?: string;
     id: string;
     kind: "type" | "constraint";
     appliesTo?: string[];
@@ -143,6 +145,7 @@ export type SchemaNode = {
 };
 
 export type TableDocument = {
+    displayName?: string;
     path: string;
     namespace: string;
     name: string;
@@ -173,6 +176,7 @@ export type NavTarget = {
 };
 
 export type SchemaDefinitionDocument = {
+    displayName?: string;
     name: string;
     kind: "type" | "constraint";
     type?: string;
@@ -182,12 +186,14 @@ export type SchemaDefinitionDocument = {
 };
 
 export type PublicSchemaDocument = {
+    displayName?: string;
     path: string;
     package: string;
     definitions: SchemaDefinitionDocument[];
 };
 
 export type SchemaEditorState = {
+    displayName?: string;
     path: string;
     local: boolean;
     package?: string;

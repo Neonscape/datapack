@@ -337,3 +337,8 @@ func (a *App) RenameColumn(rename workspace.ColumnRename) (workspace.ColumnRenam
 func (a *App) MoveColumn(move workspace.ColumnMove) (workspace.ColumnMoveResult, error) {
 	return a.workspace.MoveColumn(move)
 }
+
+// SetDisplayName changes optional table/Schema presentation metadata.
+func (a *App) SetDisplayName(update workspace.DisplayNameSet) (workspace.SchemaEditResult, error) {
+	return a.workspace.SetDisplayName(update)
+}

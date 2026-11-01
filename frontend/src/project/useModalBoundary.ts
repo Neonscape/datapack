@@ -1,8 +1,10 @@
-import {useEffect, type RefObject} from "react";
+import {useEffect, useRef, type RefObject} from "react";
 
 // Lock the workspace, while allowing native wheel scrolling inside the dialog.
 // Body overflow alone does not contain scrollable grid/side-panel elements.
 export function useModalBoundary(ref: RefObject<HTMLElement>, onClose: () => void) {
+    const close = useRef(onClose);
+    close.current = onClose;
     useEffect(() => {
         const backdrop = ref.current;
         if (!backdrop) return;
@@ -37,7 +39,7 @@ export function useModalBoundary(ref: RefObject<HTMLElement>, onClose: () => voi
             if (event.key === "Escape") {
                 event.preventDefault();
                 event.stopPropagation();
-                onClose();
+                close.current();
             } else if (event.key === "Tab") {
                 const controls = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'))
                     .filter((element) => element.getClientRects().length > 0);
@@ -61,5 +63,5 @@ export function useModalBoundary(ref: RefObject<HTMLElement>, onClose: () => voi
             document.body.style.overflow = bodyOverflow;
             if (previousFocus?.isConnected && !previousFocus.closest("[inert]")) previousFocus.focus();
         };
-    }, [ref, onClose]);
+    }, [ref]);
 }

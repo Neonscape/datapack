@@ -24,14 +24,16 @@ type Diagnostic struct {
 }
 
 type Table struct {
-	Path             string       `json:"path"`
-	Package          string       `json:"package"`
-	Namespace        string       `json:"namespace"`
-	Name             string       `json:"name"`
-	Columns          []string     `json:"columns"`
-	RowIDs           []string     `json:"rowIDs"`
-	LocalDefinitions []string     `json:"localDefinitions"`
-	Diagnostics      []Diagnostic `json:"diagnostics,omitempty"`
+	DisplayName            string            `json:"displayName,omitempty"`
+	DefinitionDisplayNames map[string]string `json:"definitionDisplayNames,omitempty"`
+	Path                   string            `json:"path"`
+	Package                string            `json:"package"`
+	Namespace              string            `json:"namespace"`
+	Name                   string            `json:"name"`
+	Columns                []string          `json:"columns"`
+	RowIDs                 []string          `json:"rowIDs"`
+	LocalDefinitions       []string          `json:"localDefinitions"`
+	Diagnostics            []Diagnostic      `json:"diagnostics,omitempty"`
 }
 
 func (t Table) LogicalName() string {
@@ -63,6 +65,8 @@ func ParseTable(path string, source []byte) Table {
 		return table
 	}
 
+	titles := ReadEditorTitles(file)
+	table.DisplayName, table.DefinitionDisplayNames = titles.Table, titles.Definitions
 	fields := topLevelFields(file)
 	packageDecl := packageDeclaration(file)
 	if packageDecl == nil || packageDecl.Name == nil {

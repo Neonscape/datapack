@@ -27,6 +27,7 @@ const (
 // Node is a logical source-tree node. Tables and Schemas are refined into
 // logical views after CUE parsing is available.
 type Node struct {
+	DisplayName string                 `json:"displayName,omitempty"`
 	Kind        NodeKind               `json:"kind"`
 	Name        string                 `json:"name"`
 	Path        string                 `json:"path,omitempty"`
@@ -90,7 +91,7 @@ func Scan(projectPath string, tableRoots, schemaRoots, excludes []string) (Tree,
 			continue
 		}
 		group := ensureNamespace(schema.Package)
-		group.schemas = append(group.schemas, Node{Kind: NodeSchemaFile, Name: filepath.Base(schema.Path), Path: schema.Path, Children: schemaDefinitionNodes(schema)})
+		group.schemas = append(group.schemas, Node{Kind: NodeSchemaFile, Name: filepath.Base(schema.Path), DisplayName: schema.DisplayName, Path: schema.Path, Children: schemaDefinitionNodes(schema)})
 	}
 
 	sort.Strings(order)
@@ -175,24 +176,25 @@ func walkDirectory(projectRoot, directory string, excludes []string, files *[]st
 
 func tableNode(table cuesource.Table) Node {
 	return Node{
-		Kind: NodeTable,
-		Name: table.Name,
-		Path: table.Path,
+		Kind:        NodeTable,
+		Name:        table.Name,
+		DisplayName: table.DisplayName,
+		Path:        table.Path,
 		Children: []Node{
 			{
 				Kind:     NodeLocalSchema,
 				Name:     "local_schema",
 				Path:     table.Path,
-				Children: localDefinitionNodes(table.Path, table.LocalDefinitions),
+				Children: localDefinitionNodes(table.Path, table.LocalDefinitions, table.DefinitionDisplayNames),
 			},
 		},
 	}
 }
 
-func localDefinitionNodes(path string, definitions []string) []Node {
+func localDefinitionNodes(path string, definitions []string, titles map[string]string) []Node {
 	nodes := make([]Node, 0, len(definitions))
 	for _, definition := range definitions {
-		nodes = append(nodes, Node{Kind: NodeLocalSchema, Name: "#" + definition, Path: path})
+		nodes = append(nodes, Node{Kind: NodeLocalSchema, Name: "#" + definition, DisplayName: titles[definition], Path: path})
 	}
 	return nodes
 }
@@ -200,7 +202,7 @@ func localDefinitionNodes(path string, definitions []string) []Node {
 func schemaDefinitionNodes(schema cuesource.SchemaFile) []Node {
 	nodes := make([]Node, 0, len(schema.Definitions))
 	for _, definition := range schema.Definitions {
-		nodes = append(nodes, Node{Kind: NodeSchemaDefinition, Name: "#" + definition.Name, Path: schema.Path})
+		nodes = append(nodes, Node{Kind: NodeSchemaDefinition, Name: "#" + definition.Name, DisplayName: definition.DisplayName, Path: schema.Path})
 	}
 	return nodes
 }

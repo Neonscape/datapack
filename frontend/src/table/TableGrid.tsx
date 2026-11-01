@@ -1,3 +1,4 @@
+import {displayLabel} from "../tree/displayLabel";
 import {useEffect, useRef, useState} from "react";
 import {CompactSelection, DataEditor, drawTextCell, GridCellKind, type CustomCell, type CustomRenderer, type DataEditorRef, type DrawCellCallback, type GridCell, type GridColumn, type GridMouseEventArgs, type GridSelection, type Item} from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
@@ -405,7 +406,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         <div className="table-document-header">
             <div>
                 <div className="table-eyebrow">{t("grid.cueExpressionEditing")}</div>
-                <h1>{table.namespace}.{table.name}</h1>
+                <h1>{displayLabel(table.displayName, table.namespace ? `${table.namespace}.${table.name}` : table.name)}</h1>
             </div>
             <span>{t("grid.rowsDraft", {count: table.rows.length})}</span>
         </div>

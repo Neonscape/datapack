@@ -89,6 +89,8 @@ export function SetColumnWidth(arg1:workspace.ColumnWidthSet):Promise<workspace.
 
 export function SetCompileMode(arg1:string):Promise<workspace.View>;
 
+export function SetDisplayName(arg1:workspace.DisplayNameSet):Promise<workspace.SchemaEditResult>;
+
 export function SetLanguage(arg1:string):Promise<workspace.EditorSettings>;
 
 export function SetProjectExportSettings(arg1:workspace.ProjectExportSettings):Promise<workspace.ProjectSettings>;
