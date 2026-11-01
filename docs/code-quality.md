@@ -10,7 +10,7 @@
 | workspace | 已有 Service RWMutex、历史补偿、目录快照及 FK 来源保护。旧文档“没有锁”的结论过时。新事务边界在成功刷新后发布历史，读取失败不会伪装成不存在。 | 新增刷新失败的行/Schema 命令、目录、附件、历史/revision/compile 状态回归。仍需 P1 会话生命周期与发布协议特征测试，P2 测量重复扫描后再考虑缓存。 |
 | projecttree / navigation | 固定分组与标题由 UI 呈现；内部名、路径和节点 kind 保持身份。 | 导航回归覆盖大树/小窗口、初始默认祖先、刷新保留手动展开、切换项目和语言。无需领域导航框架。 |
 | exporters / export_path | 导出只消费 compiled 包，危险路径保护与 CSV 编码已有回归。 | 维持现有安全边界，无重构依据。显示名修改前后 CSV 字节一致。 |
-| App / workspace session | 已实证三项迟到读取/刷新丢标签问题并独立纠错。session 原子维护 view/tabs/active/peek，显式命令替代 React setter；项目 generation、请求序号、标签实例和焦点意图约束 open/history 的结果应用。 | 纠错前真实浏览器3项准确失败，修复后6项延迟 Promise 回归通过。职责抽取前后全量89项行为一致；其余编辑命令的异步结果协议仍需后续验证与适配。 |
+| App / workspace session | 已实证三项迟到读取/刷新丢标签问题并独立纠错。session 原子维护 view/tabs/active/peek，显式命令替代 React setter；项目 generation、请求序号、标签实例和焦点意图约束 open/history 的结果应用。 | 纠错前真实浏览器3项准确失败，修复后11项延迟 Promise 回归通过，含删除/改名请求失效及peek/命令交错。最终全量94项通过；其余编辑命令的异步结果协议仍需后续验证与适配。 |
 | TableGrid / valueCodecs | Codecs 已拆出，旧文档相反；保留选区、活动/焦点 ownership、编辑草稿与全局事件仍耦合。 | 维持真实浏览器复制/粘贴/F12/草稿/数组回归。后续明确编辑器局部状态归属，再拆受控组件；不引入新状态框架。 |
 | types / Wails bridge | DTO/UI模型保留各自职责；bridge为组件唯一生成绑定入口，集中tag/集合/零结果转换和请求模型构造。App/Settings/SchemaEditor的DTO断言与generated imports已移除。 | 生成模型契约验证身份/源码/false/0/manual/pending、取消/空半部/非法tag及输入不变；有效输入维持原行为。生成文件未改，真实Wails交互仍另列缺口。 |
 | i18n / theme / logging / settings | Catalog 与主题边界清楚。固定导航文案已入中英资源；logger 调外部 sink 时持锁、settings manual 分支早返回为待验证风险。 | 不为风格重写 catalog。低优先级复现 sink 重入/错误校验边界后决定修复，未将静态疑点当确认缺陷。 |
@@ -24,7 +24,7 @@
 
 校验所有权仍属于领域命令。非法 CUE 不落盘；合法语法但违反业务约束的数据仍可保存并产生诊断。sourcefile 只能原样写字节，不得悄悄升级为“必须编译全项目成功才保存”。
 
-Schema 改名的旧遍历器会按同名 `#Name` 修改无关作用域，已在同名公共/本地定义下触发 panic。需独立修复并加别名、局部绑定与无关源零写入回归；当前 writer 重构不声称解决该问题。
+Schema 改名的旧遍历器会按同名 `#Name` 修改无关作用域，已在真实可编译的公共/本地同名定义下复现 panic。独立纠错批次改用 CUE 词法绑定与模块/import 身份识别，覆盖名称捕获拒绝、无关源零写入和编译/导出/历史回归；这属于正确性修复，不算纯 writer 重构。范围与保守拒绝条件见 `schema-renames.md`。import alias 在 Schema 索引中的兼容性缺口另列后续纠错，不能将词法改写通过称作应用全部别名路径可用。
 
 ## 持续维护次序
 

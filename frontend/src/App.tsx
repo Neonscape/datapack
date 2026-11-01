@@ -598,7 +598,7 @@ function App() {
         try {
             const result = redo ? await Redo() : await Undo();
             if (!isCurrent(request)) return;
-            publishWorkspace(result.workspace);
+            if (!publishWorkspace(result.workspace, request)) return;
             await refreshOpenTabs(request, result.workspace, {table:async path => await GetTable(path), schema:async path => await GetPublicSchema(path)});
         } catch (reason) {
             if (!isCurrent(request)) return;
