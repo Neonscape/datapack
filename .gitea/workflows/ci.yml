@@ -54,14 +54,28 @@ jobs:
       - name: Install Playwright browser
         run: npx --prefix frontend playwright install --with-deps chromium
 
+      - name: Build frontend assets for Go embed
+        run: npm --prefix frontend run build
+
       - name: Run Go tests
         run: go test ./...
 
       - name: Run Go race tests
         run: go test -race ./...
 
+      - name: Vet Go packages
+        run: go vet ./...
+
+      - name: Test Linux packaging safety
+        run: |
+          bash test/scripts/package-linux-release.test.sh
+          bash test/scripts/release-gitea.test.sh
+
       - name: Check frontend types
         run: npm --prefix frontend run typecheck
+
+      - name: Check frontend test source types
+        run: npm --prefix frontend run typecheck:tests
 
       - name: Run end-to-end tests
         run: npm --prefix frontend run test:e2e
