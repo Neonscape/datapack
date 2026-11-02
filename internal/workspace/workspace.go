@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"datapack/internal/perftrace"
 	"errors"
 	"fmt"
 	"maps"
@@ -14,16 +15,16 @@ import (
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/ast"
-	"cuelang.org/go/cue/cuecontext"
-	"cuelang.org/go/cue/load"
 	"cuelang.org/go/cue/parser"
 	"cuelang.org/go/cue/token"
 	"datapack/internal/compiler"
 	"datapack/internal/cueformat"
 	"datapack/internal/cuerows"
+	"datapack/internal/cueschema"
 	"datapack/internal/cuesource"
 	"datapack/internal/document"
 	"datapack/internal/exporters"
+	csvformat "datapack/internal/exporters/formats/csv"
 	"datapack/internal/foreignkey"
 	"datapack/internal/formula"
 	"datapack/internal/i18n"
@@ -56,12 +57,17 @@ type CompileState struct {
 }
 
 type Service struct {
-	mu         sync.RWMutex
-	configRoot string
-	current    *View
-	undoStack  []historyEntry
-	redoStack  []historyEntry
-	logger     *logging.Logger
+	inputHooks              *inputConsistencyHooks
+	literalOps              *literalWriteOps
+	successfulCompile       *successfulCompile
+	literalTables           map[string]*literalCache
+	literalInputFingerprint string
+	mu                      sync.RWMutex
+	configRoot              string
+	current                 *View
+	undoStack               []historyEntry
+	redoStack               []historyEntry
+	logger                  *logging.Logger
 	viewLifecycle
 	settings       EditorSettings
 	settingsLoaded bool
@@ -658,6 +664,8 @@ func (s *Service) SetTheme(theme string) (EditorSettings, error) {
 func (s *Service) OpenProject(path string) (View, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.literalTables = nil
+	s.successfulCompile = nil
 	started := time.Now()
 	s.log(logging.Info, "open project started", map[string]any{"path": path})
 	project, err := LoadProject(path)
@@ -675,13 +683,23 @@ func (s *Service) OpenProject(path string) (View, error) {
 		s.log(logging.Error, "open project failed", map[string]any{"path": path, "error": err.Error()})
 		return View{}, err
 	}
+	s.literalInputFingerprint = ""
 	s.resetRevisions()
 	s.undoStack = nil
 	s.redoStack = nil
 	view := buildView(project, settings, tree)
 	s.current = &view
-	s.compile()
+	if os.Getenv("DATAPACK_DEFER_OPEN_COMPILE") == "1" && settings.Build.Mode == "manual" {
+		s.compiledRevision = -1
+		s.compileState = CompileState{Mode: "manual", Pending: true, Diagnostics: []compiler.Diagnostic{}}
+		s.current.Compile = s.compileState
+	} else {
+		s.compile()
+	}
 	view = *s.current
+	if fastEnabled() || os.Getenv("DATAPACK_COMPILE_CACHE") == "1" {
+		s.literalInputFingerprint, _ = s.sourceFingerprint()
+	}
 	s.log(logging.Info, "open project completed", map[string]any{"path": path, "schemas": len(view.Schemas.Definitions), "compile_diagnostics": len(view.Compile.Diagnostics), "duration_ms": time.Since(started).Milliseconds()})
 	return view, nil
 }
@@ -889,8 +907,8 @@ func copyBoolMap(values map[string]bool) map[string]bool {
 // path is resolved through the project tree instead of being read directly from
 // an untrusted frontend request.
 func (s *Service) GetTable(path string) (document.Table, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.current == nil {
 		err := s.userError("workspace.noProject")
 		s.log(logging.Error, "get table failed", map[string]any{"path": path, "error": err.Error()})
@@ -901,6 +919,9 @@ func (s *Service) GetTable(path string) (document.Table, error) {
 		s.log(logging.Error, "get table failed", map[string]any{"path": path, "error": err.Error()})
 		return document.Table{}, err
 	}
+	if table, ok := s.cachedLiteral(path); ok {
+		return withTableMetadata(table, *s.current), nil
+	}
 	table, err := document.LoadTable(path)
 	if err != nil {
 		err = fmt.Errorf("load table: %w", err)
@@ -908,6 +929,7 @@ func (s *Service) GetTable(path string) (document.Table, error) {
 		return document.Table{}, err
 	}
 	s.log(logging.Debug, "table loaded", map[string]any{"path": path, "rows": len(table.Rows), "columns": len(table.Columns)})
+	s.rememberLiteral(path, table)
 	return withTableMetadata(table, *s.current), nil
 }
 
@@ -1667,6 +1689,9 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 	if !containsTable(s.current.Tree.Root, update.Path) {
 		return CellUpdateResult{}, s.userError("workspace.tableNotInProject", update.Path)
 	}
+	if result, handled, err := s.tryFastLiteral(update); handled {
+		return result, err
+	}
 	table, view, err := s.edit(update.Path, func() (document.Table, error) {
 		return document.SetCellValue(update.Path, update.RowID, update.Column, update.Expression)
 	})
@@ -1684,6 +1709,11 @@ func (s *Service) SetCellText(update CellUpdate) (CellUpdateResult, error) {
 	}
 	if !containsTable(s.current.Tree.Root, update.Path) {
 		return CellUpdateResult{}, s.userError("workspace.tableNotInProject", update.Path)
+	}
+	encoded := update
+	encoded.Expression = document.EncodeStringExpression(update.Expression)
+	if result, handled, err := s.tryFastLiteral(encoded); handled {
+		return result, err
 	}
 	table, view, err := s.edit(update.Path, func() (document.Table, error) {
 		return document.SetCellText(update.Path, update.RowID, update.Column, update.Expression)
@@ -1816,6 +1846,10 @@ func (s *Service) restoreHistory(undo bool) (result HistoryResult, err error) {
 		return HistoryResult{}, s.userError("workspace.nothingToRedo")
 	}
 	snapshot := (*stack)[len(*stack)-1]
+	if snapshot.Cell != nil {
+		return s.restoreCellHistory(undo, snapshot)
+	}
+	s.literalTables = nil
 	current, err := snapshotRenameFiles(snapshotPaths(snapshot.Files)...)
 	if err != nil {
 		return HistoryResult{}, err
@@ -2102,7 +2136,19 @@ func (s *Service) Export() (ExportResult, error) {
 	if !containsString(s.current.Project.Config.Export.Targets, "csv") {
 		return ExportResult{}, s.userError("workspace.noExportTargets")
 	}
-	result, err := s.exporters.Export("csv", destination, compiled.Package)
+	result, err := s.exporters.ExportChecked("csv", destination, compiled.Package, csvformat.Options{BeforeCommit: func() error {
+		if s.inputHooks != nil && s.inputHooks.beforeExportCommit != nil {
+			s.inputHooks.beforeExportCommit()
+		}
+		snapshot, err := s.captureInputs()
+		if err != nil {
+			return err
+		}
+		if snapshot.fingerprint != compiled.InputFingerprint {
+			return fmt.Errorf("project inputs changed before export commit; export not published")
+		}
+		return nil
+	}})
 	if err != nil {
 		s.log(logging.Error, "export failed", map[string]any{"destination": destination, "error": err.Error()})
 		return ExportResult{}, err
@@ -2309,6 +2355,7 @@ func collectTables(node projecttree.Node, tables *[]document.Table) {
 }
 
 func (s *Service) refreshCurrentView() (View, error) {
+	defer perftrace.Start("workspace.refreshCurrentView")()
 	started := time.Now()
 	project, err := LoadProject(s.current.Project.Path)
 	if err != nil {
@@ -2323,6 +2370,9 @@ func (s *Service) refreshCurrentView() (View, error) {
 	s.markEdited()
 	view := buildView(project, s.current.Settings, tree)
 	s.publishView(&view)
+	if fastEnabled() || os.Getenv("DATAPACK_COMPILE_CACHE") == "1" {
+		s.literalInputFingerprint, _ = s.sourceFingerprint()
+	}
 	s.log(logging.Debug, "workspace refresh completed", map[string]any{"schemas": len(view.Schemas.Definitions), "revision": s.revision, "duration_ms": time.Since(started).Milliseconds()})
 	return view, nil
 }
@@ -2419,7 +2469,10 @@ func validNamespace(value string) bool {
 }
 
 func withDiagnostics(table document.Table, view View) document.Table {
-	evaluated := formula.Evaluate(table)
+	var evaluated formula.Result
+	if view.Compile.Mode != "manual" || len(table.Formulas) > 0 {
+		evaluated = formula.Evaluate(table)
+	}
 	if view.Compile.Mode == "manual" {
 		for _, diagnostic := range view.Compile.Diagnostics {
 			if diagnostic.Path == table.Path {
@@ -2455,6 +2508,7 @@ func withDiagnostics(table document.Table, view View) document.Table {
 }
 
 func withTableMetadata(table document.Table, view View) document.Table {
+	defer perftrace.Start("workspace.withTableMetadata")()
 	table = withForeignKeyOptions(withDiagnostics(table, view), view.Tree)
 	definitions := map[string]schemamodel.Node{}
 	for _, definition := range view.Schemas.Definitions {
@@ -2471,14 +2525,8 @@ func withTableMetadata(table document.Table, view View) document.Table {
 }
 
 func appendCueDiagnostics(table *document.Table, rows map[string]map[string]any) {
-	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path)})
-	if len(instances) != 1 {
-		table.Diagnostics = append(table.Diagnostics, document.Diagnostic{Message: "load table package: expected one package"})
-		return
-	}
-	context := cuecontext.New()
-	packageValue := context.BuildInstance(instances[0])
-	if err := packageValue.Err(); err != nil {
+	packageValue, err := cueschema.Load(*table, "")
+	if err != nil {
 		table.Diagnostics = append(table.Diagnostics, document.Diagnostic{Message: err.Error()})
 		return
 	}

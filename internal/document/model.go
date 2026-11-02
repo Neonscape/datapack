@@ -4,6 +4,7 @@ package document
 import "datapack/internal/schemamodel"
 
 type Table struct {
+	SourceSHA256 string                       `json:"-"`
 	DisplayName  string                       `json:"displayName,omitempty"`
 	Path         string                       `json:"path"`
 	Package      string                       `json:"package"`

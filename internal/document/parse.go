@@ -1,6 +1,9 @@
 package document
 
 import (
+	"crypto/sha256"
+	"datapack/internal/perftrace"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"sort"
@@ -19,18 +22,25 @@ import (
 // Structural file diagnostics remain the responsibility of cuesource; callers
 // use this only after the file has passed that first structural check.
 func LoadTable(path string) (Table, error) {
+	defer perftrace.Start("document.LoadTable")()
 	source, err := os.ReadFile(path)
 	if err != nil {
 		return Table{}, fmt.Errorf("read table source: %w", err)
 	}
+	stopParse := perftrace.Start("document.parse")
 	file, err := parser.ParseFile(path, source, parser.ParseComments, parser.AllErrors)
+	stopParse()
 	if err != nil {
 		return Table{}, fmt.Errorf("parse table source: %w", err)
 	}
+	stopResolve := perftrace.Start("document.resolve")
 	astutil.Resolve(file, func(token.Pos, string, ...interface{}) {})
+	stopResolve()
 	titles := cuesource.ReadEditorTitles(file)
 	fields := fieldsOfFile(file)
+	sourceHash := sha256.Sum256(source)
 	document := Table{
+		SourceSHA256: hex.EncodeToString(sourceHash[:]),
 		Path:         path,
 		DisplayName:  titles.Table,
 		Columns:      []Column{},
@@ -152,6 +162,7 @@ func LoadTable(path string) (Table, error) {
 		})
 	}
 
+	stopModel := perftrace.Start("document.rowModel")
 	rows := requiredField(fields, "rows")
 	for _, field := range orderedStructFields(rows.Value) {
 		if _, ok := field.Value.(*ast.StructLit); !ok {
@@ -169,6 +180,7 @@ func LoadTable(path string) (Table, error) {
 		document.Rows = append(document.Rows, row)
 	}
 
+	stopModel()
 	localDefinitions := localDefinitionKinds(fields)
 	if local := fields["_local"]; local != nil {
 		for _, field := range orderedStructFields(local.Value) {

@@ -4,6 +4,7 @@
 package compiler
 
 import (
+	"datapack/internal/perftrace"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/load"
 	"datapack/internal/cuerows"
+	"datapack/internal/cueschema"
 	"datapack/internal/document"
 	"datapack/internal/foreignkey"
 	"datapack/internal/formula"
@@ -33,8 +35,9 @@ type Diagnostic struct {
 
 // Result is the outcome of one full compile.
 type Result struct {
-	Diagnostics []Diagnostic `json:"diagnostics"`
-	Package     *Package     `json:"package,omitempty"`
+	InputFingerprint string       `json:"-"`
+	Diagnostics      []Diagnostic `json:"diagnostics"`
+	Package          *Package     `json:"package,omitempty"`
 }
 
 // Package is the read-only compiled data an exporter consumes.
@@ -64,6 +67,7 @@ type Row struct {
 // CompileAll validates every table and Schema definition and, when clean,
 // returns the compiled package.
 func CompileAll(publicSchemas []document.PublicSchema, tables []document.Table) Result {
+	defer perftrace.Start("compiler.CompileAll")()
 	result := Result{}
 	registry := schemaregistry.Build(publicSchemas, tables)
 	for _, diagnostic := range registry.Diagnostics {
@@ -109,11 +113,23 @@ func compileTable(table document.Table) (Table, []Diagnostic) {
 		compiled.CSV = &CSV{Columns: table.CSVExport.Columns}
 	}
 	diagnostics := []Diagnostic{}
-	evaluated := formula.Evaluate(table)
+	loaded, loadErr := cueschema.Load(table, table.Package)
+	var evaluated formula.Result
+	if loadErr == nil {
+		evaluated = formula.EvaluateWithSchema(table, loaded.LookupPath(cue.MakePath(cue.Def("Row"))))
+	} else {
+		evaluated = formula.Evaluate(table)
+	}
 	for _, diagnostic := range evaluated.Diagnostics {
 		diagnostics = append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), RowID: diagnostic.RowID, Column: diagnostic.Column, Message: diagnostic.Message})
 	}
-	rows, rowDiagnostics := validateRows(table, evaluated.Rows)
+	var rows map[string]map[string]any
+	var rowDiagnostics []Diagnostic
+	if loadErr == nil {
+		rows, rowDiagnostics = validateRows(table, evaluated.Rows, loaded)
+	} else {
+		rows, rowDiagnostics = validateRows(table, evaluated.Rows)
+	}
 	diagnostics = append(diagnostics, rowDiagnostics...)
 	for _, row := range table.Rows {
 		compiled.Rows = append(compiled.Rows, Row{ID: row.ID, Values: rows[row.ID]})
@@ -123,17 +139,24 @@ func compileTable(table document.Table) (Table, []Diagnostic) {
 
 // validateRows unifies the evaluated row values with the table Schema and
 // decodes the final concrete values, including defaults.
-func validateRows(table document.Table, evaluated map[string]map[string]any) (map[string]map[string]any, []Diagnostic) {
-	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path), Package: table.Package})
+func validateRows(table document.Table, evaluated map[string]map[string]any, provided ...cue.Value) (map[string]map[string]any, []Diagnostic) {
+	defer perftrace.Start("compiler.validateRows")()
 	diagnostics := []Diagnostic{}
-	if len(instances) != 1 {
-		count := strconv.Itoa(len(instances))
-		return nil, append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Key: "compile.expectedOnePackage", Args: []string{count}, Message: fmt.Sprintf("load table package: expected one package, found %s", count)})
-	}
-	context := cuecontext.New()
-	packageValue := context.BuildInstance(instances[0])
-	if err := packageValue.Err(); err != nil {
-		return nil, append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Message: err.Error()})
+	var packageValue cue.Value
+	if len(provided) > 0 {
+		packageValue = provided[0]
+	} else {
+		instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path), Package: table.Package})
+		if len(instances) != 1 {
+			count := strconv.Itoa(len(instances))
+			return nil, append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Key: "compile.expectedOnePackage", Args: []string{count}, Message: fmt.Sprintf("load table package: expected one package, found %s", count)})
+		}
+		context := cuecontext.New()
+		packageValue = context.BuildInstance(instances[0])
+		if err := packageValue.Err(); err != nil {
+			return nil, append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Message: err.Error()})
+		}
+
 	}
 	rowSchema := packageValue.LookupPath(cue.MakePath(cue.Def("Row")))
 	primaryKey := packageValue.LookupPath(cue.MakePath(cue.Def("PrimaryKey")))

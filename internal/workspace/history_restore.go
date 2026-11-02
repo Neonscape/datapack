@@ -11,6 +11,7 @@ import (
 // positions without copying or discarding unrelated sidecars. This is process
 // local compensating history, not a crash or external-concurrency transaction.
 type historyEntry struct {
+	Cell      *cellHistory
 	Files     map[string][]byte
 	Moves     []renameMove
 	Directory *directoryHistory

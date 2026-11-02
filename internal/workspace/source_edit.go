@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"bytes"
+	"datapack/internal/perftrace"
 	"errors"
 	"fmt"
 	"os"
@@ -15,6 +16,8 @@ import (
 // refreshes compensate source changes before returning; only a complete edit
 // is published to history. This is not a crash/concurrent filesystem transaction.
 func editSource[T any](s *Service, path string, operation func() (T, error)) (result T, view View, err error) {
+	defer perftrace.Start("workspace.editSource")()
+	s.literalTables = nil
 	started := time.Now()
 	info, err := os.Lstat(path)
 	if err != nil {

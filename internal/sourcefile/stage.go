@@ -2,6 +2,7 @@
 package sourcefile
 
 import (
+	"datapack/internal/perftrace"
 	"errors"
 	"fmt"
 	"os"
@@ -19,6 +20,7 @@ type stagedFile interface {
 }
 
 func Stage(path string, source []byte, mode os.FileMode) (string, error) {
+	defer perftrace.Start("sourcefile.stageWriteSync")()
 	return stage(path, source, mode, func(dir, pattern string) (stagedFile, error) { return os.CreateTemp(dir, pattern) })
 }
 

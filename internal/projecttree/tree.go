@@ -2,6 +2,7 @@
 package projecttree
 
 import (
+	"datapack/internal/perftrace"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -48,6 +49,7 @@ type namespaceGroup struct {
 // grouped logical tree. Tables use _tool.table.namespace and public Schema
 // files use package; both are treated as one namespace concept.
 func Scan(projectPath string, tableRoots, schemaRoots, excludes []string) (Tree, error) {
+	defer perftrace.Start("projecttree.Scan")()
 	root := filepath.Dir(projectPath)
 	projectName := strings.TrimSuffix(filepath.Base(projectPath), filepath.Ext(projectPath))
 
