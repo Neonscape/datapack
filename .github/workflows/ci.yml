@@ -71,7 +71,12 @@ jobs:
         run: npm --prefix frontend run typecheck:tests
 
       - name: Run end-to-end tests
-        run: npm --prefix frontend run test:e2e
+        run: |
+          # Use the hosted image's browser with its existing sandbox support.
+          # Downloaded headless-shell paths can be denied by Ubuntu AppArmor.
+          chrome_path="$(command -v google-chrome)"
+          "$chrome_path" --version
+          DATAPACK_CHROMIUM_EXECUTABLE="$chrome_path" npm --prefix frontend run test:e2e
 
   build:
     name: Build ${{ matrix.name }}
