@@ -2,6 +2,8 @@
 
 本轮候选基于 alpha `5f8156f829f77dda2cd1636b76af4c79bec62c8d`，保留该版本的结构操作 hydration、enum 类型与重复提交修复。工作分支 `candidate/100k-local-20261102`；精确最终 head、补丁及校验和见交付包 `candidate-metadata.json`。这是待独立审查的候选，不表示已合入、发布或部署。
 
+> 测量版本说明：下列 100k 宏测与原生 PNG 的实测代码为 `eaf172bf91faaa8d054a8a44bf80f83c111b515e`。独立审查后增加了 `df5fd63` 的后端配置/完整闭包修正和 `927a01b` 的前端顺序/freshness 修正；未重跑耗时基准。新候选已通过必要的正确性回归，原始日志、截图像素与计时记录保持不变。5.75 秒等导出数字仍是原测量版本的 Service+JSON，不包含新增的必要 UI 文档刷新成本。
+
 ## 本轮结论
 
 在严格单表 100000 行、10 列的既有 fixture 上，手动模式保持即时持久化，并达到已测原生编辑的 ≤2 秒目标。Linux Wails/Xvfb 的三次首行数值编辑，磁盘可观察到更新为 0.130–0.132 秒；在 1.165–1.178 秒完成的整屏截图中，画布已显示权威新值。这是固定等待后截图得到的**上界**，不是精确 paint latency。撤销与重做各一轮也在约 1.17 秒的整屏截图中显示正确结果；末行字符串及中部布尔操作另有记录，详见 native 摘要。权威提交、原子替换及历史提交先于 RPC 成功响应；最终画布显示采用真实 Wails 路径，不以输入框文字或 spinner 作为完成。
@@ -47,7 +49,7 @@ CPU、内存、Go 版本及保护参数见 `hardware.json`。Go 1.26.5；GOMAXPR
 - manual 首次打开、成功后非法值、失败后修复但未重编译：`TestManualOpenAndStaleDiagnosticsHaveExplicitRevision`；冲突锁与错误解锁：`TestOperationProgressReadableAndConflictingEditsRejected`。
 - delta 与实际保存的完整文档一致、text 转义、公式回退：`TestCommittedCellDeltaAndHistoryMatchFullDocument`；前端 `operation-order.spec.ts` 检查串行派发、失败重试、跨工程/乱序/旧 revision 拒绝及真实进度锁。
 - alpha enum 删除行、公式结构操作、值/公式切换、Schema/列 DTO、CUE 默认值/边界数值、FK、注释、重命名与粘贴：既有 Go/functional 和前端 suite 全量回归。`structural-responses.spec.ts` 仍从真实 Service 生成 DTO；历史采样的 width fixture 在模拟新写请求时显式重标请求 revision，避免将真实旧版本伪装成新响应。
-- 最终验证：Go `go test -p 1 ./...`、内部与 functional `-race`、`go vet -p 1 ./...`、前端构建及测试类型检查、**148 项前端测试通过**。Linux Wails 原生构建与实际窗口操作、Windows amd64 交叉构建成功；Windows 原生未执行。
+- 最终验证：Go `go test -p 1 ./...`、内部与 functional `-race`、`go vet -p 1 ./...`、前端构建及测试类型检查、**155 项前端测试通过**。Linux Wails 原生构建与实际窗口操作、Windows amd64 交叉构建成功；Windows 原生未执行。
 - 四份真实 Service CSV 各独立解析 100000 行、10 列、100000 唯一 ID，逐字段与固定 seed 原始数据叠加实际编辑记录比对，共 400 万字段；包含逗号、引号、换行、制表符、首中末值。六份 SaveAs 源文件与原始源 hash 一致。见 `verify_exports.py` 与 `export-verification.json`。
 
 ## 仍需独立审查的边界与远程状态
@@ -57,3 +59,12 @@ CPU、内存、Go 版本及保护参数见 `hardware.json`。Go 1.26.5；GOMAXPR
 本地所有变更在隔离 worktree，未碰原有 12 项用户修改。用户已授权在测试与独立审查后接入 canonical Gitea、再核验 GitHub 镜像；未授权发新版。只读查询 canonical master 返回 `could not read Username for https://dev.projectmiraland.top:50005`，现有运行环境没有可用认证。没有读取或修改凭据、权限、同步或 runner 设置。远程推送/PR/合并/镜像 CI 状态以 `candidate-metadata.json` 的实际结果为准；本报告不将本地完成描述为远程接入完成。
 
 建议采用即时保存 + 默认 manual + 严格 freshness + revisioned delta 的路线，先独立审查完整依赖和失败恢复，再通过现有授权认证接入。保留已有显式 auto 用户选择，但应清楚提示其 100k 编辑仍有完整编译成本。导出始终校验当前数据，不依赖过期的“成功”标记。
+
+## 独立审查修正（2026-11-02）
+
+- `TestExportReloadsExternalDestinationBeforePublishing` 在旧候选上复现 .dtproj 导出目录 A→B 后写旧 A。现在先完成编译/外部刷新，再从同一权威项目配置解析和安全验证目录。A 保持不变、B 得到新数据；B 非法或指向受保护源目录时拒绝，不能退回 A。
+- `TestTransitiveInputsRejectUnsupportedExternalAttributes` 在旧候选上证明新发现的传递依赖 @embed/@extern 未拒绝。当前对发现文件、实际加载字节及闭包稳定后的全集执行相同限制，在依赖包求值前递归检查。
+- `review-composed-lifecycle.spec.ts` 用真实 App/session/ordered 组合复现延迟 edit 后已提交 Undo 的结果被 enqueue-time publication token 丢弃，以及 Redo 失败被静默隐藏。现在用工程/请求归属与权威 epoch/revision 协调；delta 和完整读取均覆盖，旧工程及更新 revision 仍受保护。
+- 成功 Export 返回权威 workspace。App 安装当前校验状态，必要时读取公式/变更文档；同 revision 无公式表只清理过期诊断，避免重传 100k 行。首次 manual 打开→导出、旧错误修复→导出、排队 edit→导出均有组合回归，未增加重复 Compile。
+- 目标回归、Go/race/vet、构建与类型检查通过；最终完整前端 155 项通过。一次全量中原有画布双击夹具尚未建立编辑器，发生在粘贴前；独立 7 项通过，并补充先确认单元格选中状态的步骤后取得完整 155 项通过。原失败日志保留，不将其删去或当作通过。
+- 原生 PNG 已作为独立像素证据包交付，含逐操作 JSON 和 SHA256 对应表，可供独立像素复核；producer 的 visually_verified 标记本身不是独立审查结论。截图仍来自原测量，没有为审查重跑或修改像素。
