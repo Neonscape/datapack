@@ -1807,3 +1807,5 @@
     white-space: nowrap;
 }
 .schema-kind-dot, .usage-count, .table-actions { flex-shrink: 0; }
+
+.operation-progress, .compile-freshness { padding: 6px 14px; font-size: 12px; background: var(--surface-secondary, #e9edf3); }

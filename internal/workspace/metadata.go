@@ -10,6 +10,9 @@ import (
 )
 
 func withForeignKeyOptions(table document.Table, tree projecttree.Tree) document.Table {
+	if len(table.ForeignKeys) == 0 {
+		return table
+	}
 	targets := map[string][]string{}
 	var tables []document.Table
 	collectTables(tree.Root, &tables)

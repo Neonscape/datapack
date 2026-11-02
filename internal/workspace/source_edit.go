@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"bytes"
+	"datapack/internal/perftrace"
 	"errors"
 	"fmt"
 	"os"
@@ -15,6 +16,11 @@ import (
 // refreshes compensate source changes before returning; only a complete edit
 // is published to history. This is not a crash/concurrent filesystem transaction.
 func editSource[T any](s *Service, path string, operation func() (T, error)) (result T, view View, err error) {
+	defer perftrace.Start("workspace.editSource")()
+	if s.sourceUncertain {
+		return result, View{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
+	s.literalTables = nil
 	started := time.Now()
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -29,7 +35,11 @@ func editSource[T any](s *Service, path string, operation func() (T, error)) (re
 	}
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, restoreSourceFile(path, before, sourcePermissionMode(info.Mode())))
+			rollback := restoreSourceFile(path, before, sourcePermissionMode(info.Mode()))
+			if rollback != nil {
+				s.markSourceUncertain()
+			}
+			err = errors.Join(err, rollback)
 		}
 	}()
 	result, err = operation()
@@ -94,6 +104,9 @@ type sourceCommandOps struct {
 }
 
 func editSourcesWithOps[T any](s *Service, paths []string, operation func() (T, error), ops sourceCommandOps) (result T, view View, err error) {
+	if s.sourceUncertain {
+		return result, View{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	snapshot, err := snapshotRenameFiles(paths...)
 	if err != nil {
 		return result, View{}, err
@@ -105,7 +118,11 @@ func editSourcesWithOps[T any](s *Service, paths []string, operation func() (T, 
 	transaction.restore = ops.restore
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, transaction.rollback())
+			rollback := transaction.rollback()
+			if rollback != nil {
+				s.markSourceUncertain()
+			}
+			err = errors.Join(err, rollback)
 		}
 	}()
 	result, err = operation()

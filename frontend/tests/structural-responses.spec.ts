@@ -22,7 +22,7 @@ test.beforeAll(()=>{
 async function point(page:Page,column:number,row=0){const box=await page.locator(".tab-panel:visible canvas").first().boundingBox();expect(box).not.toBeNull();return{x:box!.x+(column===0?85:225+170*(column-1)),y:box!.y+50+30*row};}
 async function boot(page:Page,fixture:Fixture,raw=false){
  await page.addInitScript(({fixture,raw})=>{
-  let table=raw?fixture.RawBefore:fixture.Before;const state:State={draws:[],calls:[],fixture};window.__structuralResponse=state;
+  let table=raw?{...fixture.RawBefore,projectEpoch:fixture.View.projectEpoch,workspaceRevision:fixture.View.revision}:fixture.Before;const state:State={draws:[],calls:[],fixture};window.__structuralResponse=state;
   const draw=CanvasRenderingContext2D.prototype.fillText;
   CanvasRenderingContext2D.prototype.fillText=function(text,x,y,maxWidth){
    if(this.canvas instanceof HTMLCanvasElement&&this.canvas.isConnected){const rect=this.canvas.getBoundingClientRect();if(rect.width&&rect.height){const matrix=this.getTransform();state.draws.push({text,x:rect.x+(matrix.a*x+matrix.c*y+matrix.e)/(this.canvas.width/rect.width),y:rect.y+(matrix.b*x+matrix.d*y+matrix.f)/(this.canvas.height/rect.height)});}}
@@ -31,7 +31,7 @@ async function boot(page:Page,fixture:Fixture,raw=false){
   (window as unknown as Window&{go:unknown}).go={main:{App:{GetSettings:async()=>({language:"en",theme:"light"}),GetExportFormats:async()=>[],SelectProject:async()=>fixture.View,GetTable:async()=>structuredClone(table),GetPublicSchema:async()=>fixture.Schema,
    DeleteRow:async({rowID}:{rowID:string})=>{state.calls.push({method:"DeleteRow",rowID});table=fixture.Result.table;return structuredClone(fixture.Result);},
    Undo:async()=>{state.calls.push({method:"Undo"});table=fixture.UndoTable;return structuredClone(fixture.Undo);},Redo:async()=>{state.calls.push({method:"Redo"});table=fixture.RedoTable;return structuredClone(fixture.Redo);},
-   SetColumnWidth:async()=>{state.calls.push({method:"Width"});return await new Promise<Result>(resolve=>{state.resolveWidth=resolve;});},
+   SetColumnWidth:async()=>{state.calls.push({method:"Width"});return await new Promise<Result>(resolve=>{state.resolveWidth=value=>{const revision=(fixture.View.revision??0)+1;resolve({...value,table:{...value.table,projectEpoch:fixture.View.projectEpoch,workspaceRevision:revision},workspace:{...value.workspace,projectEpoch:fixture.View.projectEpoch,revision}});};});},
    SetCellFormula:async(argument:{rowID:string;column:string;expression:string})=>{state.calls.push({method:"SetCellFormula",...argument});return structuredClone({table,workspace:fixture.View});},
    ClearCell:async(argument:{rowID:string;column:string;expression:string})=>{state.calls.push({method:"ClearCell",...argument});return structuredClone({table,workspace:fixture.View});},
    SetLanguage:async(language:string)=>({language,theme:"light"}),

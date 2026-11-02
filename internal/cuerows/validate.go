@@ -27,14 +27,20 @@ func Validate(rowSchema, primaryKey cue.Value, rowID string, values map[string]a
 	if err := primaryKey.Unify(context.Encode(rowID)).Validate(cue.Concrete(true)); err != nil {
 		issues = append(issues, Issue{Kind: Identity, Err: err})
 	}
+	candidate := rowSchema.Unify(context.Encode(values))
+	rowErr := candidate.Validate(cue.Concrete(true))
+	// A valid whole row already satisfies every supplied field. Keep the old
+	// field-by-field path for failures so diagnostic granularity/order remains.
+	if rowErr == nil {
+		return candidate, issues
+	}
 	for column, value := range values {
 		schema := rowSchema.LookupPath(cue.MakePath(cue.Str(column)))
 		if err := schema.Unify(context.Encode(value)).Validate(cue.Concrete(true)); err != nil {
 			issues = append(issues, Issue{Kind: Field, Column: column, Err: err})
 		}
 	}
-	candidate := rowSchema.Unify(context.Encode(values))
-	if err := candidate.Validate(cue.Concrete(true)); err != nil {
+	if err := rowErr; err != nil {
 		issues = append(issues, Issue{Kind: Row, Err: err})
 	}
 	return candidate, issues

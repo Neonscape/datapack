@@ -91,10 +91,14 @@ func TestFailedRefreshDoesNotPublishLifecycleAndReopenResetsHistory(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.revision != 0 || s.compiledRevision != 0 || result.CanUndo || result.CanRedo || result.Compile.Pending || result.Compile.Mode != "manual" || result.Compile.CompiledAt == "" {
+	if s.revision != 0 || s.compiledRevision != -1 || result.CanUndo || result.CanRedo || !result.Compile.Pending || result.Compile.Mode != "manual" || result.Compile.CompiledAt != "" {
 		t.Fatalf("reopen protocol: %#v", result.Compile)
 	}
-	if len(result.Compile.Diagnostics) == 0 {
+	compiled, err := s.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compiled.Workspace.Compile.Diagnostics) == 0 {
 		t.Fatal("reopen reused the old successful compilation after external source change")
 	}
 }

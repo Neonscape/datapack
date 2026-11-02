@@ -33,7 +33,7 @@ async function setup(page:Page,mode:"manual"|"auto",diagnostic:"field"|"row"|"en
  await page.goto("/");await page.getByRole("button",{name:"File",exact:true}).click();await page.getByLabel("Application menu").getByRole("button",{name:"Open project",exact:true}).click();await page.getByRole("button",{name:"probe",exact:true}).click();
 }
 for(const mode of ["manual","auto"] as const)for(const diagnostic of ["field","row","enum","none"] as const)test(`enum field remains editable with ${diagnostic} diagnostic in ${mode}`,async({page})=>{
- await setup(page,mode,diagnostic);const point=await cell(page,2);await page.mouse.dblclick(point.x,point.y);
+ await setup(page,mode,diagnostic);const point=await cell(page,2);await page.mouse.click(point.x,point.y);await expect(page.locator(".formula-bar-input")).toHaveValue(diagnostic==="enum"?'"BAD"':'"N"');await page.mouse.dblclick(point.x,point.y);
  const select=page.locator("#portal select");await expect(select).toBeVisible();await select.selectOption({label:"R"});await page.mouse.click(point.x,point.y+120);
  await expect.poll(()=>page.evaluate(()=>window.__enumLanguage.calls.filter(c=>c.method==="UpdateCell"))).toEqual([{method:"UpdateCell",path:"/project/tables/probe.cue",rowID:"one",column:"rarity",expression:'"R"'}]);
  expect(await page.evaluate(()=>window.__enumLanguage.table.rows[0].values.total)).toEqual({expression:"20 + 5",display:"25",formula:true});

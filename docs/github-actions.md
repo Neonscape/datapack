@@ -30,6 +30,8 @@ If repository or organization Actions settings restrict the token to read-only, 
 
 GitHub-hosted runners provide Linux and Windows environments. Linux builds install GTK 3 and WebKitGTK 4.1 development packages; Windows builds use native Wails packaging without the Linux `webkit2_41` tag.
 
+The Linux browser test step selects the hosted image's preinstalled `google-chrome` through `DATAPACK_CHROMIUM_EXECUTABLE` and prints its version. Playwright keeps `chromiumSandbox: true`; this avoids the downloaded headless-shell path that Ubuntu AppArmor may reject. A missing browser or sandbox launch failure fails the job. This does not change host security settings or install another browser, and the Gitea workflow remains unchanged.
+
 ## Release tag
 
 ```bash

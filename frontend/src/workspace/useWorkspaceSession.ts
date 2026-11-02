@@ -1,5 +1,6 @@
+import {patchCell} from "./cellDelta";
 import {useRef, useState} from "react";
-import type {SchemaDefinition, SchemaEditorState, TableDocument, WorkspaceView} from "../types";
+import type {SchemaDefinition, SchemaEditorState, TableDocument, WorkspaceView, CellDelta} from "../types";
 import {containsPath, tabPath, withTabs, reconcilePeek, type OpenTab, type SessionState} from "./sessionState";
 import {readTab, type TabReader} from "./tabRead";
 export {refreshSchemaState} from "./sessionState";
@@ -14,6 +15,12 @@ export function useWorkspaceSession() {
     const focus = useRef(0);
     const publication = useRef(0);
     const projectPath = useRef("");
+    const epoch = useRef<string>();
+    const revision = useRef(-1);
+    const documents = useRef(new Map<string,TableDocument>());
+    function accepts(tag: {projectEpoch?:string}, value?:number) {
+        return (!tag.projectEpoch || !epoch.current || tag.projectEpoch === epoch.current) && (value === undefined || value >= revision.current);
+    }
     const {workspace, tabs, activeTabId, selectedSchema} = state;
     const activeTab = tabs.find(tab => tab.id === activeTabId) ?? null;
     const table = activeTab?.kind === "table" ? activeTab.table : null;
@@ -24,18 +31,26 @@ export function useWorkspaceSession() {
         requests.current.set(scope, serial);
         return {project:generation.current,scope,serial,view:publication.current,focus:scope.startsWith("open:") ? ++focus.current : focus.current};
     }
-    function isCurrent(request: SessionRequest) {
-        return request.project === generation.current && request.serial === requests.current.get(request.scope)
-            && (request.scope !== "history" || request.view === publication.current);
+    function ownsRequest(request: SessionRequest) {
+        return request.project === generation.current && request.serial === requests.current.get(request.scope);
+    }
+    function isCurrent(request: SessionRequest, response?: WorkspaceView) {
+        // A history command may have waited behind an edit in the write lane.
+        // Its newer authoritative revision supersedes the enqueue-time view.
+        const authoritative = response?.projectEpoch && response.revision !== undefined
+            && accepts(response,response.revision);
+        return ownsRequest(request) && (request.scope !== "history" || request.view === publication.current || !!authoritative);
     }
     function publishWorkspace(view: WorkspaceView, request?: SessionRequest) {
-        if (request && !isCurrent(request)) return false;
+        if (request && !isCurrent(request,view)) return false;
+        if (!accepts(view, view.revision)) return false;
         if (projectPath.current && view.project?.path && projectPath.current !== view.project.path) return false;
+        if (view.revision !== undefined) revision.current = view.revision;
         const project = generation.current;
         ++publication.current;
         if (request) request.view = publication.current;
         setState(current => {
-            if (project !== generation.current || request && !isCurrent(request)) return current;
+            if (project !== generation.current || request && !isCurrent(request,view)) return current;
             return {...current,workspace:view,selectedSchema:reconcilePeek(current.selectedSchema,view)};
         });
         return true;
@@ -64,8 +79,18 @@ export function useWorkspaceSession() {
         });
     }
     function updateTable(document: TableDocument) {
+        if (!accepts(document, document.workspaceRevision)) return;
+        documents.current.set(document.path,document);
         invalidateDocument(document.path);
         setState(current => ({...current,tabs:current.tabs.map(tab => tab.kind === "table" && tab.path === document.path ? {...tab,table:document} : tab)}));
+    }
+    function applyCellDelta(delta: CellDelta) {
+        if (!accepts(delta,delta.revision)) return false;
+        const current = documents.current.get(delta.path);
+        const document = current ? patchCell(current,delta) : null;
+        if (!document) return false;
+        updateTable(document);
+        return true;
     }
     function updateSchema(value: SchemaEditorState) {
         updateSchemaTabById(`schema:${value.path}`,value);
@@ -86,6 +111,9 @@ export function useWorkspaceSession() {
         ++generation.current;
         ++publication.current;
         projectPath.current = view.project.path;
+        documents.current.clear();
+        epoch.current = view.projectEpoch;
+        revision.current = view.revision ?? -1;
         requests.current.clear();
         ++focus.current;
         setState({workspace:view,tabs:[],activeTabId:null,selectedSchema:selected});
@@ -101,6 +129,8 @@ export function useWorkspaceSession() {
         });
     }
     function addTableTab(path: string, document: TableDocument, request?: SessionRequest) {
+        if (!accepts(document, document.workspaceRevision) || request && !isCurrent(request)) return;
+        documents.current.set(path,document);
         addTab({id:`table:${path}`,kind:"table",path,table:document},request);
     }
     function addSchemaTab(path: string, value: SchemaEditorState, request?: SessionRequest) {
@@ -113,22 +143,39 @@ export function useWorkspaceSession() {
         setState(current => {
             if (!isCurrent(request)) return current;
             const next = current.tabs.flatMap(tab => {
-                // A close/reopen, edit, selection, rename or new tab after the
-                // read started owns its state; a stale snapshot cannot replace it.
-                if (originals.get(tab.id) !== tab) return [tab];
+                const result = results.get(tab.id);
+                // Preserve local drafts and newer documents. A tagged table
+                // read can rebase over an earlier queued edit, but never over a
+                // newer revision or another project. Untagged/schema snapshots
+                // keep the original object-identity fence.
+                const authoritative = tab.kind === "table" && result?.kind === "table"
+                    && !!result.table.projectEpoch && result.table.projectEpoch === tab.table.projectEpoch
+                    && result.table.workspaceRevision !== undefined && tab.table.workspaceRevision !== undefined
+                    && result.table.workspaceRevision >= tab.table.workspaceRevision;
+                if (originals.get(tab.id) !== tab && !authoritative) return [tab];
                 if (!containsPath(view.tree.root,tabPath(tab))) return [];
-                return [results.get(tab.id) ?? tab];
+                if (result?.kind === "table" && !accepts(result.table, result.table.workspaceRevision)) return [tab];
+                if(result?.kind === "table") documents.current.set(result.path,result.table);
+                return [result ?? tab];
             });
             return withTabs(current,next);
         });
     }
-    async function refreshOpenTabs(request: SessionRequest, view: WorkspaceView, reader: TabReader) {
+    async function refreshOpenTabs(request: SessionRequest, view: WorkspaceView, reader: TabReader, validated = false) {
         const opened = tabs;
         const refreshed: OpenTab[] = [];
         for (const tab of opened) {
             if (!isCurrent(request)) return;
             try {
-                refreshed.push(await readTab(tab, reader));
+                const document = tab.kind === "table" ? documents.current.get(tab.path) ?? tab.table : null;
+                // Successful validation does not change independent literal
+                // values. Clear their stale diagnostics without resending 100k
+                // rows when the displayed authority already matches the input.
+                const unchangedLiteral = validated && document && !!view.projectEpoch
+                    && document.projectEpoch === view.projectEpoch && document.workspaceRevision === view.revision
+                    && !document.rows.some(row=>Object.values(row.values).some(cell=>cell.formula));
+                if (tab.kind === "table" && unchangedLiteral) refreshed.push({...tab,table:{...document,diagnostics:[]}});
+                else refreshed.push(await readTab(tab, reader));
             } catch {
                 // A read failure does not prove deletion. applyRefresh closes a
                 // tab only when its source is absent from the new project tree.
@@ -161,7 +208,7 @@ export function useWorkspaceSession() {
             return {...tab,state:{...tab.state,definitions,selected:selected ?? definitions[0]?.name ?? null,creating:false}};
         })}));
     }
-    return {workspace,tabs,activeTabId,selectedSchema,activeTab,table,schemaDocument,publishWorkspace,selectSchema,activateTab,closeTab,updateTable,updateSchema,updateSchemaTabById,updateDisplayName,applyProjectView,addTableTab,addSchemaTab,beginRequest,isCurrent,refreshOpenTabs,renameTable,closeDocument,applyDefinitionResult};
+    return {workspace,tabs,activeTabId,selectedSchema,activeTab,table,schemaDocument,publishWorkspace,selectSchema,activateTab,closeTab,updateTable,applyCellDelta,updateSchema,updateSchemaTabById,updateDisplayName,applyProjectView,addTableTab,addSchemaTab,beginRequest,isCurrent,ownsRequest,refreshOpenTabs,renameTable,closeDocument,applyDefinitionResult};
 }
 
 export type WorkspaceSession = ReturnType<typeof useWorkspaceSession>;

@@ -2,16 +2,16 @@
 package formula
 
 import (
+	"datapack/internal/perftrace"
 	"fmt"
 	"math"
-	"path/filepath"
 	"sort"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
-	"cuelang.org/go/cue/load"
 	"github.com/expr-lang/expr"
 
+	"datapack/internal/cueschema"
 	"datapack/internal/document"
 	"datapack/internal/schemamodel"
 )
@@ -50,13 +50,15 @@ type formulaEntry struct {
 	state    evaluationState
 }
 
-func Evaluate(table document.Table) Result {
+func Evaluate(table document.Table) Result { return EvaluateWithSchema(table, loadRowSchema(table)) }
+
+func EvaluateWithSchema(table document.Table, rowSchema cue.Value) Result {
+	defer perftrace.Start("formula.Evaluate")()
 	result := Result{Rows: map[string]map[string]any{}}
 	entries := map[Reference]*formulaEntry{}
 	columns := map[string]schemamodel.Kind{}
 	foreignKeys := map[string]bool{}
 	blocked := map[Reference]bool{}
-	rowSchema := loadRowSchema(table)
 	for _, column := range table.Columns {
 		kind := column.Schema.Kind
 		if kind == schemamodel.KindReference && rowSchema.Exists() {
@@ -121,9 +123,12 @@ func Evaluate(table document.Table) Result {
 				fail(entry, "formula and fixed value cannot coexist")
 				continue
 			}
-			value := cuecontext.New().CompileString(cell.Expression)
-			var decoded any
-			if err := value.Decode(&decoded); err != nil {
+			decoded, scalar := decodeScalar(cell.Expression)
+			var decodeErr error
+			if !scalar {
+				decodeErr = cuecontext.New().CompileString(cell.Expression).Decode(&decoded)
+			}
+			if err := decodeErr; err != nil {
 				result.Diagnostics = append(result.Diagnostics, Diagnostic{RowID: row.ID, Column: column, Message: err.Error()})
 				blocked[ref] = true
 				continue
@@ -333,13 +338,8 @@ func loadRowSchema(table document.Table) cue.Value {
 	if table.Path == "" {
 		return cue.Value{}
 	}
-	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path), Package: table.Package})
-	if len(instances) != 1 {
-		return cue.Value{}
-	}
-	context := cuecontext.New()
-	value := context.BuildInstance(instances[0])
-	if value.Err() != nil {
+	value, err := cueschema.Load(table, table.Package)
+	if err != nil {
 		return cue.Value{}
 	}
 	return value.LookupPath(cue.MakePath(cue.Def("Row")))

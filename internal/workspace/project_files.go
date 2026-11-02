@@ -23,7 +23,17 @@ func (s *Service) CreateProject(path string) (View, error) {
 
 // SaveProjectAs copies the source portion of the current project to path and
 // switches the editor to the copied project.
-func (s *Service) SaveProjectAs(path string) (View, error) {
+func (s *Service) SaveProjectAs(path string) (result View, err error) {
+	finish, err := s.beginOperation("saveAs")
+	if err != nil {
+		return View{}, err
+	}
+	defer func() { finish(err) }()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return View{}, fmt.Errorf("source state uncertain; reopen project before continuing")
+	}
 	if s.current == nil {
 		return View{}, s.userError("workspace.noProject")
 	}
@@ -53,6 +63,7 @@ func (s *Service) SaveProjectAs(path string) (View, error) {
 		return View{}, fmt.Errorf("create save-as staging directory: %w", err)
 	}
 	defer os.RemoveAll(stage)
+	s.operationProgress("copy", 0, 0)
 	if err := copyProjectSource(s.current.Project, stage); err != nil {
 		return View{}, err
 	}
@@ -82,7 +93,7 @@ func (s *Service) SaveProjectAs(path string) (View, error) {
 		}
 		moved = append(moved, entry.Name())
 	}
-	return s.OpenProject(target.Path)
+	return s.openProjectLocked(target.Path)
 }
 
 func newProjectAt(path string) (Project, error) {

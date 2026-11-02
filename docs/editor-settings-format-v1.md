@@ -14,7 +14,7 @@ Linux 的默认路径为：
 ~/.config/datapack/settings.json
 ```
 
-首次启动时，文件不存在则使用默认值；用户修改设置后由编辑器创建或更新该文件。
+首次启动时，文件不存在则使用默认值；新默认 build.mode 为 manual。已有显式 auto/manual 设置保持不变；用户修改设置后由编辑器创建或更新该文件。
 
 ## 完整示例
 
@@ -36,7 +36,7 @@ Linux 的默认路径为：
 |---|---:|---|
 | `version` | 是 | 编辑器设置格式版本。v1 固定为 `1`。 |
 | `build.mode` | 是 | `auto` 或 `manual`。 |
-| `build.autoCompileDebounceSeconds` | `auto` 时是 | 自动编译等待秒数；默认 `10`。 |
+| `build.autoCompileDebounceSeconds` | `auto` 时是 | 保留的自动编译等待配置，默认 `10`；当前服务仍在 auto 编辑后同步完整编译，尚未实现 debounce 调度。 |
 | `language` | 否 | 界面语言：`en` 或 `zh-CN`；默认 `zh-CN`。 |
 | `theme` | 否 | 颜色主题：`system`、`light` 或 `dark`；默认 `system`（跟随系统）。 |
 

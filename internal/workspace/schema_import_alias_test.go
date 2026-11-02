@@ -129,6 +129,9 @@ language:{version:"v0.9.0"}`)
 
 func TestBrokenModuleDoesNotPreventSimpleSchemaRepair(t *testing.T) {
 	s, table, _ := sourceEditFixture(t)
+	if _, err := s.SetCompileMode("auto"); err != nil {
+		t.Fatal(err)
+	}
 	writeFile(t, filepath.Join(s.current.Project.Root, "cue.mod/module.cue"), `module: {broken:`)
 	if _, err := s.OpenProject(s.current.Project.Path); err != nil {
 		t.Fatal(err)

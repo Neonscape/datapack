@@ -17,11 +17,12 @@ func (l *viewLifecycle) recordCompile(mode, at string, diagnostics []compiler.Di
 	if diagnostics == nil {
 		diagnostics = []compiler.Diagnostic{}
 	}
-	l.compileState = CompileState{Mode: mode, CompiledAt: at, Diagnostics: diagnostics}
+	l.compileState = CompileState{InputRevision: l.revision, Mode: mode, CompiledAt: at, Diagnostics: diagnostics}
 	l.compiledRevision = l.revision
 	return l.compileState
 }
 func (l viewLifecycle) publish(view View, mode string, canUndo, canRedo bool) View {
+	view.Revision = l.revision
 	view.Compile = l.compileState
 	view.Compile.Mode = mode
 	view.Compile.Pending = l.compiledRevision < l.revision

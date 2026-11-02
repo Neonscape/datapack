@@ -45,7 +45,13 @@ func TestOpenProjectPreservesDamagedDocumentDiagnostics(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(projectRoot, "tables", "broken.cue"), "package broken\n#Row: {")
-	service := NewService(t.TempDir())
+	config := t.TempDir()
+	settings := DefaultEditorSettings()
+	settings.Build.Mode = "auto"
+	if err := SaveEditorSettings(config, settings); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(config)
 	view, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj"))
 	if err != nil {
 		t.Fatal(err)
@@ -272,7 +278,13 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(t.TempDir())
+	config := t.TempDir()
+	settings := DefaultEditorSettings()
+	settings.Build.Mode = "auto"
+	if err := SaveEditorSettings(config, settings); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(config)
 	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +348,13 @@ _editor: {columns: {}}`)
 	writeFile(t, filepath.Join(projectRoot, "schema", "common.cue"), `package common
 #GameID: string
 _schema: {version: 1, definitions: {GameID: {kind: "type", type: "string"}}}`)
-	service := NewService(t.TempDir())
+	config := t.TempDir()
+	settings := DefaultEditorSettings()
+	settings.Build.Mode = "auto"
+	if err := SaveEditorSettings(config, settings); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(config)
 	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
 		t.Fatal(err)
 	}
@@ -1059,7 +1077,13 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(t.TempDir())
+	config := t.TempDir()
+	settings := DefaultEditorSettings()
+	settings.Build.Mode = "auto"
+	if err := SaveEditorSettings(config, settings); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(config)
 	if _, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj")); err != nil {
 		t.Fatal(err)
 	}
@@ -1551,7 +1575,13 @@ _tool: {table: {namespace: "rpg", name: "item"}}`)
 	if err := os.MkdirAll(filepath.Join(projectRoot, "schema"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(t.TempDir())
+	config := t.TempDir()
+	settings := DefaultEditorSettings()
+	settings.Build.Mode = "auto"
+	if err := SaveEditorSettings(config, settings); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(config)
 	view, err := service.OpenProject(filepath.Join(projectRoot, "game.dtproj"))
 	if err != nil {
 		t.Fatal(err)

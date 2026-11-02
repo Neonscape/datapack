@@ -1,6 +1,7 @@
 package document
 
 import (
+	"datapack/internal/perftrace"
 	"datapack/internal/sourcefile"
 	"fmt"
 	"os"
@@ -23,6 +24,7 @@ import (
 // Schema errors are intentionally persisted as diagnostics so users can build a
 // row incrementally, like a spreadsheet.
 func SetCellValue(path, rowID, column, expression string) (Table, error) {
+	defer perftrace.Start("document.SetCellValue")()
 	source, err := os.ReadFile(path)
 	if err != nil {
 		return Table{}, fmt.Errorf("read table source: %w", err)
@@ -39,7 +41,9 @@ func SetCellValue(path, rowID, column, expression string) (Table, error) {
 		return Table{}, err
 	}
 	removeFormula(file, rowID, column)
+	stopFormat := perftrace.Start("document.formatWholeFile")
 	candidate, err := cueformat.Node(file)
+	stopFormat()
 	if err != nil {
 		return Table{}, fmt.Errorf("format updated table: %w", err)
 	}
@@ -994,6 +998,7 @@ func validateRows(path string, source []byte, rowIDs []string) error {
 }
 
 func validateAndReplace(path string, source []byte) (Table, error) {
+	defer perftrace.Start("document.validateAndReplace")()
 	info, err := os.Stat(path)
 	if err != nil {
 		return Table{}, fmt.Errorf("stat table source: %w", err)

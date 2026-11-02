@@ -30,12 +30,12 @@ type Result struct {
 	Files []string `json:"files"`
 }
 
-type handler func(destination string, pkg *compiler.Package) (Result, error)
+type handler func(destination string, pkg *compiler.Package, options csv.Options) (Result, error)
 
 func Discover() (Registry, error) {
 	registry := Registry{formats: map[string]Format{}, handlers: map[string]handler{
-		"csv": func(destination string, pkg *compiler.Package) (Result, error) {
-			result, err := csv.Export(destination, pkg)
+		"csv": func(destination string, pkg *compiler.Package, options csv.Options) (Result, error) {
+			result, err := csv.ExportWithOptions(destination, pkg, options)
 			return Result{Files: result.Files}, err
 		},
 	}}
@@ -89,5 +89,12 @@ func (r Registry) Export(id, destination string, pkg *compiler.Package) (Result,
 	if !r.Has(id) {
 		return Result{}, fmt.Errorf("unknown exporter format %q", id)
 	}
-	return r.handlers[id](destination, pkg)
+	return r.handlers[id](destination, pkg, csv.Options{})
+}
+
+func (r Registry) ExportChecked(id, destination string, pkg *compiler.Package, options csv.Options) (Result, error) {
+	if !r.Has(id) {
+		return Result{}, fmt.Errorf("unknown exporter format %q", id)
+	}
+	return r.handlers[id](destination, pkg, options)
 }

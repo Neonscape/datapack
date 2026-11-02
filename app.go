@@ -342,3 +342,15 @@ func (a *App) MoveColumn(move workspace.ColumnMove) (workspace.ColumnMoveResult,
 func (a *App) SetDisplayName(update workspace.DisplayNameSet) (workspace.SchemaEditResult, error) {
 	return a.workspace.SetDisplayName(update)
 }
+
+func (a *App) GetOperationState() workspace.OperationState { return a.workspace.GetOperationState() }
+
+func (a *App) UpdateCellDelta(update workspace.CellUpdate) (workspace.CellEditResult, error) {
+	return a.workspace.UpdateCellDelta(update)
+}
+func (a *App) SetCellTextDelta(update workspace.CellUpdate) (workspace.CellEditResult, error) {
+	return a.workspace.SetCellTextDelta(update)
+}
+
+func (a *App) UndoDelta() (workspace.CellEditResult, error) { return a.workspace.UndoDelta() }
+func (a *App) RedoDelta() (workspace.CellEditResult, error) { return a.workspace.RedoDelta() }

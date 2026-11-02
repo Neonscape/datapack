@@ -1,4 +1,6 @@
-import {useEffect, useState} from 'react';
+import {operationSnapshot, withProjectOperation} from "./bridge/ordered";
+import {useProjectOperation} from "./workspace/useProjectOperation";
+import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import './App.css';
 import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellComment, SetCellFormula, SetCellText, SetColumnDisplayName, SetDisplayName, SetColumnSchema, SetColumnWidth, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "./bridge";
 import {useTranslation, type Language} from "./i18n";
@@ -35,9 +37,19 @@ type TreeDialog =
     | {mode: "displayName"; path: string; definition: string; identity: string; value: string};
 
 function App() {
+    const operation = useProjectOperation();
+    const operationLabel = (value:string) => ({inputs:"读取输入",discover:"扫描工程",index:"建立索引",schema:"准备校验",validate:"校验数据",write:"写入导出文件",commit:"提交文件",copy:"复制工程",Compile:"编译",Export:"导出",SaveProjectAs:"另存为",OpenProject:"打开工程",SelectProject:"打开工程",NewProject:"新建工程"} as Record<string,string>)[value] ?? value;
     const {t, language, setLanguage} = useTranslation();
     const {preference, setPreference} = useTheme();
-    const {workspace, publishWorkspace, selectedSchema, selectSchema, tabs, activeTabId, activeTab, table, schemaDocument, activateTab, closeTab, updateTable, updateSchema, updateSchemaTabById, updateDisplayName, addTableTab, addSchemaTab, applyProjectView: resetProject, beginRequest, isCurrent, refreshOpenTabs, renameTable: renameSessionTable, closeDocument, applyDefinitionResult} = useWorkspaceSession();
+    const {workspace, publishWorkspace, selectedSchema, selectSchema, tabs, activeTabId, activeTab, table, schemaDocument, activateTab, closeTab, updateTable, applyCellDelta, updateSchema, updateSchemaTabById, updateDisplayName, addTableTab, addSchemaTab, applyProjectView: resetProject, beginRequest, isCurrent, ownsRequest, refreshOpenTabs, renameTable: renameSessionTable, closeDocument, applyDefinitionResult} = useWorkspaceSession();
+    const historyFlight = useRef(false);
+    const [historyState, setHistoryState] = useState({pending:false});
+    useLayoutEffect(() => {
+        // Release only after React has committed the authoritative workspace
+        // and any full-document refresh. A fresh completion object also runs
+        // this barrier when an immediate RPC batches pending true/false.
+        if (!historyState.pending) historyFlight.current = false;
+    }, [historyState]);
     const [cellError, setCellError] = useState<CellError | null>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
@@ -176,9 +188,10 @@ function App() {
 
     useEffect(() => {
         const historyShortcut = (event: KeyboardEvent) => {
-            if (projectSettingsOpen || !activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select, [role=dialog]")) return;
+            if (operationSnapshot().busy || event.repeat || event.isComposing || projectSettingsOpen || !activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select, [role=dialog]")) return;
             const redo = event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z");
             if (event.key.toLowerCase() !== "z" && !redo) return;
+            if (historyFlight.current) {event.preventDefault();return;}
             if (redo ? !workspace?.canRedo : !workspace?.canUndo) return;
             event.preventDefault();
             void applyHistory(redo);
@@ -461,6 +474,7 @@ function App() {
         }
         setError("");
         setCellError(null);
+        const request = beginRequest(`cell:${table.path}:${rowID}:${column}`);
         try {
             if (column === "__create__") {
                 const {values, formulas} = JSON.parse(input);
@@ -484,13 +498,16 @@ function App() {
             }
             const columnDefinition = table.columns.find((entry) => entry.name === column);
             const result = input.startsWith("=")
-                ? await SetCellFormula({path: table.path, rowID, column, expression: input.slice(1).trim()})
+                ? {...await SetCellFormula({path: table.path, rowID, column, expression: input.slice(1).trim()}),delta:undefined}
                 : !columnDefinition?.foreignKeyTable && (columnDefinition?.effectiveSchema ?? columnDefinition?.schema)?.kind === "string"
                     ? await SetCellText({path: table.path, rowID, column, expression: input})
                     : await UpdateCell({path: table.path, rowID, column, expression: input});
-            updateTable(result.table);
+            if (result.delta) {
+                if (!applyCellDelta(result.delta)) updateTable(await GetTable(table.path));
+            } else updateTable(result.table);
             publishWorkspace(result.workspace);
         } catch (reason) {
+            if (!isCurrent(request)) return;
             // The draft editor owns creation errors and must keep its unsaved row.
             // Ordinary cell edits continue to report their error through the app toast.
             if (column === "__create__") throw reason;
@@ -593,27 +610,47 @@ function App() {
     }
 
     async function applyHistory(redo: boolean) {
+        // Undo and Redo share one flight; a second trigger must not allocate a
+        // new request serial and supersede a result that has already committed.
+        if (historyFlight.current) return;
+        historyFlight.current = true;
+        setHistoryState({pending:true});
         setError("");
         const request = beginRequest("history");
         try {
             const result = redo ? await Redo() : await Undo();
-            if (!isCurrent(request)) return;
+            if (!isCurrent(request,result.workspace)) return;
+            const appliedDelta = result.delta && applyCellDelta(result.delta);
             if (!publishWorkspace(result.workspace, request)) return;
+            if (appliedDelta) return;
             await refreshOpenTabs(request, result.workspace, {table:async path => await GetTable(path), schema:async path => await GetPublicSchema(path)});
         } catch (reason) {
-            if (!isCurrent(request)) return;
+            if (!ownsRequest(request)) return;
             setError(reason instanceof Error ? reason.message : String(reason));
+        } finally {
+            setHistoryState({pending:false});
         }
     }
 
     async function exportProject() {
+        if(operationSnapshot().busy) return;
         setError("");
         setNotice("");
+        const request = beginRequest("export");
         try {
-            const result = await Export();
-            setExportResult(result);
-            void OpenPath(result.directory).catch(() => undefined);
+            await withProjectOperation("Export", async () => {
+                const result = await Export();
+                if (!isCurrent(request,result.workspace)) return;
+                if (result.workspace) {
+                    if (!publishWorkspace(result.workspace,request)) return;
+                    await refreshOpenTabs(request,result.workspace,{table:async path=>await GetTable(path),schema:async path=>await GetPublicSchema(path)},true);
+                }
+                if (!ownsRequest(request)) return;
+                setExportResult(result);
+                void OpenPath(result.directory).catch(() => undefined);
+            });
         } catch (reason) {
+            if (!ownsRequest(request)) return;
             setError(reason instanceof Error ? reason.message : String(reason));
         }
     }
@@ -631,22 +668,33 @@ function App() {
     }
 
     async function compileProject() {
-        if (!workspace) return;
+        if (!workspace || operationSnapshot().busy) return;
         setError("");
         try {
-            const result = await Compile();
-            publishWorkspace(result.workspace);
-            if (table) {
-                updateTable(await GetTable(table.path));
-            }
+            await withProjectOperation("Compile", async () => {
+                const result = await Compile();
+                publishWorkspace(result.workspace);
+                if (table) updateTable(await GetTable(table.path));
+            });
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         }
     }
 
+    useEffect(() => {
+        const shortcut = (event: KeyboardEvent) => {
+            if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.key.toLowerCase() !== "b") return;
+            if (event.repeat || event.isComposing || operationSnapshot().busy || !workspace || (event.target as Element | null)?.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
+            event.preventDefault();
+            void compileProject();
+        };
+        document.addEventListener("keydown", shortcut);
+        return () => document.removeEventListener("keydown", shortcut);
+    }, [workspace, table, operation.busy]);
+
     return (
         <main className="app-shell" onContextMenu={(event) => event.preventDefault()}>
-            <header className="app-header">
+            <header {...(operation.busy ? {inert:""} : {})} className="app-header">
                 <div className="brand">Datapack</div>
                 <div className="header-divider"/>
                 <nav className="app-menubar" aria-label={t("menu.appMenu")}>
@@ -666,22 +714,25 @@ function App() {
                     <div className="app-menu">
                         <button aria-expanded={appMenu === "edit"} onClick={() => setAppMenu(appMenu === "edit" ? null : "edit")}>{t("menu.edit")}</button>
                         {appMenu === "edit" && <div className="app-menu-popover">
-                            <button disabled={!workspace?.canUndo} onClick={() => { setAppMenu(null); applyHistory(false); }}>{t("menu.undo")} <kbd>Ctrl+Z</kbd></button>
-                            <button disabled={!workspace?.canRedo} onClick={() => { setAppMenu(null); applyHistory(true); }}>{t("menu.redo")} <kbd>Ctrl+Y</kbd></button>
+                            <button disabled={historyState.pending || !workspace?.canUndo} onClick={() => { setAppMenu(null); applyHistory(false); }}>{t("menu.undo")} <kbd>Ctrl+Z</kbd></button>
+                            <button disabled={historyState.pending || !workspace?.canRedo} onClick={() => { setAppMenu(null); applyHistory(true); }}>{t("menu.redo")} <kbd>Ctrl+Y</kbd></button>
                         </div>}
                     </div>
                 </nav>
                 <span className="project-name">{workspace?.tree.root.name ?? t("header.noProjectOpen")}</span>
                 <div className="header-actions">
                     {workspace && <button className={`build-mode build-mode-${workspace.compile.mode} build-mode-toggle`} aria-label={t("header.toggleCompileMode")} title={t("header.compileModeHint")} onClick={toggleCompileMode}>{workspace.compile.mode === "auto" ? t("header.autoCompile") : t("header.manualCompile")}{workspace.compile.pending ? t("header.pending") : ""}</button>}
-                    {workspace && workspace.compile.mode === "manual" && <button className="compile-button" disabled={!workspace.compile.pending} onClick={compileProject}>{t("header.compile")}</button>}
+                    {workspace && workspace.compile.mode === "manual" && <button className="compile-button" disabled={operation.busy || !workspace.compile.pending} title="Ctrl+Shift+B" onClick={compileProject}>{t("header.compile")}</button>}
                     {workspace && workspace.compile.diagnostics.length > 0 && <span className="compile-errors" title={t("header.compileDiagnostics")}>{workspace.compile.diagnostics.length}</span>}
                     <button className="export-button" aria-label={t("settings.title")} onClick={() => setSettingsOpen(true)}>{t("settings.title")}</button>
                 </div>
             </header>
 
+            {operation.busy && <div className="operation-progress" role="status" aria-live="polite">{language === "zh-CN" ? operationLabel(operation.kind) : operation.kind} · {operation.progress ? (language === "zh-CN" ? operationLabel(operation.progress.phase) : operation.progress.phase) : "…"}{operation.progress && operation.progress.total > 0 ? ` ${operation.progress.completed} / ${operation.progress.total}` : ""}</div>}
+            {workspace?.sourceUncertain && <div role="alert">{language === "zh-CN" ? "源文件状态不确定，请重新打开工程后继续。" : "Source state is uncertain. Reopen the project before continuing."}</div>}
+            {workspace?.compile.pending && <div className="compile-freshness">{language === "zh-CN" ? (workspace.compile.compiledAt ? "数据已保存；显示的是上次编译结果，请重新编译。" : "尚未校验；编辑即时保存，编译和导出时完整校验。") : (workspace.compile.compiledAt ? "Saved; showing previous compile results. Recompile to validate current data." : "Not validated yet. Edits save immediately; compile and export validate current data.")}</div>}
             {workspace ? (
-                <section className="workbench">
+                <section className="workbench" {...(operation.busy ? {inert:""} : {})}>
                     <aside className="project-explorer">
                         <div className="panel-title">{t("panel.project")}</div>
                         <div className="tree"><Tree node={workspace.tree.root} expanded={expandedNodes} onToggleCollapse={(key) => setExpandedNodes((current) => {
@@ -742,7 +793,7 @@ function App() {
                     <aside className="schema-explorer">
                         <div className="diagnostics-panel">
                             <div className="panel-title">{t("panel.diagnostics")}</div>
-                            {(workspace.schemas.diagnostics ?? []).length === 0 && (workspace.foreignKeys.diagnostics ?? []).length === 0 && workspace.compile.diagnostics.length === 0 && <div className="schema-editor-empty">{t("panel.noDiagnostics")}</div>}
+                            {(workspace.schemas.diagnostics ?? []).length === 0 && (workspace.foreignKeys.diagnostics ?? []).length === 0 && workspace.compile.diagnostics.length === 0 && <div className="schema-editor-empty">{workspace.compile.pending ? (language === "zh-CN" ? "当前输入尚未完整校验" : "Current input has not been fully validated") : t("panel.noDiagnostics")}</div>}
                             {(workspace.schemas.diagnostics ?? []).length > 0 && <div className="schema-diagnostics">
                                 {(workspace.schemas.diagnostics ?? []).map((diagnostic) => <button className="schema-diagnostic schema-diagnostic-action" key={`${diagnostic.path}:${diagnostic.field}:${diagnostic.message}`} onClick={() => jumpToDiagnostic(diagnostic)}>
                                     <code>{diagnostic.field}</code>

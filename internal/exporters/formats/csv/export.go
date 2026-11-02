@@ -21,7 +21,15 @@ type Result struct {
 // Export writes all compiled tables with CSV configuration to destination.
 // The destination is replaced as a directory, so callers never observe a
 // partially written export set.
+type Options struct {
+	Progress     func(int, int)
+	BeforeCommit func() error
+}
+
 func Export(destination string, pkg *compiler.Package) (Result, error) {
+	return ExportWithOptions(destination, pkg, Options{})
+}
+func ExportWithOptions(destination string, pkg *compiler.Package, options Options) (Result, error) {
 	if pkg == nil {
 		return Result{}, fmt.Errorf("export requires a compiled package")
 	}
@@ -48,18 +56,34 @@ func Export(destination string, pkg *compiler.Package) (Result, error) {
 		return Result{}, fmt.Errorf("create export directory: %w", err)
 	}
 	defer os.RemoveAll(temporary)
+	total, completed := 0, 0
+	for _, table := range pkg.Tables {
+		if table.CSV != nil {
+			total += len(table.Rows)
+		}
+	}
 	result := Result{}
 	for _, table := range pkg.Tables {
 		if table.CSV == nil {
 			continue
 		}
 		file := filepath.Join(temporary, tableName(table)+".csv")
-		if err := writeTable(file, table); err != nil {
+		if err := writeTableProgress(file, table, func(n int) {
+			if options.Progress != nil {
+				options.Progress(completed+n, total)
+			}
+		}); err != nil {
 			return Result{}, err
 		}
+		completed += len(table.Rows)
 		result.Files = append(result.Files, filepath.Join(destination, filepath.Base(file)))
 	}
 	sort.Strings(result.Files)
+	if options.BeforeCommit != nil {
+		if err := options.BeforeCommit(); err != nil {
+			return Result{}, err
+		}
+	}
 	if err := replaceDirectory(destination, temporary); err != nil {
 		return Result{}, err
 	}
@@ -84,7 +108,8 @@ func validateFileName(name string) error {
 	return nil
 }
 
-func writeTable(path string, table compiler.Table) error {
+func writeTable(path string, table compiler.Table) error { return writeTableProgress(path, table, nil) }
+func writeTableProgress(path string, table compiler.Table, progress func(int)) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create CSV %s: %w", tableName(table), err)
@@ -98,7 +123,7 @@ func writeTable(path string, table compiler.Table) error {
 	if err := writer.Write(table.CSV.Columns); err != nil {
 		return fmt.Errorf("write CSV header: %w", err)
 	}
-	for _, row := range table.Rows {
+	for index, row := range table.Rows {
 		record := make([]string, 0, len(table.CSV.Columns))
 		for _, column := range table.CSV.Columns {
 			if column == "id" {
@@ -122,10 +147,16 @@ func writeTable(path string, table compiler.Table) error {
 		if err := writer.Write(record); err != nil {
 			return fmt.Errorf("write CSV row: %w", err)
 		}
+		if progress != nil && ((index+1)%1000 == 0 || index+1 == len(table.Rows)) {
+			progress(index + 1)
+		}
 	}
 	writer.Flush()
 	if err := writer.Error(); err != nil {
 		return fmt.Errorf("flush CSV: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close CSV: %w", err)
 	}
 	return nil
 }

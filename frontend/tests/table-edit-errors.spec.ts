@@ -170,6 +170,8 @@ test("retains an ID-first draft when an inline edit fails to create it", async (
     const canvas = page.locator(".tab-panel:visible canvas").first();
     const box = await canvas.boundingBox();
     expect(box).not.toBeNull();
+    await selectCell(page,2,1);
+    await expect(formula(page)).toHaveValue("");
     await page.mouse.dblclick(box!.x + 395, box!.y + 80);
     const inline = page.locator(".inline-cell-editor");
     await inline.fill("123");

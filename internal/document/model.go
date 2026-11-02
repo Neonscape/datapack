@@ -4,21 +4,24 @@ package document
 import "datapack/internal/schemamodel"
 
 type Table struct {
-	DisplayName  string                       `json:"displayName,omitempty"`
-	Path         string                       `json:"path"`
-	Package      string                       `json:"package"`
-	Namespace    string                       `json:"namespace"`
-	Name         string                       `json:"name"`
-	PrimaryKey   schemamodel.Node             `json:"primaryKey"`
-	Columns      []Column                     `json:"columns"`
-	Rows         []Row                        `json:"rows"`
-	ForeignKeys  []ForeignKey                 `json:"foreignKeys,omitempty"`
-	Formulas     []Formula                    `json:"formulas,omitempty"`
-	Diagnostics  []Diagnostic                 `json:"diagnostics,omitempty"`
-	CSVExport    *CSVExport                   `json:"csvExport,omitempty"`
-	Exports      map[string]ExportSettings    `json:"exports,omitempty"`
-	CellComments map[string]map[string]string `json:"cellComments,omitempty"`
-	LocalSchema  []SchemaDefinition           `json:"localSchema"`
+	ProjectEpoch      string                       `json:"projectEpoch,omitempty"`
+	WorkspaceRevision int                          `json:"workspaceRevision"`
+	SourceSHA256      string                       `json:"-"`
+	DisplayName       string                       `json:"displayName,omitempty"`
+	Path              string                       `json:"path"`
+	Package           string                       `json:"package"`
+	Namespace         string                       `json:"namespace"`
+	Name              string                       `json:"name"`
+	PrimaryKey        schemamodel.Node             `json:"primaryKey"`
+	Columns           []Column                     `json:"columns"`
+	Rows              []Row                        `json:"rows"`
+	ForeignKeys       []ForeignKey                 `json:"foreignKeys,omitempty"`
+	Formulas          []Formula                    `json:"formulas,omitempty"`
+	Diagnostics       []Diagnostic                 `json:"diagnostics,omitempty"`
+	CSVExport         *CSVExport                   `json:"csvExport,omitempty"`
+	Exports           map[string]ExportSettings    `json:"exports,omitempty"`
+	CellComments      map[string]map[string]string `json:"cellComments,omitempty"`
+	LocalSchema       []SchemaDefinition           `json:"localSchema"`
 }
 
 type Column struct {

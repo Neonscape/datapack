@@ -122,6 +122,8 @@ test("leaves inline and formula-bar native editing in control of paste", async (
     const canvas = page.locator(".tab-panel:visible canvas").first();
     const box = await canvas.boundingBox();
     expect(box).not.toBeNull();
+    await selectCell(page,1,0);
+    await expect(page.getByRole("textbox",{name:"Formula bar"})).toHaveValue("beta 1");
     await page.mouse.dblclick(box!.x + 225, box!.y + 50);
     const inline = page.locator(".inline-cell-editor:visible");
     await expect(inline).toBeFocused();

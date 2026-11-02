@@ -62,6 +62,10 @@ export function GetExportFormats() {
   return window['go']['main']['App']['GetExportFormats']();
 }
 
+export function GetOperationState() {
+  return window['go']['main']['App']['GetOperationState']();
+}
+
 export function GetProjectSettings() {
   return window['go']['main']['App']['GetProjectSettings']();
 }
@@ -114,6 +118,10 @@ export function Redo() {
   return window['go']['main']['App']['Redo']();
 }
 
+export function RedoDelta() {
+  return window['go']['main']['App']['RedoDelta']();
+}
+
 export function RenameColumn(arg1) {
   return window['go']['main']['App']['RenameColumn'](arg1);
 }
@@ -152,6 +160,10 @@ export function SetCellFormula(arg1) {
 
 export function SetCellText(arg1) {
   return window['go']['main']['App']['SetCellText'](arg1);
+}
+
+export function SetCellTextDelta(arg1) {
+  return window['go']['main']['App']['SetCellTextDelta'](arg1);
 }
 
 export function SetColumnDisplayName(arg1) {
@@ -198,6 +210,14 @@ export function Undo() {
   return window['go']['main']['App']['Undo']();
 }
 
+export function UndoDelta() {
+  return window['go']['main']['App']['UndoDelta']();
+}
+
 export function UpdateCell(arg1) {
   return window['go']['main']['App']['UpdateCell'](arg1);
+}
+
+export function UpdateCellDelta(arg1) {
+  return window['go']['main']['App']['UpdateCellDelta'](arg1);
 }

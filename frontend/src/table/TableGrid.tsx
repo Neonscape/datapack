@@ -70,6 +70,16 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
     const foreignKeyEditorRef = useRef<HTMLSelectElement | null>(null);
     const formulaBarRef = useRef<HTMLInputElement | null>(null);
     const dataEditorRef = useRef<DataEditorRef | null>(null);
+    const visibleRegion = useRef({x:0,y:0,width:1,height:1});
+    useEffect(() => {
+        if (!active) return;
+        const range=visibleRegion.current, cells:{cell:Item}[]=[];
+        for(let row=Math.max(0,range.y);row<Math.min(table.rows.length+1,range.y+range.height);row++)
+            for(let column=Math.max(0,range.x);column<Math.min(table.columns.length+1,range.x+range.width);column++) cells.push({cell:[column,row]});
+        // Glide retains canvas pixels. Damage the visible viewport after an
+        // authoritative content change, including WebKit without a mouse move.
+        dataEditorRef.current?.updateCells(cells);
+    }, [active,table.rows,table.columns,table.diagnostics,table.cellComments]);
     const gridRef = useRef<HTMLDivElement | null>(null);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const columns: GridColumn[] = [
@@ -373,11 +383,11 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
                 void onPaste(range.y, range.x, text);
             }
         };
-        element.addEventListener("copy", clipboard);
-        element.addEventListener("paste", clipboard);
+        window.addEventListener("copy", clipboard, true);
+        window.addEventListener("paste", clipboard, true);
         return () => {
-            element.removeEventListener("copy", clipboard);
-            element.removeEventListener("paste", clipboard);
+            window.removeEventListener("copy", clipboard, true);
+            window.removeEventListener("paste", clipboard, true);
         };
     }, [active, gridSelection, table, onPaste]);
     return <div className="table-document" data-inline-editor={inlineEditor || foreignKeyEditor || arrayEditor || structEditor ? "open" : "closed"}>
@@ -450,6 +460,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         <div ref={gridRef} className="table-grid">
             <DataEditor
                 ref={dataEditorRef}
+                onVisibleRegionChanged={range=>{visibleRegion.current=range;}}
                  columns={columns}
                  minColumnWidth={80}
                  maxColumnWidth={600}

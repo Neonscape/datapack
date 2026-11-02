@@ -298,6 +298,8 @@ export namespace document {
 	}
 	
 	export class Table {
+	    projectEpoch?: string;
+	    workspaceRevision: number;
 	    displayName?: string;
 	    path: string;
 	    package: string;
@@ -320,6 +322,8 @@ export namespace document {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projectEpoch = source["projectEpoch"];
+	        this.workspaceRevision = source["workspaceRevision"];
 	        this.displayName = source["displayName"];
 	        this.path = source["path"];
 	        this.package = source["package"];
@@ -836,25 +840,52 @@ export namespace workspace {
 	        this.comment = source["comment"];
 	    }
 	}
-	export class CellUpdate {
+	export class CellDelta {
 	    path: string;
+	    projectEpoch: string;
+	    baseRevision: number;
+	    revision: number;
+	    rowIndex: number;
 	    rowID: string;
 	    column: string;
-	    expression: string;
+	    cell: document.Cell;
 	
 	    static createFrom(source: any = {}) {
-	        return new CellUpdate(source);
+	        return new CellDelta(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
+	        this.projectEpoch = source["projectEpoch"];
+	        this.baseRevision = source["baseRevision"];
+	        this.revision = source["revision"];
+	        this.rowIndex = source["rowIndex"];
 	        this.rowID = source["rowID"];
 	        this.column = source["column"];
-	        this.expression = source["expression"];
+	        this.cell = this.convertValues(source["cell"], document.Cell);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class CompileState {
+	    inputRevision: number;
 	    mode: string;
 	    pending: boolean;
 	    compiledAt?: string;
@@ -866,6 +897,7 @@ export namespace workspace {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.inputRevision = source["inputRevision"];
 	        this.mode = source["mode"];
 	        this.pending = source["pending"];
 	        this.compiledAt = source["compiledAt"];
@@ -1015,6 +1047,9 @@ export namespace workspace {
 		}
 	}
 	export class View {
+	    projectEpoch: string;
+	    revision: number;
+	    sourceUncertain?: boolean;
 	    project: Project;
 	    settings: EditorSettings;
 	    tree: projecttree.Tree;
@@ -1030,6 +1065,9 @@ export namespace workspace {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projectEpoch = source["projectEpoch"];
+	        this.revision = source["revision"];
+	        this.sourceUncertain = source["sourceUncertain"];
 	        this.project = this.convertValues(source["project"], Project);
 	        this.settings = this.convertValues(source["settings"], EditorSettings);
 	        this.tree = this.convertValues(source["tree"], projecttree.Tree);
@@ -1057,6 +1095,58 @@ export namespace workspace {
 		    }
 		    return a;
 		}
+	}
+	export class CellEditResult {
+	    table?: document.Table;
+	    delta?: CellDelta;
+	    workspace: View;
+	
+	    static createFrom(source: any = {}) {
+	        return new CellEditResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = this.convertValues(source["table"], document.Table);
+	        this.delta = this.convertValues(source["delta"], CellDelta);
+	        this.workspace = this.convertValues(source["workspace"], View);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CellUpdate {
+	    path: string;
+	    rowID: string;
+	    column: string;
+	    expression: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CellUpdate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.rowID = source["rowID"];
+	        this.column = source["column"];
+	        this.expression = source["expression"];
+	    }
 	}
 	export class CellUpdateResult {
 	    table: document.Table;
@@ -1432,6 +1522,7 @@ export namespace workspace {
 	    }
 	}
 	export class ExportResult {
+	    workspace: View;
 	    directory: string;
 	    files: string[];
 	
@@ -1441,9 +1532,28 @@ export namespace workspace {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.workspace = this.convertValues(source["workspace"], View);
 	        this.directory = source["directory"];
 	        this.files = source["files"];
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ExportTable {
 	    id: string;
@@ -1554,6 +1664,30 @@ export namespace workspace {
 		    }
 		    return a;
 		}
+	}
+	export class OperationState {
+	    id: number;
+	    kind: string;
+	    phase: string;
+	    completed: number;
+	    total: number;
+	    running: boolean;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new OperationState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.kind = source["kind"];
+	        this.phase = source["phase"];
+	        this.completed = source["completed"];
+	        this.total = source["total"];
+	        this.running = source["running"];
+	        this.error = source["error"];
+	    }
 	}
 	export class Paste {
 	    path: string;

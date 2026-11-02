@@ -4,6 +4,7 @@
 package compiler
 
 import (
+	"datapack/internal/perftrace"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/load"
 	"datapack/internal/cuerows"
+	"datapack/internal/cueschema"
 	"datapack/internal/document"
 	"datapack/internal/foreignkey"
 	"datapack/internal/formula"
@@ -33,8 +35,9 @@ type Diagnostic struct {
 
 // Result is the outcome of one full compile.
 type Result struct {
-	Diagnostics []Diagnostic `json:"diagnostics"`
-	Package     *Package     `json:"package,omitempty"`
+	InputFingerprint string       `json:"-"`
+	Diagnostics      []Diagnostic `json:"diagnostics"`
+	Package          *Package     `json:"package,omitempty"`
 }
 
 // Package is the read-only compiled data an exporter consumes.
@@ -64,6 +67,10 @@ type Row struct {
 // CompileAll validates every table and Schema definition and, when clean,
 // returns the compiled package.
 func CompileAll(publicSchemas []document.PublicSchema, tables []document.Table) Result {
+	return CompileAllProgress(publicSchemas, tables, nil)
+}
+func CompileAllProgress(publicSchemas []document.PublicSchema, tables []document.Table, progress func(string, int, int)) Result {
+	defer perftrace.Start("compiler.CompileAll")()
 	result := Result{}
 	registry := schemaregistry.Build(publicSchemas, tables)
 	for _, diagnostic := range registry.Diagnostics {
@@ -71,8 +78,20 @@ func CompileAll(publicSchemas []document.PublicSchema, tables []document.Table) 
 	}
 	compiled := make([]Table, 0, len(tables))
 	resolved := foreignkey.ResolvedRows{}
+	total, done := 0, 0
 	for _, table := range tables {
-		compiledTable, diagnostics := compileTable(table)
+		total += len(table.Rows)
+	}
+	for _, table := range tables {
+		if progress != nil {
+			progress("schema", done, total)
+		}
+		compiledTable, diagnostics := compileTableProgress(table, func(n int) {
+			if progress != nil {
+				progress("validate", done+n, total)
+			}
+		})
+		done += len(table.Rows)
 		result.Diagnostics = append(result.Diagnostics, diagnostics...)
 		compiled = append(compiled, compiledTable)
 		resolved[table.Path] = map[string]map[string]any{}
@@ -100,6 +119,9 @@ func compiledTableName(table Table) string {
 }
 
 func compileTable(table document.Table) (Table, []Diagnostic) {
+	return compileTableProgress(table, nil)
+}
+func compileTableProgress(table document.Table, progress func(int)) (Table, []Diagnostic) {
 	columns := []string{"id"}
 	for _, column := range table.Columns {
 		columns = append(columns, column.Name)
@@ -109,11 +131,23 @@ func compileTable(table document.Table) (Table, []Diagnostic) {
 		compiled.CSV = &CSV{Columns: table.CSVExport.Columns}
 	}
 	diagnostics := []Diagnostic{}
-	evaluated := formula.Evaluate(table)
+	loaded, loadErr := cueschema.Load(table, table.Package)
+	var evaluated formula.Result
+	if loadErr == nil {
+		evaluated = formula.EvaluateWithSchema(table, loaded.LookupPath(cue.MakePath(cue.Def("Row"))))
+	} else {
+		evaluated = formula.Evaluate(table)
+	}
 	for _, diagnostic := range evaluated.Diagnostics {
 		diagnostics = append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), RowID: diagnostic.RowID, Column: diagnostic.Column, Message: diagnostic.Message})
 	}
-	rows, rowDiagnostics := validateRows(table, evaluated.Rows)
+	var rows map[string]map[string]any
+	var rowDiagnostics []Diagnostic
+	if loadErr == nil {
+		rows, rowDiagnostics = validateRowsProgress(table, evaluated.Rows, progress, loaded)
+	} else {
+		rows, rowDiagnostics = validateRowsProgress(table, evaluated.Rows, progress)
+	}
 	diagnostics = append(diagnostics, rowDiagnostics...)
 	for _, row := range table.Rows {
 		compiled.Rows = append(compiled.Rows, Row{ID: row.ID, Values: rows[row.ID]})
@@ -123,17 +157,27 @@ func compileTable(table document.Table) (Table, []Diagnostic) {
 
 // validateRows unifies the evaluated row values with the table Schema and
 // decodes the final concrete values, including defaults.
-func validateRows(table document.Table, evaluated map[string]map[string]any) (map[string]map[string]any, []Diagnostic) {
-	instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path), Package: table.Package})
+func validateRows(table document.Table, evaluated map[string]map[string]any, provided ...cue.Value) (map[string]map[string]any, []Diagnostic) {
+	return validateRowsProgress(table, evaluated, nil, provided...)
+}
+func validateRowsProgress(table document.Table, evaluated map[string]map[string]any, progress func(int), provided ...cue.Value) (map[string]map[string]any, []Diagnostic) {
+	defer perftrace.Start("compiler.validateRows")()
 	diagnostics := []Diagnostic{}
-	if len(instances) != 1 {
-		count := strconv.Itoa(len(instances))
-		return nil, append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Key: "compile.expectedOnePackage", Args: []string{count}, Message: fmt.Sprintf("load table package: expected one package, found %s", count)})
-	}
-	context := cuecontext.New()
-	packageValue := context.BuildInstance(instances[0])
-	if err := packageValue.Err(); err != nil {
-		return nil, append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Message: err.Error()})
+	var packageValue cue.Value
+	if len(provided) > 0 {
+		packageValue = provided[0]
+	} else {
+		instances := load.Instances([]string{"."}, &load.Config{Dir: filepath.Dir(table.Path), Package: table.Package})
+		if len(instances) != 1 {
+			count := strconv.Itoa(len(instances))
+			return nil, append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Key: "compile.expectedOnePackage", Args: []string{count}, Message: fmt.Sprintf("load table package: expected one package, found %s", count)})
+		}
+		context := cuecontext.New()
+		packageValue = context.BuildInstance(instances[0])
+		if err := packageValue.Err(); err != nil {
+			return nil, append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), Message: err.Error()})
+		}
+
 	}
 	rowSchema := packageValue.LookupPath(cue.MakePath(cue.Def("Row")))
 	primaryKey := packageValue.LookupPath(cue.MakePath(cue.Def("PrimaryKey")))
@@ -149,7 +193,10 @@ func validateRows(table document.Table, evaluated map[string]map[string]any) (ma
 		}
 	}
 	finalRows := make(map[string]map[string]any, len(table.Rows))
-	for _, row := range table.Rows {
+	for index, row := range table.Rows {
+		if progress != nil && index%1000 == 0 {
+			progress(index)
+		}
 		base := len(diagnostics)
 		candidate, issues := cuerows.Validate(rowSchema, primaryKey, row.ID, evaluated[row.ID])
 		for _, issue := range issues {
@@ -168,6 +215,9 @@ func validateRows(table document.Table, evaluated map[string]map[string]any) (ma
 			continue
 		}
 		finalRows[row.ID] = decoded
+	}
+	if progress != nil {
+		progress(len(table.Rows))
 	}
 	return finalRows, diagnostics
 }
