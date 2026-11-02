@@ -9,8 +9,14 @@ on:
   workflow_dispatch:
 
 # The runner image only ships Node/npm/git; Go and Wails are installed in-job.
-# Keep the local Gitea host out of any proxy.
+# The image also bakes in http_proxy=127.0.0.1:7897, which is a dead address
+# inside the job container (its loopback is not the host), so clear it here.
+# Keep the local Gitea host out of any proxy as well.
 env:
+  http_proxy: ""
+  https_proxy: ""
+  HTTP_PROXY: ""
+  HTTPS_PROXY: ""
   NO_PROXY: "dev.projectmiraland.top,127.0.0.1,localhost"
   no_proxy: "dev.projectmiraland.top,127.0.0.1,localhost"
   # Git reads http.proxy from global/system config independently of the proxy
