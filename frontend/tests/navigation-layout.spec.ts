@@ -202,16 +202,18 @@ test("Chinese local-rule and creation menus use translated labels", async ({page
     await expect(page.getByRole("button",{name:"新建校验规则",exact:true})).toBeVisible();
 });
 
-test("modal survives parent rerender and restores focus after Escape and backdrop closing", async ({page}) => {
+test("compile locks conflicting settings and restores modal focus after completion", async ({page}) => {
     await fixture(page);
     await openGrid(page);
     await page.evaluate(() => { (window as unknown as {__layout:{holdCompile:boolean}}).__layout.holdCompile=true; });
     await page.getByRole("button",{name:"Compile",exact:true}).click();
+    await expect(page.locator(".workbench")).toHaveAttribute("inert", "");
+    await page.evaluate(() => { (window as unknown as {__layout:{resumeCompile:()=>void}}).__layout.resumeCompile(); });
+    await expect(page.locator(".workbench")).not.toHaveAttribute("inert", "");
     await page.getByRole("button",{name:"game.dtproj",exact:true}).click();
     const input=page.locator(".project-settings-directory-input input");
     await input.fill("new directory");
     await input.focus();
-    await page.evaluate(() => { (window as unknown as {__layout:{resumeCompile:()=>void}}).__layout.resumeCompile(); });
     await expect(input).toBeFocused();
     await input.pressSequentially(" still typing");
     await expect(input).toHaveValue("new directory still typing");

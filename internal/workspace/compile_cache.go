@@ -55,8 +55,7 @@ type successfulCompile struct {
 	result      compiler.Result
 }
 
-// Imported dependencies outside project roots are intentionally not cached by
-// this prototype. The conservative keyword check may reject harmless comments.
+// Imported dependencies are fully checked for consistency but are not reused.
 func (s *Service) compileFingerprint() (string, bool) {
 	snapshot, err := s.captureInputs()
 	return snapshot.fingerprint, err == nil && snapshot.cacheable

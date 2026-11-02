@@ -62,6 +62,10 @@ export function GetExportFormats() {
   return window['go']['main']['App']['GetExportFormats']();
 }
 
+export function GetOperationState() {
+  return window['go']['main']['App']['GetOperationState']();
+}
+
 export function GetProjectSettings() {
   return window['go']['main']['App']['GetProjectSettings']();
 }

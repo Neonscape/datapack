@@ -67,6 +67,9 @@ type Row struct {
 // CompileAll validates every table and Schema definition and, when clean,
 // returns the compiled package.
 func CompileAll(publicSchemas []document.PublicSchema, tables []document.Table) Result {
+	return CompileAllProgress(publicSchemas, tables, nil)
+}
+func CompileAllProgress(publicSchemas []document.PublicSchema, tables []document.Table, progress func(string, int, int)) Result {
 	defer perftrace.Start("compiler.CompileAll")()
 	result := Result{}
 	registry := schemaregistry.Build(publicSchemas, tables)
@@ -75,8 +78,20 @@ func CompileAll(publicSchemas []document.PublicSchema, tables []document.Table) 
 	}
 	compiled := make([]Table, 0, len(tables))
 	resolved := foreignkey.ResolvedRows{}
+	total, done := 0, 0
 	for _, table := range tables {
-		compiledTable, diagnostics := compileTable(table)
+		total += len(table.Rows)
+	}
+	for _, table := range tables {
+		if progress != nil {
+			progress("schema", done, total)
+		}
+		compiledTable, diagnostics := compileTableProgress(table, func(n int) {
+			if progress != nil {
+				progress("validate", done+n, total)
+			}
+		})
+		done += len(table.Rows)
 		result.Diagnostics = append(result.Diagnostics, diagnostics...)
 		compiled = append(compiled, compiledTable)
 		resolved[table.Path] = map[string]map[string]any{}
@@ -104,6 +119,9 @@ func compiledTableName(table Table) string {
 }
 
 func compileTable(table document.Table) (Table, []Diagnostic) {
+	return compileTableProgress(table, nil)
+}
+func compileTableProgress(table document.Table, progress func(int)) (Table, []Diagnostic) {
 	columns := []string{"id"}
 	for _, column := range table.Columns {
 		columns = append(columns, column.Name)
@@ -126,9 +144,9 @@ func compileTable(table document.Table) (Table, []Diagnostic) {
 	var rows map[string]map[string]any
 	var rowDiagnostics []Diagnostic
 	if loadErr == nil {
-		rows, rowDiagnostics = validateRows(table, evaluated.Rows, loaded)
+		rows, rowDiagnostics = validateRowsProgress(table, evaluated.Rows, progress, loaded)
 	} else {
-		rows, rowDiagnostics = validateRows(table, evaluated.Rows)
+		rows, rowDiagnostics = validateRowsProgress(table, evaluated.Rows, progress)
 	}
 	diagnostics = append(diagnostics, rowDiagnostics...)
 	for _, row := range table.Rows {
@@ -140,6 +158,9 @@ func compileTable(table document.Table) (Table, []Diagnostic) {
 // validateRows unifies the evaluated row values with the table Schema and
 // decodes the final concrete values, including defaults.
 func validateRows(table document.Table, evaluated map[string]map[string]any, provided ...cue.Value) (map[string]map[string]any, []Diagnostic) {
+	return validateRowsProgress(table, evaluated, nil, provided...)
+}
+func validateRowsProgress(table document.Table, evaluated map[string]map[string]any, progress func(int), provided ...cue.Value) (map[string]map[string]any, []Diagnostic) {
 	defer perftrace.Start("compiler.validateRows")()
 	diagnostics := []Diagnostic{}
 	var packageValue cue.Value
@@ -172,7 +193,10 @@ func validateRows(table document.Table, evaluated map[string]map[string]any, pro
 		}
 	}
 	finalRows := make(map[string]map[string]any, len(table.Rows))
-	for _, row := range table.Rows {
+	for index, row := range table.Rows {
+		if progress != nil && index%1000 == 0 {
+			progress(index)
+		}
 		base := len(diagnostics)
 		candidate, issues := cuerows.Validate(rowSchema, primaryKey, row.ID, evaluated[row.ID])
 		for _, issue := range issues {
@@ -191,6 +215,9 @@ func validateRows(table document.Table, evaluated map[string]map[string]any, pro
 			continue
 		}
 		finalRows[row.ID] = decoded
+	}
+	if progress != nil {
+		progress(len(table.Rows))
 	}
 	return finalRows, diagnostics
 }

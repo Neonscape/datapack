@@ -342,3 +342,5 @@ func (a *App) MoveColumn(move workspace.ColumnMove) (workspace.ColumnMoveResult,
 func (a *App) SetDisplayName(update workspace.DisplayNameSet) (workspace.SchemaEditResult, error) {
 	return a.workspace.SetDisplayName(update)
 }
+
+func (a *App) GetOperationState() workspace.OperationState { return a.workspace.GetOperationState() }

@@ -35,6 +35,8 @@ export function Export():Promise<workspace.ExportResult>;
 
 export function GetExportFormats():Promise<Array<workspace.ExportFormat>>;
 
+export function GetOperationState():Promise<workspace.OperationState>;
+
 export function GetProjectSettings():Promise<workspace.ProjectSettings>;
 
 export function GetPublicSchema(arg1:string):Promise<document.PublicSchema>;

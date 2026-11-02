@@ -37,26 +37,33 @@ import (
 )
 
 type View struct {
-	Project     Project              `json:"project"`
-	Settings    EditorSettings       `json:"settings"`
-	Tree        projecttree.Tree     `json:"tree"`
-	Schemas     schemaregistry.Index `json:"schemas"`
-	ForeignKeys foreignkey.Summary   `json:"foreignKeys"`
-	Compile     CompileState         `json:"compile"`
-	CanUndo     bool                 `json:"canUndo"`
-	CanRedo     bool                 `json:"canRedo"`
+	ProjectEpoch    string               `json:"projectEpoch"`
+	Revision        int                  `json:"revision"`
+	SourceUncertain bool                 `json:"sourceUncertain,omitempty"`
+	Project         Project              `json:"project"`
+	Settings        EditorSettings       `json:"settings"`
+	Tree            projecttree.Tree     `json:"tree"`
+	Schemas         schemaregistry.Index `json:"schemas"`
+	ForeignKeys     foreignkey.Summary   `json:"foreignKeys"`
+	Compile         CompileState         `json:"compile"`
+	CanUndo         bool                 `json:"canUndo"`
+	CanRedo         bool                 `json:"canRedo"`
 }
 
 // CompileState carries the current build-mode state and the outcome of the
 // most recent full compile.
 type CompileState struct {
-	Mode        string                `json:"mode"`
-	Pending     bool                  `json:"pending"`
-	CompiledAt  string                `json:"compiledAt,omitempty"`
-	Diagnostics []compiler.Diagnostic `json:"diagnostics"`
+	InputRevision int                   `json:"inputRevision"`
+	Mode          string                `json:"mode"`
+	Pending       bool                  `json:"pending"`
+	CompiledAt    string                `json:"compiledAt,omitempty"`
+	Diagnostics   []compiler.Diagnostic `json:"diagnostics"`
 }
 
 type Service struct {
+	operationMu             sync.RWMutex
+	operation               OperationState
+	sourceUncertain         bool
 	inputHooks              *inputConsistencyHooks
 	literalOps              *literalWriteOps
 	successfulCompile       *successfulCompile
@@ -234,9 +241,18 @@ type CompileResult struct {
 }
 
 // Compile runs one full compile and publishes the outcome into the workspace.
-func (s *Service) Compile() (CompileResult, error) {
+func (s *Service) Compile() (result CompileResult, err error) {
+	finish, err := s.beginOperation("compile")
+	if err != nil {
+		return CompileResult{}, err
+	}
+	defer func() { finish(err) }()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return CompileResult{}, fmt.Errorf("source state uncertain; reopen project before continuing")
+	}
 	if s.current == nil {
 		return CompileResult{}, s.userError("workspace.noProject")
 	}
@@ -247,8 +263,14 @@ func (s *Service) Compile() (CompileResult, error) {
 // SetCompileMode switches between auto and manual compilation and persists the
 // user-level editor settings.
 func (s *Service) SetCompileMode(mode string) (View, error) {
+	if s.operationBusy() {
+		return View{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return View{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return View{}, s.userError("workspace.noProject")
 	}
@@ -661,9 +683,17 @@ func (s *Service) SetTheme(theme string) (EditorSettings, error) {
 	return settings, nil
 }
 
-func (s *Service) OpenProject(path string) (View, error) {
+func (s *Service) OpenProject(path string) (result View, err error) {
+	finish, err := s.beginOperation("open")
+	if err != nil {
+		return View{}, err
+	}
+	defer func() { finish(err) }()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.openProjectLocked(path)
+}
+func (s *Service) openProjectLocked(path string) (View, error) {
 	s.literalTables = nil
 	s.successfulCompile = nil
 	started := time.Now()
@@ -678,28 +708,31 @@ func (s *Service) OpenProject(path string) (View, error) {
 		s.log(logging.Error, "open project failed", map[string]any{"path": path, "error": err.Error()})
 		return View{}, err
 	}
+	s.operationProgress("discover", 0, 0)
 	tree, err := projecttree.Scan(project.Path, project.Config.TableRoots, project.Config.SchemaRoots, project.Config.Exclude)
 	if err != nil {
 		s.log(logging.Error, "open project failed", map[string]any{"path": path, "error": err.Error()})
 		return View{}, err
 	}
 	s.literalInputFingerprint = ""
+	s.sourceUncertain = false
 	s.resetRevisions()
 	s.undoStack = nil
 	s.redoStack = nil
+	s.operationProgress("index", 0, 0)
 	view := buildView(project, settings, tree)
+	view.ProjectEpoch = strconv.FormatUint(epochCounter.Add(1), 10)
+	view.Revision = s.revision
 	s.current = &view
-	if os.Getenv("DATAPACK_DEFER_OPEN_COMPILE") == "1" && settings.Build.Mode == "manual" {
+	if settings.Build.Mode == "manual" {
 		s.compiledRevision = -1
-		s.compileState = CompileState{Mode: "manual", Pending: true, Diagnostics: []compiler.Diagnostic{}}
+		s.compileState = CompileState{InputRevision: -1, Mode: "manual", Pending: true, Diagnostics: []compiler.Diagnostic{}}
 		s.current.Compile = s.compileState
 	} else {
 		s.compile()
 	}
 	view = *s.current
-	if fastEnabled() || os.Getenv("DATAPACK_COMPILE_CACHE") == "1" {
-		s.literalInputFingerprint, _ = s.sourceFingerprint()
-	}
+	s.literalInputFingerprint, _ = s.sourceFingerprint()
 	s.log(logging.Info, "open project completed", map[string]any{"path": path, "schemas": len(view.Schemas.Definitions), "compile_diagnostics": len(view.Compile.Diagnostics), "duration_ms": time.Since(started).Milliseconds()})
 	return view, nil
 }
@@ -760,8 +793,14 @@ func (s *Service) NormalizeProjectExportDirectory(path string) (string, error) {
 }
 
 func (s *Service) SetTableExportSettings(settings TableExportSettings) (TableExportSettingsResult, error) {
+	if s.operationBusy() {
+		return TableExportSettingsResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return TableExportSettingsResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return TableExportSettingsResult{}, s.userError("workspace.noProject")
 	}
@@ -785,8 +824,14 @@ func (s *Service) SetTableExportSettings(settings TableExportSettings) (TableExp
 }
 
 func (s *Service) SetProjectExportSettings(settings ProjectExportSettings) (ProjectSettings, error) {
+	if s.operationBusy() {
+		return ProjectSettings{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return ProjectSettings{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return ProjectSettings{}, s.userError("workspace.noProject")
 	}
@@ -919,6 +964,20 @@ func (s *Service) GetTable(path string) (document.Table, error) {
 		s.log(logging.Error, "get table failed", map[string]any{"path": path, "error": err.Error()})
 		return document.Table{}, err
 	}
+	fingerprint, inputErr := s.sourceFingerprint()
+	if inputErr == nil && s.literalInputFingerprint != "" && fingerprint != s.literalInputFingerprint {
+		if _, err := s.refreshCurrentView(); err != nil {
+			return document.Table{}, err
+		}
+	}
+	if inputErr != nil {
+		s.literalTables = nil
+		if !s.current.Compile.Pending {
+			s.markEdited()
+			view := *s.current
+			s.publishView(&view)
+		}
+	}
 	if table, ok := s.cachedLiteral(path); ok {
 		return withTableMetadata(table, *s.current), nil
 	}
@@ -996,8 +1055,14 @@ func (s *Service) schemaDefinitionID(path, name string) (schemaregistry.ID, erro
 // CreateSchemaDefinition adds one definition to a public Schema file or to a
 // table's local Schema, then refreshes the workspace snapshot.
 func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaEditResult, error) {
+	if s.operationBusy() {
+		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
@@ -1050,8 +1115,14 @@ func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaE
 
 // SetSchemaDefinition replaces one definition expression and metadata.
 func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult, error) {
+	if s.operationBusy() {
+		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
@@ -1105,8 +1176,14 @@ func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult
 // RenameSchemaDefinition renames a definition and rewrites every Schema
 // reference across all project source files.
 func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaEditResult, error) {
+	if s.operationBusy() {
+		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
@@ -1150,8 +1227,14 @@ func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaE
 
 // DeleteSchemaDefinition removes a definition unless it is still referenced.
 func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaEditResult, error) {
+	if s.operationBusy() {
+		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return SchemaEditResult{}, s.userError("workspace.noProject")
 	}
@@ -1459,8 +1542,14 @@ func (s *Service) moduleName() (string, error) {
 }
 
 func (s *Service) CreateTable(create TableCreate) (TableCreateResult, error) {
+	if s.operationBusy() {
+		return TableCreateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return TableCreateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return TableCreateResult{}, s.userError("workspace.noProject")
 	}
@@ -1522,8 +1611,14 @@ _editor: {columns: {}}
 // RenameTable changes a table's namespace and name, moves its source directory,
 // and updates every foreign-key reference to it.
 func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
+	if s.operationBusy() {
+		return TableRenameResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return TableRenameResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	return s.renameTable(rename, defaultTableRenameOps())
 }
 
@@ -1580,7 +1675,11 @@ func (s *Service) renameTable(rename TableRename, ops tableRenameOps) (result Ta
 	}
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, transaction.rollback())
+			rollback := transaction.rollback()
+			if rollback != nil {
+				s.markSourceUncertain()
+			}
+			err = errors.Join(err, rollback)
 		}
 	}()
 	if _, err := ops.rewrite(rename.Path, rename.Namespace, rename.Name, references); err != nil {
@@ -1633,15 +1732,27 @@ func (s *Service) renameTable(rename TableRename, ops tableRenameOps) (result Ta
 // DeleteTable removes a table source directory unless another table references
 // it through a foreign key.
 func (s *Service) DeleteTable(delete TableDelete) (TableDeleteResult, error) {
+	if s.operationBusy() {
+		return TableDeleteResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return TableDeleteResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	return s.deleteTable(delete, tableDeleteOps{rename: os.Rename, saveProject: SaveProject})
 }
 
 // CreateSchemaFile creates an empty public Schema package for a namespace.
 func (s *Service) CreateSchemaFile(namespace string) (SchemaFileCreateResult, error) {
+	if s.operationBusy() {
+		return SchemaFileCreateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return SchemaFileCreateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return SchemaFileCreateResult{}, s.userError("workspace.noProject")
 	}
@@ -1681,8 +1792,14 @@ func (s *Service) CreateSchemaFile(namespace string) (SchemaFileCreateResult, er
 // UpdateCell applies one CUE expression to an existing table cell, then
 // refreshes the project tree and Schema registry from the saved source.
 func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
@@ -1702,8 +1819,14 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 }
 
 func (s *Service) SetCellText(update CellUpdate) (CellUpdateResult, error) {
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
@@ -1725,8 +1848,14 @@ func (s *Service) SetCellText(update CellUpdate) (CellUpdateResult, error) {
 }
 
 func (s *Service) SetCellComment(update CellCommentSet) (CellUpdateResult, error) {
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
@@ -1743,8 +1872,14 @@ func (s *Service) SetCellComment(update CellCommentSet) (CellUpdateResult, error
 }
 
 func (s *Service) SetColumnDisplayName(update ColumnDisplayNameSet) (CellUpdateResult, error) {
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
@@ -1761,8 +1896,14 @@ func (s *Service) SetColumnDisplayName(update ColumnDisplayNameSet) (CellUpdateR
 }
 
 func (s *Service) SetColumnWidth(update ColumnWidthSet) (CellUpdateResult, error) {
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
@@ -1779,8 +1920,14 @@ func (s *Service) SetColumnWidth(update ColumnWidthSet) (CellUpdateResult, error
 }
 
 func (s *Service) Paste(paste Paste) (HistoryResult, error) {
+	if s.operationBusy() {
+		return HistoryResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return HistoryResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return HistoryResult{}, s.userError("workspace.noProject")
 	}
@@ -1797,20 +1944,38 @@ func (s *Service) Paste(paste Paste) (HistoryResult, error) {
 }
 
 func (s *Service) Undo() (HistoryResult, error) {
+	if s.operationBusy() {
+		return HistoryResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return HistoryResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	return s.restoreHistory(true)
 }
 
 func (s *Service) Redo() (HistoryResult, error) {
+	if s.operationBusy() {
+		return HistoryResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return HistoryResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	return s.restoreHistory(false)
 }
 
 func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
+	if s.operationBusy() {
+		return FormulaSetResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return FormulaSetResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return FormulaSetResult{}, s.userError("workspace.noProject")
 	}
@@ -1831,6 +1996,9 @@ func (s *Service) edit(path string, operation func() (document.Table, error)) (d
 }
 
 func (s *Service) restoreHistory(undo bool) (result HistoryResult, err error) {
+	if s.sourceUncertain {
+		return HistoryResult{}, fmt.Errorf("source state uncertain; reopen project before continuing")
+	}
 	if s.current == nil {
 		return HistoryResult{}, s.userError("workspace.noProject")
 	}
@@ -1860,7 +2028,11 @@ func (s *Service) restoreHistory(undo bool) (result HistoryResult, err error) {
 	}
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, transaction.rollback())
+			rollback := transaction.rollback()
+			if rollback != nil {
+				s.markSourceUncertain()
+			}
+			err = errors.Join(err, rollback)
 		}
 	}()
 	var directory *directoryTransaction
@@ -1950,8 +2122,14 @@ func writeFileAtomicWithRename(path string, content []byte, rename func(string, 
 }
 
 func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
+	if s.operationBusy() {
+		return RowCreateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return RowCreateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return RowCreateResult{}, s.userError("workspace.noProject")
 	}
@@ -1989,8 +2167,14 @@ func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
 }
 
 func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return CellUpdateResult{}, s.userError("workspace.noProject")
 	}
@@ -2018,8 +2202,14 @@ func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
 }
 
 func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
+	if s.operationBusy() {
+		return RowAddResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return RowAddResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return RowAddResult{}, s.userError("workspace.noProject")
 	}
@@ -2036,8 +2226,14 @@ func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
 }
 
 func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
+	if s.operationBusy() {
+		return RowDeleteResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return RowDeleteResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return RowDeleteResult{}, s.userError("workspace.noProject")
 	}
@@ -2065,8 +2261,14 @@ func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
 }
 
 func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
+	if s.operationBusy() {
+		return RowRenameResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return RowRenameResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return RowRenameResult{}, s.userError("workspace.noProject")
 	}
@@ -2110,9 +2312,18 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 // Schema or foreign-key diagnostics.
 // Export writes configured CSV files only when a full compile is clean. The
 // exporter receives the compiled package and never re-validates data.
-func (s *Service) Export() (ExportResult, error) {
+func (s *Service) Export() (result ExportResult, err error) {
+	finish, err := s.beginOperation("export")
+	if err != nil {
+		return ExportResult{}, err
+	}
+	defer func() { finish(err) }()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return ExportResult{}, fmt.Errorf("source state uncertain; reopen project before continuing")
+	}
 	if s.current == nil {
 		err := s.userError("workspace.noProject")
 		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
@@ -2136,10 +2347,11 @@ func (s *Service) Export() (ExportResult, error) {
 	if !containsString(s.current.Project.Config.Export.Targets, "csv") {
 		return ExportResult{}, s.userError("workspace.noExportTargets")
 	}
-	result, err := s.exporters.ExportChecked("csv", destination, compiled.Package, csvformat.Options{BeforeCommit: func() error {
+	exported, err := s.exporters.ExportChecked("csv", destination, compiled.Package, csvformat.Options{Progress: func(done, total int) { s.operationProgress("write", done, total) }, BeforeCommit: func() error {
 		if s.inputHooks != nil && s.inputHooks.beforeExportCommit != nil {
 			s.inputHooks.beforeExportCommit()
 		}
+		s.operationProgress("commit", 0, 0)
 		snapshot, err := s.captureInputs()
 		if err != nil {
 			return err
@@ -2153,8 +2365,8 @@ func (s *Service) Export() (ExportResult, error) {
 		s.log(logging.Error, "export failed", map[string]any{"destination": destination, "error": err.Error()})
 		return ExportResult{}, err
 	}
-	s.log(logging.Info, "export completed", map[string]any{"files": len(result.Files), "destination": destination})
-	return ExportResult{Directory: destination, Files: result.Files}, nil
+	s.log(logging.Info, "export completed", map[string]any{"files": len(exported.Files), "destination": destination})
+	return ExportResult{Directory: destination, Files: exported.Files}, nil
 }
 
 func filterExportPackage(pkg *compiler.Package, selected map[string]bool) *compiler.Package {
@@ -2220,8 +2432,14 @@ func removeExportTableSelection(config *ProjectConfig, id string) bool {
 }
 
 func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
+	if s.operationBusy() {
+		return ColumnAddResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return ColumnAddResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return ColumnAddResult{}, s.userError("workspace.noProject")
 	}
@@ -2249,8 +2467,14 @@ func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 }
 
 func (s *Service) SetColumnSchema(set ColumnSchemaSet) (ColumnSchemaSetResult, error) {
+	if s.operationBusy() {
+		return ColumnSchemaSetResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return ColumnSchemaSetResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return ColumnSchemaSetResult{}, s.userError("workspace.noProject")
 	}
@@ -2274,8 +2498,14 @@ func (s *Service) SetColumnSchema(set ColumnSchemaSet) (ColumnSchemaSetResult, e
 }
 
 func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) {
+	if s.operationBusy() {
+		return ColumnDeleteResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return ColumnDeleteResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return ColumnDeleteResult{}, s.userError("workspace.noProject")
 	}
@@ -2292,8 +2522,14 @@ func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) 
 }
 
 func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) {
+	if s.operationBusy() {
+		return ColumnRenameResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return ColumnRenameResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return ColumnRenameResult{}, s.userError("workspace.noProject")
 	}
@@ -2310,8 +2546,14 @@ func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) 
 }
 
 func (s *Service) MoveColumn(move ColumnMove) (ColumnMoveResult, error) {
+	if s.operationBusy() {
+		return ColumnMoveResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.operationBusy() {
+		return ColumnMoveResult{}, fmt.Errorf("project operation in progress; edit not applied")
+	}
 	if s.current == nil {
 		return ColumnMoveResult{}, s.userError("workspace.noProject")
 	}
@@ -2370,9 +2612,7 @@ func (s *Service) refreshCurrentView() (View, error) {
 	s.markEdited()
 	view := buildView(project, s.current.Settings, tree)
 	s.publishView(&view)
-	if fastEnabled() || os.Getenv("DATAPACK_COMPILE_CACHE") == "1" {
-		s.literalInputFingerprint, _ = s.sourceFingerprint()
-	}
+	s.literalInputFingerprint, _ = s.sourceFingerprint()
 	s.log(logging.Debug, "workspace refresh completed", map[string]any{"schemas": len(view.Schemas.Definitions), "revision": s.revision, "duration_ms": time.Since(started).Milliseconds()})
 	return view, nil
 }
@@ -2509,6 +2749,8 @@ func withDiagnostics(table document.Table, view View) document.Table {
 
 func withTableMetadata(table document.Table, view View) document.Table {
 	defer perftrace.Start("workspace.withTableMetadata")()
+	table.ProjectEpoch = view.ProjectEpoch
+	table.WorkspaceRevision = view.Revision
 	table = withForeignKeyOptions(withDiagnostics(table, view), view.Tree)
 	definitions := map[string]schemamodel.Node{}
 	for _, definition := range view.Schemas.Definitions {

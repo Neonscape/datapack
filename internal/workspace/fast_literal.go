@@ -19,7 +19,7 @@ type literalCache struct {
 }
 type cellHistory struct{ Path, RowID, Column, Before, After, BeforeSHA, AfterSHA string }
 
-func fastEnabled() bool           { return os.Getenv("DATAPACK_FAST_EDIT") == "1" }
+func fastEnabled() bool           { return os.Getenv("DATAPACK_FAST_EDIT") != "0" }
 func digest(source []byte) string { v := sha256.Sum256(source); return hex.EncodeToString(v[:]) }
 
 func (s *Service) rememberLiteral(path string, table document.Table) {
@@ -66,6 +66,9 @@ func (s *Service) cachedLiteral(path string) (document.Table, bool) {
 }
 
 func (s *Service) tryFastLiteral(update CellUpdate) (CellUpdateResult, bool, error) {
+	if s.sourceUncertain {
+		return CellUpdateResult{}, true, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if !fastEnabled() || s.current.Settings.Build.Mode != "manual" {
 		return CellUpdateResult{}, false, nil
 	}
@@ -97,8 +100,10 @@ func (s *Service) tryFastLiteral(update CellUpdate) (CellUpdateResult, bool, err
 }
 
 type literalWriteOps struct {
-	stage  func(string, []byte, os.FileMode) (string, error)
-	rename func(string, string) error
+	refresh func() (string, error)
+	restore func(string, []byte, os.FileMode) error
+	stage   func(string, []byte, os.FileMode) (string, error)
+	rename  func(string, string) error
 }
 
 func (s *Service) writeLiteralPatch(path string, cache *literalCache, patch document.LiteralPatch) (document.Table, View, error) {
@@ -110,9 +115,20 @@ func (s *Service) writeLiteralPatch(path string, cache *literalCache, patch docu
 	if !info.Mode().IsRegular() {
 		return document.Table{}, View{}, fmt.Errorf("fast patch requires regular source")
 	}
-	ops := literalWriteOps{sourcefile.Stage, os.Rename}
+	ops := literalWriteOps{stage: sourcefile.Stage, rename: os.Rename, restore: restoreSourceFile, refresh: s.sourceFingerprint}
 	if s.literalOps != nil {
-		ops = *s.literalOps
+		if s.literalOps.stage != nil {
+			ops.stage = s.literalOps.stage
+		}
+		if s.literalOps.rename != nil {
+			ops.rename = s.literalOps.rename
+		}
+		if s.literalOps.refresh != nil {
+			ops.refresh = s.literalOps.refresh
+		}
+		if s.literalOps.restore != nil {
+			ops.restore = s.literalOps.restore
+		}
 	}
 	staged, err := ops.stage(path, patch.Source, info.Mode())
 	if err != nil {
@@ -134,9 +150,13 @@ func (s *Service) writeLiteralPatch(path string, cache *literalCache, patch docu
 	if err := ops.rename(staged, path); err != nil {
 		return document.Table{}, View{}, err
 	}
-	fingerprint, err = s.sourceFingerprint()
+	fingerprint, err = ops.refresh()
 	if err != nil {
-		rollback := restoreSourceFile(path, cache.snapshot.Source, sourcePermissionMode(info.Mode()))
+		rollback := ops.restore(path, cache.snapshot.Source, sourcePermissionMode(info.Mode()))
+		if rollback != nil {
+			s.markSourceUncertain()
+			return document.Table{}, View{}, errors.Join(fmt.Errorf("source may already be saved; rollback failed; reopen project before editing: %w", err), rollback)
+		}
 		return document.Table{}, View{}, errors.Join(fmt.Errorf("cache refresh failed; edit rolled back: %w", err), rollback)
 	}
 	cache.snapshot.Commit(patch)

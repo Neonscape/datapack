@@ -14,6 +14,11 @@ export function useWorkspaceSession() {
     const focus = useRef(0);
     const publication = useRef(0);
     const projectPath = useRef("");
+    const epoch = useRef<string>();
+    const revision = useRef(-1);
+    function accepts(tag: {projectEpoch?:string}, value?:number) {
+        return (!tag.projectEpoch || !epoch.current || tag.projectEpoch === epoch.current) && (value === undefined || value >= revision.current);
+    }
     const {workspace, tabs, activeTabId, selectedSchema} = state;
     const activeTab = tabs.find(tab => tab.id === activeTabId) ?? null;
     const table = activeTab?.kind === "table" ? activeTab.table : null;
@@ -30,6 +35,8 @@ export function useWorkspaceSession() {
     }
     function publishWorkspace(view: WorkspaceView, request?: SessionRequest) {
         if (request && !isCurrent(request)) return false;
+        if (!accepts(view, view.revision)) return false;
+        if (view.revision !== undefined) revision.current = view.revision;
         if (projectPath.current && view.project?.path && projectPath.current !== view.project.path) return false;
         const project = generation.current;
         ++publication.current;
@@ -64,6 +71,7 @@ export function useWorkspaceSession() {
         });
     }
     function updateTable(document: TableDocument) {
+        if (!accepts(document, document.workspaceRevision)) return;
         invalidateDocument(document.path);
         setState(current => ({...current,tabs:current.tabs.map(tab => tab.kind === "table" && tab.path === document.path ? {...tab,table:document} : tab)}));
     }
@@ -86,6 +94,8 @@ export function useWorkspaceSession() {
         ++generation.current;
         ++publication.current;
         projectPath.current = view.project.path;
+        epoch.current = view.projectEpoch;
+        revision.current = view.revision ?? -1;
         requests.current.clear();
         ++focus.current;
         setState({workspace:view,tabs:[],activeTabId:null,selectedSchema:selected});
@@ -101,6 +111,7 @@ export function useWorkspaceSession() {
         });
     }
     function addTableTab(path: string, document: TableDocument, request?: SessionRequest) {
+        if (!accepts(document, document.workspaceRevision)) return;
         addTab({id:`table:${path}`,kind:"table",path,table:document},request);
     }
     function addSchemaTab(path: string, value: SchemaEditorState, request?: SessionRequest) {
@@ -117,7 +128,9 @@ export function useWorkspaceSession() {
                 // read started owns its state; a stale snapshot cannot replace it.
                 if (originals.get(tab.id) !== tab) return [tab];
                 if (!containsPath(view.tree.root,tabPath(tab))) return [];
-                return [results.get(tab.id) ?? tab];
+                const result = results.get(tab.id);
+                if (result?.kind === "table" && !accepts(result.table, result.table.workspaceRevision)) return [tab];
+                return [result ?? tab];
             });
             return withTabs(current,next);
         });

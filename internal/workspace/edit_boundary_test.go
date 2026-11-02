@@ -215,7 +215,7 @@ func TestSourceCommandsKeepSpecialModeAndRejectReadableSymlinks(t *testing.T) {
 func TestWorkspaceRefreshCompensationFailureRetainsOriginalBytes(t *testing.T) {
 	s, table, _ := sourceEditFixture(t)
 	before, _ := os.ReadFile(table)
-	state := sourceEditState(s)
+	undo, redo := len(s.undoStack), len(s.redoStack)
 	_, _, err := editSourcesWithOps(s, []string{table}, func() (bool, error) { return true, os.WriteFile(table, []byte("changed"), 0644) }, sourceCommandOps{
 		refresh: func() (View, error) { return View{}, fmt.Errorf("injected refresh failure") },
 		restore: func(path string, data []byte) error {
@@ -234,8 +234,8 @@ func TestWorkspaceRefreshCompensationFailureRetainsOriginalBytes(t *testing.T) {
 	if readErr != nil || string(data) != string(before) {
 		t.Fatalf("original recovery: %s %v", data, readErr)
 	}
-	if sourceEditState(s) != state {
-		t.Fatal("failed compensation published history/view")
+	if !s.sourceUncertain || !s.current.SourceUncertain || len(s.undoStack) != undo || len(s.redoStack) != redo {
+		t.Fatal("rollback failure must mark authority uncertain without consuming history")
 	}
 }
 

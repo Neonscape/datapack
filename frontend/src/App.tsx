@@ -1,3 +1,5 @@
+import {withProjectOperation} from "./bridge/ordered";
+import {useProjectOperation} from "./workspace/useProjectOperation";
 import {useEffect, useState} from 'react';
 import './App.css';
 import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellComment, SetCellFormula, SetCellText, SetColumnDisplayName, SetDisplayName, SetColumnSchema, SetColumnWidth, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "./bridge";
@@ -35,6 +37,8 @@ type TreeDialog =
     | {mode: "displayName"; path: string; definition: string; identity: string; value: string};
 
 function App() {
+    const operation = useProjectOperation();
+    const operationLabel = (value:string) => ({inputs:"读取输入",discover:"扫描工程",index:"建立索引",schema:"准备校验",validate:"校验数据",write:"写入导出文件",commit:"提交文件",copy:"复制工程",Compile:"编译",Export:"导出",SaveProjectAs:"另存为",OpenProject:"打开工程",SelectProject:"打开工程",NewProject:"新建工程"} as Record<string,string>)[value] ?? value;
     const {t, language, setLanguage} = useTranslation();
     const {preference, setPreference} = useTheme();
     const {workspace, publishWorkspace, selectedSchema, selectSchema, tabs, activeTabId, activeTab, table, schemaDocument, activateTab, closeTab, updateTable, updateSchema, updateSchemaTabById, updateDisplayName, addTableTab, addSchemaTab, applyProjectView: resetProject, beginRequest, isCurrent, refreshOpenTabs, renameTable: renameSessionTable, closeDocument, applyDefinitionResult} = useWorkspaceSession();
@@ -176,7 +180,7 @@ function App() {
 
     useEffect(() => {
         const historyShortcut = (event: KeyboardEvent) => {
-            if (projectSettingsOpen || !activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select, [role=dialog]")) return;
+            if (operation.busy || event.repeat || event.isComposing || projectSettingsOpen || !activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select, [role=dialog]")) return;
             const redo = event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z");
             if (event.key.toLowerCase() !== "z" && !redo) return;
             if (redo ? !workspace?.canRedo : !workspace?.canUndo) return;
@@ -461,6 +465,7 @@ function App() {
         }
         setError("");
         setCellError(null);
+        const request = beginRequest(`cell:${table.path}:${rowID}:${column}`);
         try {
             if (column === "__create__") {
                 const {values, formulas} = JSON.parse(input);
@@ -491,6 +496,7 @@ function App() {
             updateTable(result.table);
             publishWorkspace(result.workspace);
         } catch (reason) {
+            if (!isCurrent(request)) return;
             // The draft editor owns creation errors and must keep its unsaved row.
             // Ordinary cell edits continue to report their error through the app toast.
             if (column === "__create__") throw reason;
@@ -631,22 +637,33 @@ function App() {
     }
 
     async function compileProject() {
-        if (!workspace) return;
+        if (!workspace || operation.busy) return;
         setError("");
         try {
-            const result = await Compile();
-            publishWorkspace(result.workspace);
-            if (table) {
-                updateTable(await GetTable(table.path));
-            }
+            await withProjectOperation("Compile", async () => {
+                const result = await Compile();
+                publishWorkspace(result.workspace);
+                if (table) updateTable(await GetTable(table.path));
+            });
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         }
     }
 
+    useEffect(() => {
+        const shortcut = (event: KeyboardEvent) => {
+            if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.key.toLowerCase() !== "b") return;
+            if (event.repeat || event.isComposing || operation.busy || !workspace || (event.target as Element | null)?.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
+            event.preventDefault();
+            void compileProject();
+        };
+        document.addEventListener("keydown", shortcut);
+        return () => document.removeEventListener("keydown", shortcut);
+    }, [workspace, table, operation.busy]);
+
     return (
         <main className="app-shell" onContextMenu={(event) => event.preventDefault()}>
-            <header className="app-header">
+            <header {...(operation.busy ? {inert:""} : {})} className="app-header">
                 <div className="brand">Datapack</div>
                 <div className="header-divider"/>
                 <nav className="app-menubar" aria-label={t("menu.appMenu")}>
@@ -674,14 +691,17 @@ function App() {
                 <span className="project-name">{workspace?.tree.root.name ?? t("header.noProjectOpen")}</span>
                 <div className="header-actions">
                     {workspace && <button className={`build-mode build-mode-${workspace.compile.mode} build-mode-toggle`} aria-label={t("header.toggleCompileMode")} title={t("header.compileModeHint")} onClick={toggleCompileMode}>{workspace.compile.mode === "auto" ? t("header.autoCompile") : t("header.manualCompile")}{workspace.compile.pending ? t("header.pending") : ""}</button>}
-                    {workspace && workspace.compile.mode === "manual" && <button className="compile-button" disabled={!workspace.compile.pending} onClick={compileProject}>{t("header.compile")}</button>}
+                    {workspace && workspace.compile.mode === "manual" && <button className="compile-button" disabled={operation.busy || !workspace.compile.pending} title="Ctrl+Shift+B" onClick={compileProject}>{t("header.compile")}</button>}
                     {workspace && workspace.compile.diagnostics.length > 0 && <span className="compile-errors" title={t("header.compileDiagnostics")}>{workspace.compile.diagnostics.length}</span>}
                     <button className="export-button" aria-label={t("settings.title")} onClick={() => setSettingsOpen(true)}>{t("settings.title")}</button>
                 </div>
             </header>
 
+            {operation.busy && <div className="operation-progress" role="status" aria-live="polite">{language === "zh-CN" ? operationLabel(operation.kind) : operation.kind} · {operation.progress ? (language === "zh-CN" ? operationLabel(operation.progress.phase) : operation.progress.phase) : "…"}{operation.progress && operation.progress.total > 0 ? ` ${operation.progress.completed} / ${operation.progress.total}` : ""}</div>}
+            {workspace?.sourceUncertain && <div role="alert">{language === "zh-CN" ? "源文件状态不确定，请重新打开工程后继续。" : "Source state is uncertain. Reopen the project before continuing."}</div>}
+            {workspace?.compile.pending && <div className="compile-freshness">{language === "zh-CN" ? (workspace.compile.compiledAt ? "数据已保存；显示的是上次编译结果，请重新编译。" : "尚未校验；编辑即时保存，编译和导出时完整校验。") : (workspace.compile.compiledAt ? "Saved; showing previous compile results. Recompile to validate current data." : "Not validated yet. Edits save immediately; compile and export validate current data.")}</div>}
             {workspace ? (
-                <section className="workbench">
+                <section className="workbench" {...(operation.busy ? {inert:""} : {})}>
                     <aside className="project-explorer">
                         <div className="panel-title">{t("panel.project")}</div>
                         <div className="tree"><Tree node={workspace.tree.root} expanded={expandedNodes} onToggleCollapse={(key) => setExpandedNodes((current) => {

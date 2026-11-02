@@ -42,7 +42,7 @@ func (s *Service) compile() compiler.Result {
 	var publicSchemas []document.PublicSchema
 	var tables []document.Table
 	collectionDiagnostics := collectDocuments(s.current.Tree.Root, &publicSchemas, &tables)
-	result := compiler.CompileAll(publicSchemas, tables)
+	result := compiler.CompileAllProgress(publicSchemas, tables, s.operationProgress)
 	result.Diagnostics = append(collectionDiagnostics, result.Diagnostics...)
 	appendTreeDiagnostics(s.current.Tree.Root, &result)
 	after, afterErr := s.captureInputs()
@@ -84,6 +84,8 @@ func appendTreeDiagnostics(node projecttree.Node, result *compiler.Result) {
 
 // publishView stamps the compile state onto a freshly built view.
 func (s *Service) publishView(view *View) {
+	view.ProjectEpoch = s.current.ProjectEpoch
+	view.SourceUncertain = s.sourceUncertain
 	*view = s.viewLifecycle.publish(*view, s.current.Settings.Build.Mode, len(s.undoStack) > 0, len(s.redoStack) > 0)
 
 	s.current = view

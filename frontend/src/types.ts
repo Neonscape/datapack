@@ -15,6 +15,9 @@ export type TreeNode = {
 };
 
 export type WorkspaceView = {
+    projectEpoch?: string;
+    revision?: number;
+    sourceUncertain?: boolean;
     project: {
         path: string;
         root: string;
@@ -33,6 +36,7 @@ export type WorkspaceView = {
     compile: {
         mode: "auto" | "manual";
         pending: boolean;
+        inputRevision?: number;
         compiledAt?: string;
         diagnostics: {path: string; table?: string; field?: string; rowID?: string; column?: string; key?: string; args?: string[]; message: string}[];
     };
@@ -145,6 +149,8 @@ export type SchemaNode = {
 };
 
 export type TableDocument = {
+    projectEpoch?: string;
+    workspaceRevision?: number;
     displayName?: string;
     path: string;
     namespace: string;

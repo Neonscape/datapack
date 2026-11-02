@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -21,10 +22,11 @@ func dependencyFixture(t *testing.T, imports, missingValue bool) (*Service, stri
 	}
 	header := "package item\n#PrimaryKey: string\n#Row: {price: int}\n"
 	if imports {
-		writeFile(t, filepath.Join(root, "shared", "base", "base.cue"), "package base\n#Price: int & <=20\n")
-		writeFile(t, filepath.Join(root, "shared", "common", "common.cue"), "package common\nimport \"example.com/inputguard/shared/base\"\n#Price: base.#Price\n")
-		header = "package item\nimport \"example.com/inputguard/shared/common\"\n#PrimaryKey: string\n#Row: {price: common.#Price}\n"
+		writeFile(t, filepath.Join(root, "shared", "base", "base.cue"), "package base\nlimit: 20\n")
+		writeFile(t, filepath.Join(root, "shared", "common", "common.cue"), "package common\nimport \"example.com/inputguard/shared/base\"\nlimit: base.limit\n")
+		writeFile(t, filepath.Join(root, "constraints.cue"), "package item\nimport \"example.com/inputguard/shared/common\"\n#Row: {price: <=common.limit}\n")
 	}
+
 	row := "rows: {one: {price: 10}}\n"
 	if missingValue {
 		row = "rows: {one: {}}\n"
@@ -97,16 +99,62 @@ func TestTransitiveImportAndModuleChangesInvalidate(t *testing.T) {
 	if _, err := s.Export(); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(root, "shared", "base", "base.cue"), "package base\n#Price: int & <=5\n")
+	writeFile(t, filepath.Join(root, "shared", "base", "base.cue"), "package base\nlimit: 5\n")
 	if _, err := s.Export(); err == nil {
 		t.Fatal("transitive import constraint change not validated")
 	}
-	writeFile(t, filepath.Join(root, "shared", "base", "base.cue"), "package base\n#Price: int & <=20\n")
+	writeFile(t, filepath.Join(root, "shared", "base", "base.cue"), "package base\nlimit: 20\n")
 	if _, err := s.Export(); err != nil {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(root, "cue.mod", "module.cue"), "module: 123\nlanguage: {version: \"v0.9.0\"}\n")
 	if _, err := s.Export(); err == nil {
 		t.Fatal("invalid current module used previous success")
+	}
+}
+
+func TestNewSiblingAndImportedFileSetChangesInvalidate(t *testing.T) {
+	for _, imports := range []bool{false, true} {
+		t.Run(map[bool]string{false: "second_table", true: "imported_file_set"}[imports], func(t *testing.T) {
+			s, root, table := dependencyFixture(t, imports, false)
+			if _, err := s.Export(); err != nil {
+				t.Fatal(err)
+			}
+			if imports {
+				extra := filepath.Join(root, "shared", "base", "extra.cue")
+				writeFile(t, extra, "package base\nlimit: 5\n")
+				if _, err := s.Export(); err == nil {
+					t.Fatal("new imported sibling ignored")
+				}
+				if err := os.Remove(extra); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := s.Export(); err != nil {
+					t.Fatal("deleted imported sibling not refreshed", err)
+				}
+				path := filepath.Join(root, "shared", "base", "base.cue")
+				if err := os.Rename(path, path+".txt"); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := s.Export(); err == nil {
+					t.Fatal("renamed imported file ignored")
+				}
+			} else {
+				raw, _ := os.ReadFile(table)
+				second := filepath.Join(root, "tables", "other", "other.cue")
+				data := strings.ReplaceAll(strings.ReplaceAll(string(raw), "package item", "package other"), `name: "item"`, `name: "other"`)
+				data = strings.Replace(data, "price: 10", `price: "bad"`, 1)
+				writeFile(t, second, data)
+				if _, err := s.Export(); err == nil {
+					t.Fatal("new invalid second table ignored")
+				}
+				if err := os.Remove(second); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := s.Export(); err != nil {
+					t.Fatal("deleted second table not refreshed", err)
+				}
+			}
+		})
 	}
 }

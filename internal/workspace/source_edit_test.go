@@ -174,7 +174,7 @@ func TestSourceEditRefreshFailureRestoresImportsAndCanRetry(t *testing.T) {
 
 func TestSourceEditReportsOriginalAndRollbackFailures(t *testing.T) {
 	s, table, _ := sourceEditFixture(t)
-	state := sourceEditState(s)
+	undo, redo := len(s.undoStack), len(s.redoStack)
 	injected := errors.New("operation failed after partial write")
 	_, _, err := editSource(s, table, func() (document.Table, error) {
 		if err := os.Remove(table); err != nil {
@@ -186,8 +186,8 @@ func TestSourceEditReportsOriginalAndRollbackFailures(t *testing.T) {
 	if !errors.Is(err, injected) || !strings.Contains(err.Error(), "rollback edit source") {
 		t.Fatalf("missing error evidence: %v", err)
 	}
-	if sourceEditState(s) != state {
-		t.Fatal("failed source rollback recorded history")
+	if !s.sourceUncertain || !s.current.SourceUncertain || len(s.undoStack) != undo || len(s.redoStack) != redo {
+		t.Fatal("rollback failure must mark authority uncertain without consuming history")
 	}
 	if content, err := os.ReadFile(filepath.Join(table, "preserve.bin")); err != nil || string(content) != "only copy" {
 		t.Fatal("rollback removed conflicting content")

@@ -48,7 +48,7 @@ func DefaultEditorSettings() EditorSettings {
 	return EditorSettings{
 		Version: 1,
 		Build: BuildSettings{
-			Mode:                       "auto",
+			Mode:                       "manual",
 			AutoCompileDebounceSeconds: defaultAutoCompileDebounceSeconds,
 		},
 		Language: DefaultLanguage,

@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 	"sort"
 
+	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/ast"
 	"cuelang.org/go/cue/build"
+	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/load"
 	"cuelang.org/go/cue/parser"
 	"datapack/internal/perftrace"
@@ -207,6 +209,11 @@ func captureProjectInputs(project Project, seeds []string) (inputSnapshot, error
 			if instance.Err != nil {
 				return instance.Err
 			}
+			// Validate every loaded dependency itself. A bottom in an imported
+			// package must not disappear behind a selected root projection.
+			if err := cuecontext.New().BuildInstance(instance).Validate(cue.Definitions(true), cue.Optional(true)); err != nil {
+				return inputSnapshotDependencyError(instance.ImportPath, err)
+			}
 			if instance.Dir != "" {
 				inv.addPackage(instance.Dir, instance.Root)
 			}
@@ -273,4 +280,8 @@ type inputConsistencyHooks struct {
 	afterCompile       func()
 	afterCacheHit      func()
 	beforeExportCommit func()
+}
+
+func inputSnapshotDependencyError(path string, err error) error {
+	return fmt.Errorf("invalid CUE input package %s: %w", path, err)
 }

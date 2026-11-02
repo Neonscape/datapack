@@ -88,7 +88,13 @@ func copyExample(t *testing.T, name string) string {
 
 func openProject(t *testing.T, projectPath string) *workspace.Service {
 	t.Helper()
-	service := workspace.NewService(t.TempDir())
+	config := t.TempDir()
+	settings := workspace.DefaultEditorSettings()
+	settings.Build.Mode = "auto"
+	if err := workspace.SaveEditorSettings(config, settings); err != nil {
+		t.Fatal(err)
+	}
+	service := workspace.NewService(config)
 	if _, err := service.OpenProject(projectPath); err != nil {
 		t.Fatalf("OpenProject(%q): %v", projectPath, err)
 	}

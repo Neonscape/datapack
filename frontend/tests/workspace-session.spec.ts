@@ -88,7 +88,8 @@ test("a late history response cannot restore the previous project view",async({p
  const state=await control(page);await state.evaluate(s=>s.delay("history"));
  await undo(page);await expect.poll(()=>state.evaluate(s=>s.pending)).toBe(1);
  await openProject(page);
- await expect(page.getByRole("button",{name:"newitem",exact:true})).toBeVisible();
+ // The project switch is queued behind authoritative history commit.
+ await expect(page.getByRole("button",{name:"newitem",exact:true})).toHaveCount(0);
  await state.evaluate(s=>s.release());
  await expect.poll(()=>state.evaluate(s=>s.completed)).toBe(1);
  await expect(page.getByRole("button",{name:"newitem",exact:true})).toBeVisible();
@@ -152,7 +153,8 @@ test("a late history view cannot overwrite a newer document command",async({page
  await page.getByRole("button",{name:"item",exact:true}).click({button:"right"});
  await page.getByRole("menu",{name:"Project tree actions"}).getByRole("button",{name:"Delete table",exact:true}).click();
  await page.locator(".structure-dialog").getByRole("button",{name:"Delete table",exact:true}).click();
- await expect(page.getByRole("button",{name:"item",exact:true})).toHaveCount(0);
+ // A later mutation cannot overtake the in-flight history write.
+ await expect(page.getByRole("button",{name:"item",exact:true})).toHaveCount(1);
  await state.evaluate(s=>s.release());await expect.poll(()=>state.evaluate(s=>s.completed)).toBe(1);
  await expect(page.getByRole("button",{name:"item",exact:true})).toHaveCount(0);
  await expect(page.getByRole("tab",{name:"game.hero ×",exact:true})).toHaveAttribute("aria-selected","true");
