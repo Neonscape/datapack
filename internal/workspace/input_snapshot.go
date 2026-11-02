@@ -172,8 +172,8 @@ func captureProjectInputs(project Project, seeds []string) (inputSnapshot, error
 				imported = true
 			}
 		}
-		if bytes.Contains(data, []byte("@embed")) || bytes.Contains(data, []byte("@extern")) {
-			return inputSnapshot{}, fmt.Errorf("cannot establish complete external input dependencies for %s", path)
+		if err := rejectUnsupportedExternalInput(path, data); err != nil {
+			return inputSnapshot{}, err
 		}
 	}
 	if !imported {
@@ -209,23 +209,39 @@ func captureProjectInputs(project Project, seeds []string) (inputSnapshot, error
 			if instance.Err != nil {
 				return instance.Err
 			}
-			// Validate every loaded dependency itself. A bottom in an imported
-			// package must not disappear behind a selected root projection.
-			if err := cuecontext.New().BuildInstance(instance).Validate(cue.Definitions(true), cue.Optional(true)); err != nil {
-				return inputSnapshotDependencyError(instance.ImportPath, err)
-			}
 			if instance.Dir != "" {
 				inv.addPackage(instance.Dir, instance.Root)
 			}
 			for _, f := range instance.BuildFiles {
 				if f.Filename != "" {
 					inv.files[f.Filename] = true
+					if raw, ok := f.Source.([]byte); ok {
+						if err := rejectUnsupportedExternalInput(f.Filename, raw); err != nil {
+							return err
+						}
+					}
+					data, ok := files[f.Filename]
+					if !ok {
+						var err error
+						data, err = os.ReadFile(f.Filename)
+						if err != nil {
+							return err
+						}
+					}
+					if err := rejectUnsupportedExternalInput(f.Filename, data); err != nil {
+						return err
+					}
 				}
 			}
 			for _, dependency := range instance.Imports {
 				if err := visit(dependency); err != nil {
 					return err
 				}
+			}
+			// Inspect the complete transitive source closure before evaluation.
+			// Bottoms in imported packages cannot hide behind a root projection.
+			if err := cuecontext.New().BuildInstance(instance).Validate(cue.Definitions(true), cue.Optional(true)); err != nil {
+				return inputSnapshotDependencyError(instance.ImportPath, err)
 			}
 			return nil
 		}
@@ -259,6 +275,11 @@ func captureProjectInputs(project Project, seeds []string) (inputSnapshot, error
 		if err != nil {
 			return inputSnapshot{}, err
 		}
+		for path, data := range next {
+			if err := rejectUnsupportedExternalInput(path, data); err != nil {
+				return inputSnapshot{}, err
+			}
+		}
 		if fingerprintFiles(files) == fingerprintFiles(next) {
 			return inputSnapshot{fingerprintFiles(next), false, next}, nil
 		}
@@ -284,4 +305,12 @@ type inputConsistencyHooks struct {
 
 func inputSnapshotDependencyError(path string, err error) error {
 	return fmt.Errorf("invalid CUE input package %s: %w", path, err)
+}
+
+// Match the conservative initial-input policy for every discovered CUE file.
+func rejectUnsupportedExternalInput(path string, data []byte) error {
+	if filepath.Ext(path) == ".cue" && (bytes.Contains(data, []byte("@embed")) || bytes.Contains(data, []byte("@extern"))) {
+		return fmt.Errorf("cannot establish complete external input dependencies for %s", path)
+	}
+	return nil
 }

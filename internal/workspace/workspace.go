@@ -185,6 +185,7 @@ type RowRenameResult struct {
 }
 
 type ExportResult struct {
+	Workspace View     `json:"workspace"`
 	Directory string   `json:"directory"`
 	Files     []string `json:"files"`
 }
@@ -2406,15 +2407,17 @@ func (s *Service) Export() (result ExportResult, err error) {
 		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
 		return ExportResult{}, err
 	}
-	destination, err := exportDirectory(s.current.Project)
-	if err != nil {
-		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
-		return ExportResult{}, err
-	}
 	compiled := s.compile()
 	if len(compiled.Diagnostics) > 0 {
 		err := s.userError("workspace.exportBlocked", len(compiled.Diagnostics), compiled.Diagnostics[0].Message)
 		s.log(logging.Warn, "export blocked", map[string]any{"error": err.Error()})
+		return ExportResult{}, err
+	}
+	// Compilation may reload an externally changed .dtproj. Resolve every
+	// export setting from that same authoritative configuration.
+	destination, err := exportDirectory(s.current.Project)
+	if err != nil {
+		s.log(logging.Error, "export failed", map[string]any{"error": err.Error()})
 		return ExportResult{}, err
 	}
 	compiled.Package = filterExportPackage(compiled.Package, s.current.Project.Config.Export.Tables)
@@ -2443,7 +2446,7 @@ func (s *Service) Export() (result ExportResult, err error) {
 		return ExportResult{}, err
 	}
 	s.log(logging.Info, "export completed", map[string]any{"files": len(exported.Files), "destination": destination})
-	return ExportResult{Directory: destination, Files: exported.Files}, nil
+	return ExportResult{Workspace: *s.current, Directory: destination, Files: exported.Files}, nil
 }
 
 func filterExportPackage(pkg *compiler.Package, selected map[string]bool) *compiler.Package {
