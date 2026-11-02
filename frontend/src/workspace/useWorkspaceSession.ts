@@ -1,5 +1,6 @@
+import {patchCell} from "./cellDelta";
 import {useRef, useState} from "react";
-import type {SchemaDefinition, SchemaEditorState, TableDocument, WorkspaceView} from "../types";
+import type {SchemaDefinition, SchemaEditorState, TableDocument, WorkspaceView, CellDelta} from "../types";
 import {containsPath, tabPath, withTabs, reconcilePeek, type OpenTab, type SessionState} from "./sessionState";
 import {readTab, type TabReader} from "./tabRead";
 export {refreshSchemaState} from "./sessionState";
@@ -16,6 +17,7 @@ export function useWorkspaceSession() {
     const projectPath = useRef("");
     const epoch = useRef<string>();
     const revision = useRef(-1);
+    const documents = useRef(new Map<string,TableDocument>());
     function accepts(tag: {projectEpoch?:string}, value?:number) {
         return (!tag.projectEpoch || !epoch.current || tag.projectEpoch === epoch.current) && (value === undefined || value >= revision.current);
     }
@@ -72,8 +74,17 @@ export function useWorkspaceSession() {
     }
     function updateTable(document: TableDocument) {
         if (!accepts(document, document.workspaceRevision)) return;
+        documents.current.set(document.path,document);
         invalidateDocument(document.path);
         setState(current => ({...current,tabs:current.tabs.map(tab => tab.kind === "table" && tab.path === document.path ? {...tab,table:document} : tab)}));
+    }
+    function applyCellDelta(delta: CellDelta) {
+        if (!accepts(delta,delta.revision)) return false;
+        const current = documents.current.get(delta.path);
+        const document = current ? patchCell(current,delta) : null;
+        if (!document) return false;
+        updateTable(document);
+        return true;
     }
     function updateSchema(value: SchemaEditorState) {
         updateSchemaTabById(`schema:${value.path}`,value);
@@ -94,6 +105,7 @@ export function useWorkspaceSession() {
         ++generation.current;
         ++publication.current;
         projectPath.current = view.project.path;
+        documents.current.clear();
         epoch.current = view.projectEpoch;
         revision.current = view.revision ?? -1;
         requests.current.clear();
@@ -111,7 +123,8 @@ export function useWorkspaceSession() {
         });
     }
     function addTableTab(path: string, document: TableDocument, request?: SessionRequest) {
-        if (!accepts(document, document.workspaceRevision)) return;
+        if (!accepts(document, document.workspaceRevision) || request && !isCurrent(request)) return;
+        documents.current.set(path,document);
         addTab({id:`table:${path}`,kind:"table",path,table:document},request);
     }
     function addSchemaTab(path: string, value: SchemaEditorState, request?: SessionRequest) {
@@ -130,6 +143,7 @@ export function useWorkspaceSession() {
                 if (!containsPath(view.tree.root,tabPath(tab))) return [];
                 const result = results.get(tab.id);
                 if (result?.kind === "table" && !accepts(result.table, result.table.workspaceRevision)) return [tab];
+                if(result?.kind === "table") documents.current.set(result.path,result.table);
                 return [result ?? tab];
             });
             return withTabs(current,next);
@@ -174,7 +188,7 @@ export function useWorkspaceSession() {
             return {...tab,state:{...tab.state,definitions,selected:selected ?? definitions[0]?.name ?? null,creating:false}};
         })}));
     }
-    return {workspace,tabs,activeTabId,selectedSchema,activeTab,table,schemaDocument,publishWorkspace,selectSchema,activateTab,closeTab,updateTable,updateSchema,updateSchemaTabById,updateDisplayName,applyProjectView,addTableTab,addSchemaTab,beginRequest,isCurrent,refreshOpenTabs,renameTable,closeDocument,applyDefinitionResult};
+    return {workspace,tabs,activeTabId,selectedSchema,activeTab,table,schemaDocument,publishWorkspace,selectSchema,activateTab,closeTab,updateTable,applyCellDelta,updateSchema,updateSchemaTabById,updateDisplayName,applyProjectView,addTableTab,addSchemaTab,beginRequest,isCurrent,refreshOpenTabs,renameTable,closeDocument,applyDefinitionResult};
 }
 
 export type WorkspaceSession = ReturnType<typeof useWorkspaceSession>;

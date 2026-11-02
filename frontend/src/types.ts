@@ -216,3 +216,5 @@ export type SchemaEditResult = {
 };
 
 export type CellError = { rowID: string; column: string; message: string };
+
+export type CellDelta = {path:string;projectEpoch:string;baseRevision:number;revision:number;rowIndex:number;rowID:string;column:string;cell:TableDocument["rows"][number]["values"][string]};

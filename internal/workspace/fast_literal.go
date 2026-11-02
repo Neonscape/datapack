@@ -88,6 +88,7 @@ func (s *Service) tryFastLiteral(update CellUpdate) (CellUpdateResult, bool, err
 	if err != nil {
 		return CellUpdateResult{}, false, nil
 	}
+	baseRevision := s.revision
 	beforeSHA := digest(cache.snapshot.Source)
 	table, view, err := s.writeLiteralPatch(update.Path, cache, patch)
 	if err != nil {
@@ -96,7 +97,8 @@ func (s *Service) tryFastLiteral(update CellUpdate) (CellUpdateResult, bool, err
 	s.recordHistory(historyEntry{Cell: &cellHistory{update.Path, update.RowID, update.Column, patch.Before, patch.After, beforeSHA, digest(patch.Source)}})
 	view.CanUndo, view.CanRedo = true, false
 	s.current = &view
-	return CellUpdateResult{Table: table, Workspace: view}, true, nil
+	delta := makeCellDelta(table, view, baseRevision, update.Path, update.RowID, update.Column)
+	return CellUpdateResult{Table: table, Workspace: view, delta: delta}, true, nil
 }
 
 type literalWriteOps struct {
@@ -203,7 +205,8 @@ func (s *Service) restoreCellHistory(undo bool, entry historyEntry) (HistoryResu
 	if err != nil {
 		return HistoryResult{}, err
 	}
-	_, view, err := s.writeLiteralPatch(h.Path, cache, patch)
+	baseRevision := s.revision
+	table, view, err := s.writeLiteralPatch(h.Path, cache, patch)
 	if err != nil {
 		return HistoryResult{}, err
 	}
@@ -216,5 +219,5 @@ func (s *Service) restoreCellHistory(undo bool, entry historyEntry) (HistoryResu
 	}
 	view.CanUndo, view.CanRedo = len(s.undoStack) > 0, len(s.redoStack) > 0
 	s.current = &view
-	return HistoryResult{Workspace: view, CanUndo: view.CanUndo, CanRedo: view.CanRedo}, nil
+	return HistoryResult{Workspace: view, CanUndo: view.CanUndo, CanRedo: view.CanRedo, delta: makeCellDelta(table, view, baseRevision, h.Path, h.RowID, h.Column)}, nil
 }

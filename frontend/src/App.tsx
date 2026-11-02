@@ -1,4 +1,4 @@
-import {withProjectOperation} from "./bridge/ordered";
+import {operationSnapshot, withProjectOperation} from "./bridge/ordered";
 import {useProjectOperation} from "./workspace/useProjectOperation";
 import {useEffect, useState} from 'react';
 import './App.css';
@@ -41,7 +41,7 @@ function App() {
     const operationLabel = (value:string) => ({inputs:"读取输入",discover:"扫描工程",index:"建立索引",schema:"准备校验",validate:"校验数据",write:"写入导出文件",commit:"提交文件",copy:"复制工程",Compile:"编译",Export:"导出",SaveProjectAs:"另存为",OpenProject:"打开工程",SelectProject:"打开工程",NewProject:"新建工程"} as Record<string,string>)[value] ?? value;
     const {t, language, setLanguage} = useTranslation();
     const {preference, setPreference} = useTheme();
-    const {workspace, publishWorkspace, selectedSchema, selectSchema, tabs, activeTabId, activeTab, table, schemaDocument, activateTab, closeTab, updateTable, updateSchema, updateSchemaTabById, updateDisplayName, addTableTab, addSchemaTab, applyProjectView: resetProject, beginRequest, isCurrent, refreshOpenTabs, renameTable: renameSessionTable, closeDocument, applyDefinitionResult} = useWorkspaceSession();
+    const {workspace, publishWorkspace, selectedSchema, selectSchema, tabs, activeTabId, activeTab, table, schemaDocument, activateTab, closeTab, updateTable, applyCellDelta, updateSchema, updateSchemaTabById, updateDisplayName, addTableTab, addSchemaTab, applyProjectView: resetProject, beginRequest, isCurrent, refreshOpenTabs, renameTable: renameSessionTable, closeDocument, applyDefinitionResult} = useWorkspaceSession();
     const [cellError, setCellError] = useState<CellError | null>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
@@ -180,7 +180,7 @@ function App() {
 
     useEffect(() => {
         const historyShortcut = (event: KeyboardEvent) => {
-            if (operation.busy || event.repeat || event.isComposing || projectSettingsOpen || !activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select, [role=dialog]")) return;
+            if (operationSnapshot().busy || event.repeat || event.isComposing || projectSettingsOpen || !activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select, [role=dialog]")) return;
             const redo = event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z");
             if (event.key.toLowerCase() !== "z" && !redo) return;
             if (redo ? !workspace?.canRedo : !workspace?.canUndo) return;
@@ -489,11 +489,13 @@ function App() {
             }
             const columnDefinition = table.columns.find((entry) => entry.name === column);
             const result = input.startsWith("=")
-                ? await SetCellFormula({path: table.path, rowID, column, expression: input.slice(1).trim()})
+                ? {...await SetCellFormula({path: table.path, rowID, column, expression: input.slice(1).trim()}),delta:undefined}
                 : !columnDefinition?.foreignKeyTable && (columnDefinition?.effectiveSchema ?? columnDefinition?.schema)?.kind === "string"
                     ? await SetCellText({path: table.path, rowID, column, expression: input})
                     : await UpdateCell({path: table.path, rowID, column, expression: input});
-            updateTable(result.table);
+            if (result.delta) {
+                if (!applyCellDelta(result.delta)) updateTable(await GetTable(table.path));
+            } else updateTable(result.table);
             publishWorkspace(result.workspace);
         } catch (reason) {
             if (!isCurrent(request)) return;
@@ -604,7 +606,9 @@ function App() {
         try {
             const result = redo ? await Redo() : await Undo();
             if (!isCurrent(request)) return;
+            const appliedDelta = result.delta && applyCellDelta(result.delta);
             if (!publishWorkspace(result.workspace, request)) return;
+            if (appliedDelta) return;
             await refreshOpenTabs(request, result.workspace, {table:async path => await GetTable(path), schema:async path => await GetPublicSchema(path)});
         } catch (reason) {
             if (!isCurrent(request)) return;
@@ -613,6 +617,7 @@ function App() {
     }
 
     async function exportProject() {
+        if(operationSnapshot().busy) return;
         setError("");
         setNotice("");
         try {
@@ -637,7 +642,7 @@ function App() {
     }
 
     async function compileProject() {
-        if (!workspace || operation.busy) return;
+        if (!workspace || operationSnapshot().busy) return;
         setError("");
         try {
             await withProjectOperation("Compile", async () => {
@@ -653,7 +658,7 @@ function App() {
     useEffect(() => {
         const shortcut = (event: KeyboardEvent) => {
             if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.key.toLowerCase() !== "b") return;
-            if (event.repeat || event.isComposing || operation.busy || !workspace || (event.target as Element | null)?.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
+            if (event.repeat || event.isComposing || operationSnapshot().busy || !workspace || (event.target as Element | null)?.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
             event.preventDefault();
             void compileProject();
         };
@@ -762,7 +767,7 @@ function App() {
                     <aside className="schema-explorer">
                         <div className="diagnostics-panel">
                             <div className="panel-title">{t("panel.diagnostics")}</div>
-                            {(workspace.schemas.diagnostics ?? []).length === 0 && (workspace.foreignKeys.diagnostics ?? []).length === 0 && workspace.compile.diagnostics.length === 0 && <div className="schema-editor-empty">{t("panel.noDiagnostics")}</div>}
+                            {(workspace.schemas.diagnostics ?? []).length === 0 && (workspace.foreignKeys.diagnostics ?? []).length === 0 && workspace.compile.diagnostics.length === 0 && <div className="schema-editor-empty">{workspace.compile.pending ? (language === "zh-CN" ? "当前输入尚未完整校验" : "Current input has not been fully validated") : t("panel.noDiagnostics")}</div>}
                             {(workspace.schemas.diagnostics ?? []).length > 0 && <div className="schema-diagnostics">
                                 {(workspace.schemas.diagnostics ?? []).map((diagnostic) => <button className="schema-diagnostic schema-diagnostic-action" key={`${diagnostic.path}:${diagnostic.field}:${diagnostic.message}`} onClick={() => jumpToDiagnostic(diagnostic)}>
                                     <code>{diagnostic.field}</code>

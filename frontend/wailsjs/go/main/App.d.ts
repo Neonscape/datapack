@@ -63,6 +63,8 @@ export function PrintSchema(arg1:schemamodel.Node):Promise<string>;
 
 export function Redo():Promise<workspace.HistoryResult>;
 
+export function RedoDelta():Promise<workspace.CellEditResult>;
+
 export function RenameColumn(arg1:workspace.ColumnRename):Promise<workspace.ColumnRenameResult>;
 
 export function RenameRow(arg1:workspace.RowRename):Promise<workspace.RowRenameResult>;
@@ -82,6 +84,8 @@ export function SetCellComment(arg1:workspace.CellCommentSet):Promise<workspace.
 export function SetCellFormula(arg1:workspace.FormulaSet):Promise<workspace.FormulaSetResult>;
 
 export function SetCellText(arg1:workspace.CellUpdate):Promise<workspace.CellUpdateResult>;
+
+export function SetCellTextDelta(arg1:workspace.CellUpdate):Promise<workspace.CellEditResult>;
 
 export function SetColumnDisplayName(arg1:workspace.ColumnDisplayNameSet):Promise<workspace.CellUpdateResult>;
 
@@ -105,4 +109,8 @@ export function SetTheme(arg1:string):Promise<workspace.EditorSettings>;
 
 export function Undo():Promise<workspace.HistoryResult>;
 
+export function UndoDelta():Promise<workspace.CellEditResult>;
+
 export function UpdateCell(arg1:workspace.CellUpdate):Promise<workspace.CellUpdateResult>;
+
+export function UpdateCellDelta(arg1:workspace.CellUpdate):Promise<workspace.CellEditResult>;

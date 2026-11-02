@@ -1,5 +1,5 @@
 export namespace compiler {
-
+	
 	export class Diagnostic {
 	    path: string;
 	    table?: string;
@@ -9,11 +9,11 @@ export namespace compiler {
 	    key?: string;
 	    args?: string[];
 	    message: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Diagnostic(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -30,17 +30,17 @@ export namespace compiler {
 }
 
 export namespace cuesource {
-
+	
 	export class Diagnostic {
 	    severity: string;
 	    message: string;
 	    line?: number;
 	    column?: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Diagnostic(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.severity = source["severity"];
@@ -53,14 +53,14 @@ export namespace cuesource {
 }
 
 export namespace document {
-
+	
 	export class CSVExport {
 	    columns: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new CSVExport(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.columns = source["columns"];
@@ -70,11 +70,11 @@ export namespace document {
 	    expression: string;
 	    display: string;
 	    formula?: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Cell(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.expression = source["expression"];
@@ -91,11 +91,11 @@ export namespace document {
 	    schemaExpression: string;
 	    foreignKeyTable?: string;
 	    foreignKeyOptions?: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Column(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -107,7 +107,7 @@ export namespace document {
 	        this.foreignKeyTable = source["foreignKeyTable"];
 	        this.foreignKeyOptions = source["foreignKeyOptions"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -130,11 +130,11 @@ export namespace document {
 	    rowID: string;
 	    column?: string;
 	    message: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Diagnostic(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.rowID = source["rowID"];
@@ -145,11 +145,11 @@ export namespace document {
 	export class ExportSettings {
 	    enabled: boolean;
 	    columns?: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ExportSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
@@ -159,11 +159,11 @@ export namespace document {
 	export class ForeignKey {
 	    column: string;
 	    table: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ForeignKey(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.column = source["column"];
@@ -174,11 +174,11 @@ export namespace document {
 	    rowID: string;
 	    column: string;
 	    expression: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Formula(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.rowID = source["rowID"];
@@ -194,11 +194,11 @@ export namespace document {
 	    appliesTo?: string[];
 	    schema: schemamodel.Node;
 	    schemaExpression: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SchemaDefinition(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.displayName = source["displayName"];
@@ -209,7 +209,7 @@ export namespace document {
 	        this.schema = this.convertValues(source["schema"], schemamodel.Node);
 	        this.schemaExpression = source["schemaExpression"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -233,11 +233,11 @@ export namespace document {
 	    path: string;
 	    package: string;
 	    definitions: SchemaDefinition[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new PublicSchema(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.displayName = source["displayName"];
@@ -245,7 +245,7 @@ export namespace document {
 	        this.package = source["package"];
 	        this.definitions = this.convertValues(source["definitions"], SchemaDefinition);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -267,17 +267,17 @@ export namespace document {
 	export class Row {
 	    id: string;
 	    values: Record<string, Cell>;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Row(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.values = this.convertValues(source["values"], Cell, true);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -296,7 +296,7 @@ export namespace document {
 		    return a;
 		}
 	}
-
+	
 	export class Table {
 	    projectEpoch?: string;
 	    workspaceRevision: number;
@@ -315,11 +315,11 @@ export namespace document {
 	    exports?: Record<string, ExportSettings>;
 	    cellComments?: Record<string, any>;
 	    localSchema: SchemaDefinition[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Table(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.projectEpoch = source["projectEpoch"];
@@ -340,7 +340,7 @@ export namespace document {
 	        this.cellComments = source["cellComments"];
 	        this.localSchema = this.convertValues(source["localSchema"], SchemaDefinition);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -363,7 +363,7 @@ export namespace document {
 }
 
 export namespace foreignkey {
-
+	
 	export class Diagnostic {
 	    path: string;
 	    table: string;
@@ -372,11 +372,11 @@ export namespace foreignkey {
 	    key?: string;
 	    args?: string[];
 	    message: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Diagnostic(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -390,16 +390,16 @@ export namespace foreignkey {
 	}
 	export class Summary {
 	    diagnostics?: Diagnostic[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Summary(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.diagnostics = this.convertValues(source["diagnostics"], Diagnostic);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -422,18 +422,18 @@ export namespace foreignkey {
 }
 
 export namespace navigation {
-
+	
 	export class Request {
 	    kind: string;
 	    path: string;
 	    rowID?: string;
 	    column?: string;
 	    reference?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Request(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -451,11 +451,11 @@ export namespace navigation {
 	    rowID?: string;
 	    column?: string;
 	    references?: Target[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Target(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -466,7 +466,7 @@ export namespace navigation {
 	        this.column = source["column"];
 	        this.references = this.convertValues(source["references"], Target);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -489,7 +489,7 @@ export namespace navigation {
 }
 
 export namespace projecttree {
-
+	
 	export class Node {
 	    displayName?: string;
 	    kind: string;
@@ -497,11 +497,11 @@ export namespace projecttree {
 	    path?: string;
 	    diagnostics?: cuesource.Diagnostic[];
 	    children?: Node[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Node(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.displayName = source["displayName"];
@@ -511,7 +511,7 @@ export namespace projecttree {
 	        this.diagnostics = this.convertValues(source["diagnostics"], cuesource.Diagnostic);
 	        this.children = this.convertValues(source["children"], Node);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -532,16 +532,16 @@ export namespace projecttree {
 	}
 	export class Tree {
 	    root: Node;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Tree(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.root = this.convertValues(source["root"], Node);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -564,7 +564,7 @@ export namespace projecttree {
 }
 
 export namespace schemamodel {
-
+	
 	export class Requirement {
 	    kind?: string;
 	    op?: string;
@@ -574,11 +574,11 @@ export namespace schemamodel {
 	    max?: number;
 	    reference?: string;
 	    expression?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Requirement(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -593,11 +593,11 @@ export namespace schemamodel {
 	}
 	export class Value {
 	    expression: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Value(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.expression = source["expression"];
@@ -612,11 +612,11 @@ export namespace schemamodel {
 	    element?: Node;
 	    fields?: Field[];
 	    requirements?: Requirement[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Node(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -628,7 +628,7 @@ export namespace schemamodel {
 	        this.fields = this.convertValues(source["fields"], Field);
 	        this.requirements = this.convertValues(source["requirements"], Requirement);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -650,17 +650,17 @@ export namespace schemamodel {
 	export class Field {
 	    name: string;
 	    schema: Node;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Field(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.schema = this.convertValues(source["schema"], Node);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -679,13 +679,13 @@ export namespace schemamodel {
 		    return a;
 		}
 	}
-
-
+	
+	
 
 }
 
 export namespace schemaregistry {
-
+	
 	export class Diagnostic {
 	    path: string;
 	    table?: string;
@@ -693,11 +693,11 @@ export namespace schemaregistry {
 	    key?: string;
 	    args?: string[];
 	    message: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Diagnostic(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -713,11 +713,11 @@ export namespace schemaregistry {
 	    path: string;
 	    table?: string;
 	    field: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Usage(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.definition = source["definition"];
@@ -735,11 +735,11 @@ export namespace schemaregistry {
 	    path: string;
 	    table?: string;
 	    usages?: Usage[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new IndexedDefinition(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.displayName = source["displayName"];
@@ -751,7 +751,7 @@ export namespace schemaregistry {
 	        this.table = source["table"];
 	        this.usages = this.convertValues(source["usages"], Usage);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -773,17 +773,17 @@ export namespace schemaregistry {
 	export class Index {
 	    definitions: IndexedDefinition[];
 	    diagnostics?: Diagnostic[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Index(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.definitions = this.convertValues(source["definitions"], IndexedDefinition);
 	        this.diagnostics = this.convertValues(source["diagnostics"], Diagnostic);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -802,20 +802,20 @@ export namespace schemaregistry {
 		    return a;
 		}
 	}
-
+	
 
 }
 
 export namespace workspace {
-
+	
 	export class BuildSettings {
 	    mode: string;
 	    autoCompileDebounceSeconds?: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BuildSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
@@ -827,11 +827,11 @@ export namespace workspace {
 	    rowID: string;
 	    column: string;
 	    comment: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new CellCommentSet(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -840,23 +840,49 @@ export namespace workspace {
 	        this.comment = source["comment"];
 	    }
 	}
-	export class CellUpdate {
+	export class CellDelta {
 	    path: string;
+	    projectEpoch: string;
+	    baseRevision: number;
+	    revision: number;
+	    rowIndex: number;
 	    rowID: string;
 	    column: string;
-	    expression: string;
-
+	    cell: document.Cell;
+	
 	    static createFrom(source: any = {}) {
-	        return new CellUpdate(source);
+	        return new CellDelta(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
+	        this.projectEpoch = source["projectEpoch"];
+	        this.baseRevision = source["baseRevision"];
+	        this.revision = source["revision"];
+	        this.rowIndex = source["rowIndex"];
 	        this.rowID = source["rowID"];
 	        this.column = source["column"];
-	        this.expression = source["expression"];
+	        this.cell = this.convertValues(source["cell"], document.Cell);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class CompileState {
 	    inputRevision: number;
@@ -864,11 +890,11 @@ export namespace workspace {
 	    pending: boolean;
 	    compiledAt?: string;
 	    diagnostics: compiler.Diagnostic[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new CompileState(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.inputRevision = source["inputRevision"];
@@ -877,7 +903,7 @@ export namespace workspace {
 	        this.compiledAt = source["compiledAt"];
 	        this.diagnostics = this.convertValues(source["diagnostics"], compiler.Diagnostic);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -901,11 +927,11 @@ export namespace workspace {
 	    build: BuildSettings;
 	    language: string;
 	    theme: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new EditorSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.version = source["version"];
@@ -913,7 +939,7 @@ export namespace workspace {
 	        this.language = source["language"];
 	        this.theme = source["theme"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -936,11 +962,11 @@ export namespace workspace {
 	    directory: string;
 	    targets: string[];
 	    tables: Record<string, boolean>;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ExportConfig(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.directory = source["directory"];
@@ -954,11 +980,11 @@ export namespace workspace {
 	    schemaRoots: string[];
 	    exclude?: string[];
 	    export: ExportConfig;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ProjectConfig(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.version = source["version"];
@@ -967,7 +993,7 @@ export namespace workspace {
 	        this.exclude = source["exclude"];
 	        this.export = this.convertValues(source["export"], ExportConfig);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -990,18 +1016,18 @@ export namespace workspace {
 	    path: string;
 	    root: string;
 	    config: ProjectConfig;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Project(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
 	        this.root = source["root"];
 	        this.config = this.convertValues(source["config"], ProjectConfig);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1032,11 +1058,11 @@ export namespace workspace {
 	    compile: CompileState;
 	    canUndo: boolean;
 	    canRedo: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new View(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.projectEpoch = source["projectEpoch"];
@@ -1051,7 +1077,7 @@ export namespace workspace {
 	        this.canUndo = source["canUndo"];
 	        this.canRedo = source["canRedo"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1070,20 +1096,72 @@ export namespace workspace {
 		    return a;
 		}
 	}
+	export class CellEditResult {
+	    table?: document.Table;
+	    delta?: CellDelta;
+	    workspace: View;
+	
+	    static createFrom(source: any = {}) {
+	        return new CellEditResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = this.convertValues(source["table"], document.Table);
+	        this.delta = this.convertValues(source["delta"], CellDelta);
+	        this.workspace = this.convertValues(source["workspace"], View);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CellUpdate {
+	    path: string;
+	    rowID: string;
+	    column: string;
+	    expression: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CellUpdate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.rowID = source["rowID"];
+	        this.column = source["column"];
+	        this.expression = source["expression"];
+	    }
+	}
 	export class CellUpdateResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new CellUpdateResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1108,11 +1186,11 @@ export namespace workspace {
 	    schemaExpression: string;
 	    initialExpression: string;
 	    position?: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnAdd(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1125,17 +1203,17 @@ export namespace workspace {
 	export class ColumnAddResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnAddResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1157,11 +1235,11 @@ export namespace workspace {
 	export class ColumnDelete {
 	    path: string;
 	    name: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnDelete(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1171,17 +1249,17 @@ export namespace workspace {
 	export class ColumnDeleteResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnDeleteResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1204,11 +1282,11 @@ export namespace workspace {
 	    path: string;
 	    column: string;
 	    displayName: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnDisplayNameSet(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1220,11 +1298,11 @@ export namespace workspace {
 	    path: string;
 	    name: string;
 	    position: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnMove(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1235,17 +1313,17 @@ export namespace workspace {
 	export class ColumnMoveResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnMoveResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1268,11 +1346,11 @@ export namespace workspace {
 	    path: string;
 	    oldName: string;
 	    newName: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnRename(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1283,17 +1361,17 @@ export namespace workspace {
 	export class ColumnRenameResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnRenameResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1316,11 +1394,11 @@ export namespace workspace {
 	    path: string;
 	    name: string;
 	    schemaExpression: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnSchemaSet(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1331,17 +1409,17 @@ export namespace workspace {
 	export class ColumnSchemaSetResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnSchemaSetResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1364,11 +1442,11 @@ export namespace workspace {
 	    path: string;
 	    column: string;
 	    width: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnWidthSet(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1378,16 +1456,16 @@ export namespace workspace {
 	}
 	export class CompileResult {
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new CompileResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1406,16 +1484,16 @@ export namespace workspace {
 		    return a;
 		}
 	}
-
+	
 	export class DisplayNameSet {
 	    path: string;
 	    definition?: string;
 	    displayName: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DisplayNameSet(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1423,18 +1501,18 @@ export namespace workspace {
 	        this.displayName = source["displayName"];
 	    }
 	}
-
-
+	
+	
 	export class ExportFormat {
 	    id: string;
 	    labels: Record<string, string>;
 	    supportsColumns: boolean;
 	    extensions?: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ExportFormat(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -1446,11 +1524,11 @@ export namespace workspace {
 	export class ExportResult {
 	    directory: string;
 	    files: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ExportResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.directory = source["directory"];
@@ -1465,11 +1543,11 @@ export namespace workspace {
 	    selected: boolean;
 	    configured: boolean;
 	    columns?: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ExportTable(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -1486,11 +1564,11 @@ export namespace workspace {
 	    rowID: string;
 	    column: string;
 	    expression: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FormulaSet(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1502,17 +1580,17 @@ export namespace workspace {
 	export class FormulaSetResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FormulaSetResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1536,11 +1614,11 @@ export namespace workspace {
 	    workspace: View;
 	    canUndo: boolean;
 	    canRedo: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new HistoryResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
@@ -1548,7 +1626,7 @@ export namespace workspace {
 	        this.canUndo = source["canUndo"];
 	        this.canRedo = source["canRedo"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1575,11 +1653,11 @@ export namespace workspace {
 	    total: number;
 	    running: boolean;
 	    error?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new OperationState(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -1596,11 +1674,11 @@ export namespace workspace {
 	    rowIDs: string[];
 	    columns: string[];
 	    values: string[][];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Paste(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1609,17 +1687,17 @@ export namespace workspace {
 	        this.values = source["values"];
 	    }
 	}
-
-
+	
+	
 	export class ProjectExportSettings {
 	    directory: string;
 	    targets: string[];
 	    tables: Record<string, boolean>;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ProjectExportSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.directory = source["directory"];
@@ -1633,11 +1711,11 @@ export namespace workspace {
 	    tableRoots: string[];
 	    schemaRoots: string[];
 	    exclude?: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ProjectInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1653,11 +1731,11 @@ export namespace workspace {
 	    formats: ExportFormat[];
 	    tables: ExportTable[];
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ProjectSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.project = this.convertValues(source["project"], ProjectInfo);
@@ -1666,7 +1744,7 @@ export namespace workspace {
 	        this.tables = this.convertValues(source["tables"], ExportTable);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1689,11 +1767,11 @@ export namespace workspace {
 	    path: string;
 	    rowID: string;
 	    expression: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RowAdd(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1704,17 +1782,17 @@ export namespace workspace {
 	export class RowAddResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RowAddResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1738,11 +1816,11 @@ export namespace workspace {
 	    rowID: string;
 	    values: Record<string, string>;
 	    formulas: Record<string, string>;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RowCreate(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1754,17 +1832,17 @@ export namespace workspace {
 	export class RowCreateResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RowCreateResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1786,11 +1864,11 @@ export namespace workspace {
 	export class RowDelete {
 	    path: string;
 	    rowID: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RowDelete(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1800,17 +1878,17 @@ export namespace workspace {
 	export class RowDeleteResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RowDeleteResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1833,11 +1911,11 @@ export namespace workspace {
 	    path: string;
 	    oldID: string;
 	    newID: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RowRename(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1848,17 +1926,17 @@ export namespace workspace {
 	export class RowRenameResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RowRenameResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1884,11 +1962,11 @@ export namespace workspace {
 	    type?: string;
 	    appliesTo?: string[];
 	    schemaExpression: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SchemaDefinitionCreate(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1902,11 +1980,11 @@ export namespace workspace {
 	export class SchemaDefinitionDelete {
 	    path: string;
 	    name: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SchemaDefinitionDelete(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1917,11 +1995,11 @@ export namespace workspace {
 	    path: string;
 	    oldName: string;
 	    newName: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SchemaDefinitionRename(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1936,11 +2014,11 @@ export namespace workspace {
 	    type?: string;
 	    appliesTo?: string[];
 	    schemaExpression: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SchemaDefinitionSet(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1955,18 +2033,18 @@ export namespace workspace {
 	    schema: document.PublicSchema;
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SchemaEditResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.schema = this.convertValues(source["schema"], document.PublicSchema);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1988,17 +2066,17 @@ export namespace workspace {
 	export class SchemaFileCreateResult {
 	    schema: document.PublicSchema;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SchemaFileCreateResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.schema = this.convertValues(source["schema"], document.PublicSchema);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -2020,11 +2098,11 @@ export namespace workspace {
 	export class TableCreate {
 	    namespace: string;
 	    name: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TableCreate(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.namespace = source["namespace"];
@@ -2034,17 +2112,17 @@ export namespace workspace {
 	export class TableCreateResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TableCreateResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -2065,11 +2143,11 @@ export namespace workspace {
 	}
 	export class TableDelete {
 	    path: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TableDelete(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -2077,16 +2155,16 @@ export namespace workspace {
 	}
 	export class TableDeleteResult {
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TableDeleteResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -2108,17 +2186,17 @@ export namespace workspace {
 	export class TableExportSettings {
 	    path: string;
 	    formats: Record<string, document.ExportSettings>;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TableExportSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
 	        this.formats = this.convertValues(source["formats"], document.ExportSettings, true);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -2140,17 +2218,17 @@ export namespace workspace {
 	export class TableExportSettingsResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TableExportSettingsResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -2173,11 +2251,11 @@ export namespace workspace {
 	    path: string;
 	    namespace: string;
 	    name: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TableRename(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -2188,17 +2266,17 @@ export namespace workspace {
 	export class TableRenameResult {
 	    table: document.Table;
 	    workspace: View;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TableRenameResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.table = this.convertValues(source["table"], document.Table);
 	        this.workspace = this.convertValues(source["workspace"], View);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;

@@ -152,7 +152,7 @@ func main() {
 	fixture := flag.String("fixture", "", "original fixture project directory")
 	out := flag.String("out", "", "new output directory")
 	repeats := flag.Int("repeats", 3, "number of observations per phase")
-	scenario := flag.String("scenario", "full", "full, edit, open, burst, cold, or saveas")
+	scenario := flag.String("scenario", "full", "full, edit, open, burst, cold, delta, or saveas")
 	openCount := flag.Int("opens", 0, "override open observations; default repeats")
 	flag.Parse()
 	if *fixture == "" || *out == "" {
@@ -215,14 +215,14 @@ func main() {
 		}
 		return
 	}
-	if *scenario == "burst" || *scenario == "cold" {
+	if *scenario == "burst" || *scenario == "cold" || *scenario == "delta" {
 		run("get_manual", 1, false, func() (any, error) { return service.GetTable(source) })
 		ids := []string{"item_000001", "item_050000", "item_100000"}
 		for i := 1; i <= *repeats; i++ {
 			id := ids[(i-1)%3]
 			col, expr := "price", fmt.Sprint(900000+i)
 			text := false
-			if *scenario == "burst" {
+			if *scenario == "burst" || *scenario == "delta" {
 				switch i % 4 {
 				case 1:
 					col, expr = "name", fmt.Sprintf("编辑样本%03d, \"引号\"", i)
@@ -242,11 +242,24 @@ func main() {
 				var r workspace.CellUpdateResult
 				var e error
 				expected := expr
+				if *scenario == "delta" {
+					var compact workspace.CellEditResult
+					if text {
+						compact, e = service.SetCellTextDelta(workspace.CellUpdate{Path: source, RowID: id, Column: col, Expression: expr})
+						expected = document.EncodeStringExpression(expr)
+					} else {
+						compact, e = service.UpdateCellDelta(workspace.CellUpdate{Path: source, RowID: id, Column: col, Expression: expr})
+					}
+					if e == nil && (compact.Delta == nil || compact.Table != nil || compact.Delta.RowID != id || compact.Delta.Column != col || strings.TrimSpace(compact.Delta.Cell.Expression) != strings.TrimSpace(expected)) {
+						e = fmt.Errorf("bad compact authority result")
+					}
+					return compact, e
+				}
 				if text {
-					r, e = service.SetCellText(workspace.CellUpdate{source, id, col, expr})
+					r, e = service.SetCellText(workspace.CellUpdate{Path: source, RowID: id, Column: col, Expression: expr})
 					expected = document.EncodeStringExpression(expr)
 				} else {
-					r, e = service.UpdateCell(workspace.CellUpdate{source, id, col, expr})
+					r, e = service.UpdateCell(workspace.CellUpdate{Path: source, RowID: id, Column: col, Expression: expr})
 				}
 				if e == nil {
 					e = checkTable(r, id, col, expected)
@@ -263,17 +276,27 @@ func main() {
 				})
 				activeEdit = &editAudit{"UpdateCell", id, "stock", fmt.Sprint(i + 100)}
 				run("edit_before_export", i, false, func() (any, error) {
-					return service.UpdateCell(workspace.CellUpdate{source, id, "stock", fmt.Sprint(i + 100)})
+					return service.UpdateCell(workspace.CellUpdate{Path: source, RowID: id, Column: "stock", Expression: fmt.Sprint(i + 100)})
 				})
 				run("export_after_edit", i, false, func() (any, error) { return service.Export() })
 			}
 		}
-		if *scenario == "burst" {
+		if *scenario == "burst" || *scenario == "delta" {
 			for i := 1; i <= *repeats; i++ {
-				run("undo_sequence", i, false, func() (any, error) { return service.Undo() })
+				run("undo_sequence", i, false, func() (any, error) {
+					if *scenario == "delta" {
+						return service.UndoDelta()
+					}
+					return service.Undo()
+				})
 			}
 			for i := 1; i <= *repeats; i++ {
-				run("redo_sequence", i, false, func() (any, error) { return service.Redo() })
+				run("redo_sequence", i, false, func() (any, error) {
+					if *scenario == "delta" {
+						return service.RedoDelta()
+					}
+					return service.Redo()
+				})
 			}
 			if stats, ok := any(service).(interface{ ResearchHistoryStats() map[string]int64 }); ok {
 				b, _ := json.MarshalIndent(stats.ResearchHistoryStats(), "", "  ")

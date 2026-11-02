@@ -31,7 +31,7 @@ async function boot(page:Page,fixture:Fixture,raw=false){
   (window as unknown as Window&{go:unknown}).go={main:{App:{GetSettings:async()=>({language:"en",theme:"light"}),GetExportFormats:async()=>[],SelectProject:async()=>fixture.View,GetTable:async()=>structuredClone(table),GetPublicSchema:async()=>fixture.Schema,
    DeleteRow:async({rowID}:{rowID:string})=>{state.calls.push({method:"DeleteRow",rowID});table=fixture.Result.table;return structuredClone(fixture.Result);},
    Undo:async()=>{state.calls.push({method:"Undo"});table=fixture.UndoTable;return structuredClone(fixture.Undo);},Redo:async()=>{state.calls.push({method:"Redo"});table=fixture.RedoTable;return structuredClone(fixture.Redo);},
-   SetColumnWidth:async()=>{state.calls.push({method:"Width"});return await new Promise<Result>(resolve=>{state.resolveWidth=resolve;});},
+   SetColumnWidth:async()=>{state.calls.push({method:"Width"});return await new Promise<Result>(resolve=>{state.resolveWidth=value=>{const revision=(fixture.View.revision??0)+1;resolve({...value,table:{...value.table,projectEpoch:fixture.View.projectEpoch,workspaceRevision:revision},workspace:{...value.workspace,projectEpoch:fixture.View.projectEpoch,revision}});};});},
    SetCellFormula:async(argument:{rowID:string;column:string;expression:string})=>{state.calls.push({method:"SetCellFormula",...argument});return structuredClone({table,workspace:fixture.View});},
    ClearCell:async(argument:{rowID:string;column:string;expression:string})=>{state.calls.push({method:"ClearCell",...argument});return structuredClone({table,workspace:fixture.View});},
    SetLanguage:async(language:string)=>({language,theme:"light"}),

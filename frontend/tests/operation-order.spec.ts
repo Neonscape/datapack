@@ -39,3 +39,15 @@ test("heavy operation reports true stages, blocks commands, and unlocks on failu
  await expect(page.locator("header")).not.toHaveAttribute("inert","");
  await expect(page.getByText("compile injected failure")).toBeVisible();
 });
+
+test("cell deltas preserve identity and reject stale, reordered and cross-project data",async({page})=>{
+ await page.goto("/");
+ const result=await page.evaluate(async()=>{
+  const path="/src/workspace/cellDelta.ts";const {patchCell}=await import(path);
+  const initial={path:"/table",projectEpoch:"p1",workspaceRevision:2,columns:[{name:"price"}],rows:[{id:"first",values:{price:{expression:"1",display:"1"}}},{id:"last",values:{price:{expression:"2",display:"2"}}}]};
+  const delta={path:"/table",projectEpoch:"p1",baseRevision:2,revision:3,rowIndex:1,rowID:"last",column:"price",cell:{expression:"99",display:"99"}};
+  const patched=patchCell(initial,delta);
+  return {value:patched.rows[1].values.price.display,original:initial.rows[1].values.price.display,wrongEpoch:patchCell(initial,{...delta,projectEpoch:"p2"}),wrongRow:patchCell(initial,{...delta,rowID:"first"}),stale:patchCell(patched,delta),future:patchCell(initial,{...delta,baseRevision:3,revision:4})};
+ });
+ expect(result).toEqual({value:"99",original:"2",wrongEpoch:null,wrongRow:null,stale:null,future:null});
+});

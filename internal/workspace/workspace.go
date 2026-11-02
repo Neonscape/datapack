@@ -108,6 +108,7 @@ type ColumnWidthSet struct {
 }
 
 type CellUpdateResult struct {
+	delta     *CellDelta
 	Table     document.Table `json:"table"`
 	Workspace View           `json:"workspace"`
 }
@@ -120,6 +121,7 @@ type Paste struct {
 }
 
 type HistoryResult struct {
+	delta     *CellDelta
 	Table     document.Table `json:"table"`
 	Workspace View           `json:"workspace"`
 	CanUndo   bool           `json:"canUndo"`
@@ -268,6 +270,9 @@ func (s *Service) SetCompileMode(mode string) (View, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return View{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return View{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -798,6 +803,9 @@ func (s *Service) SetTableExportSettings(settings TableExportSettings) (TableExp
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return TableExportSettingsResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return TableExportSettingsResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -829,6 +837,9 @@ func (s *Service) SetProjectExportSettings(settings ProjectExportSettings) (Proj
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return ProjectSettings{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return ProjectSettings{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1060,6 +1071,9 @@ func (s *Service) CreateSchemaDefinition(create SchemaDefinitionCreate) (SchemaE
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return SchemaEditResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1120,6 +1134,9 @@ func (s *Service) SetSchemaDefinition(set SchemaDefinitionSet) (SchemaEditResult
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return SchemaEditResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1181,6 +1198,9 @@ func (s *Service) RenameSchemaDefinition(rename SchemaDefinitionRename) (SchemaE
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return SchemaEditResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1232,6 +1252,9 @@ func (s *Service) DeleteSchemaDefinition(delete SchemaDefinitionDelete) (SchemaE
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return SchemaEditResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return SchemaEditResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1547,6 +1570,9 @@ func (s *Service) CreateTable(create TableCreate) (TableCreateResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return TableCreateResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return TableCreateResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1616,6 +1642,9 @@ func (s *Service) RenameTable(rename TableRename) (TableRenameResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return TableRenameResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return TableRenameResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1737,6 +1766,9 @@ func (s *Service) DeleteTable(delete TableDelete) (TableDeleteResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return TableDeleteResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return TableDeleteResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1750,6 +1782,9 @@ func (s *Service) CreateSchemaFile(namespace string) (SchemaFileCreateResult, er
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return SchemaFileCreateResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return SchemaFileCreateResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1797,6 +1832,9 @@ func (s *Service) UpdateCell(update CellUpdate) (CellUpdateResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return CellUpdateResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1824,6 +1862,9 @@ func (s *Service) SetCellText(update CellUpdate) (CellUpdateResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return CellUpdateResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1853,6 +1894,9 @@ func (s *Service) SetCellComment(update CellCommentSet) (CellUpdateResult, error
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return CellUpdateResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1877,6 +1921,9 @@ func (s *Service) SetColumnDisplayName(update ColumnDisplayNameSet) (CellUpdateR
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return CellUpdateResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1901,6 +1948,9 @@ func (s *Service) SetColumnWidth(update ColumnWidthSet) (CellUpdateResult, error
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return CellUpdateResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1925,6 +1975,9 @@ func (s *Service) Paste(paste Paste) (HistoryResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return HistoryResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return HistoryResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1949,6 +2002,9 @@ func (s *Service) Undo() (HistoryResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return HistoryResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return HistoryResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1961,6 +2017,9 @@ func (s *Service) Redo() (HistoryResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return HistoryResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return HistoryResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -1973,6 +2032,9 @@ func (s *Service) SetCellFormula(set FormulaSet) (FormulaSetResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return FormulaSetResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return FormulaSetResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -2127,6 +2189,9 @@ func (s *Service) CreateRow(create RowCreate) (RowCreateResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return RowCreateResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return RowCreateResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -2172,6 +2237,9 @@ func (s *Service) ClearCell(update CellUpdate) (CellUpdateResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return CellUpdateResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return CellUpdateResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -2207,6 +2275,9 @@ func (s *Service) AddRow(add RowAdd) (RowAddResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return RowAddResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return RowAddResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -2231,6 +2302,9 @@ func (s *Service) DeleteRow(delete RowDelete) (RowDeleteResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return RowDeleteResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return RowDeleteResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -2266,6 +2340,9 @@ func (s *Service) RenameRow(rename RowRename) (RowRenameResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return RowRenameResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return RowRenameResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -2437,6 +2514,9 @@ func (s *Service) AddColumn(add ColumnAdd) (ColumnAddResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return ColumnAddResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return ColumnAddResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -2472,6 +2552,9 @@ func (s *Service) SetColumnSchema(set ColumnSchemaSet) (ColumnSchemaSetResult, e
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return ColumnSchemaSetResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return ColumnSchemaSetResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -2503,6 +2586,9 @@ func (s *Service) DeleteColumn(delete ColumnDelete) (ColumnDeleteResult, error) 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return ColumnDeleteResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return ColumnDeleteResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -2527,6 +2613,9 @@ func (s *Service) RenameColumn(rename ColumnRename) (ColumnRenameResult, error) 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return ColumnRenameResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return ColumnRenameResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}
@@ -2551,6 +2640,9 @@ func (s *Service) MoveColumn(move ColumnMove) (ColumnMoveResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sourceUncertain {
+		return ColumnMoveResult{}, fmt.Errorf("source state uncertain; reopen project before editing")
+	}
 	if s.operationBusy() {
 		return ColumnMoveResult{}, fmt.Errorf("project operation in progress; edit not applied")
 	}

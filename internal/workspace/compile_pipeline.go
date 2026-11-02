@@ -8,6 +8,7 @@ import (
 	"datapack/internal/perftrace"
 	"datapack/internal/projecttree"
 	"datapack/internal/schemaregistry"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -34,7 +35,11 @@ func (s *Service) compile() compiler.Result {
 		latest, err := s.captureInputs()
 		if err != nil || latest.fingerprint != fingerprint {
 			result.Package = nil
-			result.Diagnostics = []compiler.Diagnostic{{Message: "project inputs changed after cache lookup; retry"}}
+			message := "project inputs changed after cache lookup; retry"
+			if err != nil {
+				message = fmt.Sprintf("cannot verify current inputs after cache lookup: %v", err)
+			}
+			result.Diagnostics = []compiler.Diagnostic{{Message: message}}
 		}
 		s.current.Compile = s.recordCompile(s.current.Settings.Build.Mode, time.Now().UTC().Format(time.RFC3339), result.Diagnostics)
 		return result
@@ -53,7 +58,13 @@ func (s *Service) compile() compiler.Result {
 	if inputErr != nil || afterErr != nil || after.fingerprint != fingerprint {
 		result.Package = nil
 		if len(result.Diagnostics) == 0 {
-			result.Diagnostics = append(result.Diagnostics, compiler.Diagnostic{Message: "project input snapshot unavailable or changed during compilation; retry"})
+			message := "project inputs changed during compilation; retry"
+			if inputErr != nil {
+				message = fmt.Sprintf("cannot capture compilation inputs: %v", inputErr)
+			} else if afterErr != nil {
+				message = fmt.Sprintf("cannot verify compilation inputs: %v", afterErr)
+			}
+			result.Diagnostics = append(result.Diagnostics, compiler.Diagnostic{Message: message})
 		}
 	} else if cacheable && len(result.Diagnostics) == 0 && result.Package != nil {
 		result.InputFingerprint = fingerprint
