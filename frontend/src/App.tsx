@@ -41,7 +41,7 @@ function App() {
     const operationLabel = (value:string) => ({inputs:"读取输入",discover:"扫描工程",index:"建立索引",schema:"准备校验",validate:"校验数据",write:"写入导出文件",commit:"提交文件",copy:"复制工程",Compile:"编译",Export:"导出",SaveProjectAs:"另存为",OpenProject:"打开工程",SelectProject:"打开工程",NewProject:"新建工程"} as Record<string,string>)[value] ?? value;
     const {t, language, setLanguage} = useTranslation();
     const {preference, setPreference} = useTheme();
-    const {workspace, publishWorkspace, selectedSchema, selectSchema, tabs, activeTabId, activeTab, table, schemaDocument, activateTab, closeTab, updateTable, applyCellDelta, updateSchema, updateSchemaTabById, updateDisplayName, addTableTab, addSchemaTab, applyProjectView: resetProject, beginRequest, isCurrent, refreshOpenTabs, renameTable: renameSessionTable, closeDocument, applyDefinitionResult} = useWorkspaceSession();
+    const {workspace, publishWorkspace, selectedSchema, selectSchema, tabs, activeTabId, activeTab, table, schemaDocument, activateTab, closeTab, updateTable, applyCellDelta, updateSchema, updateSchemaTabById, updateDisplayName, addTableTab, addSchemaTab, applyProjectView: resetProject, beginRequest, isCurrent, ownsRequest, refreshOpenTabs, renameTable: renameSessionTable, closeDocument, applyDefinitionResult} = useWorkspaceSession();
     const [cellError, setCellError] = useState<CellError | null>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
@@ -605,13 +605,13 @@ function App() {
         const request = beginRequest("history");
         try {
             const result = redo ? await Redo() : await Undo();
-            if (!isCurrent(request)) return;
+            if (!isCurrent(request,result.workspace)) return;
             const appliedDelta = result.delta && applyCellDelta(result.delta);
             if (!publishWorkspace(result.workspace, request)) return;
             if (appliedDelta) return;
             await refreshOpenTabs(request, result.workspace, {table:async path => await GetTable(path), schema:async path => await GetPublicSchema(path)});
         } catch (reason) {
-            if (!isCurrent(request)) return;
+            if (!ownsRequest(request)) return;
             setError(reason instanceof Error ? reason.message : String(reason));
         }
     }
@@ -620,11 +620,21 @@ function App() {
         if(operationSnapshot().busy) return;
         setError("");
         setNotice("");
+        const request = beginRequest("export");
         try {
-            const result = await Export();
-            setExportResult(result);
-            void OpenPath(result.directory).catch(() => undefined);
+            await withProjectOperation("Export", async () => {
+                const result = await Export();
+                if (!isCurrent(request,result.workspace)) return;
+                if (result.workspace) {
+                    if (!publishWorkspace(result.workspace,request)) return;
+                    await refreshOpenTabs(request,result.workspace,{table:async path=>await GetTable(path),schema:async path=>await GetPublicSchema(path)},true);
+                }
+                if (!ownsRequest(request)) return;
+                setExportResult(result);
+                void OpenPath(result.directory).catch(() => undefined);
+            });
         } catch (reason) {
+            if (!ownsRequest(request)) return;
             setError(reason instanceof Error ? reason.message : String(reason));
         }
     }

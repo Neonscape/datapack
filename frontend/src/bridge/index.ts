@@ -48,7 +48,7 @@ export const SetTableExportSettings=(value: TableExportSettings) => orderedCall(
 export const Undo=historyCall("Undo");
 export const UpdateCell=cellCall("UpdateCell");
 export const PrintSchema=(value: SchemaNode) => api.PrintSchema(new schemamodel.Node(value));
-export const Export=() => orderedCall("Export", () => api.Export());
+export const Export=() => orderedCall("Export", () => api.Export()).then(value=>({...value,workspace:value.workspace?.project?.path ? workspaceView(value.workspace) : undefined}));
 export {GetExportFormats, GetSettings, LogPath, Navigate, OpenPath, SelectProjectExportDirectory, SetLanguage, SetTheme} from "../../wailsjs/go/main/App";
 
 // Older test/runtime bridges retain their full-document contract. The native

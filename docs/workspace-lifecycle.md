@@ -1,9 +1,11 @@
 # Workspace 发布职责
 
-Service 继续持有互斥锁、当前工程、编辑命令和历史栈。`viewLifecycle` 只拥有 source revision、上次编译 revision 和编译状态，负责纯状态转换；它不读文件、不触发编译、不安排计时器。当前模式与历史可用性由调用方明确传入，因此 manual 的旧诊断/时间戳与新 pending 可以并存。
+Service 持有工程互斥锁、当前 view、不可变字面量快照与历史栈。`viewLifecycle` 只拥有 source revision、上次编译 inputRevision 和编译状态，不读文件或安排调度。每次成功持久化后发布新 revision；manual 可以同时携带旧诊断/时间戳与 pending。
 
-`compile_pipeline` 聚合源收集、索引构建、完整编译及视图构造。它调用生命周期对象记录实际编译、再发布视图；领域命令仍通过成功刷新后记历史的已有协议运行。没有统一宽容树解析与严格编辑，没有缓存源文件，没有改变 auto/manual 的调用时点。
+新默认模式为 manual，保留用户已有的显式 auto 设置。manual 首次打开清空历史并使用新 projectEpoch，标记尚未校验、inputRevision=-1；auto 打开和成功编辑执行完整校验。Ctrl+Shift+B 触发明确编译，输入框/组合输入保留快捷键 ownership。编译和导出验证当前输入，失败不会伪装为干净成功。
 
-先加入的特征测试锁定：manual 修复不覆盖旧诊断和时间戳，只有显式 Compile 更新；auto 成功编辑会编译；失败刷新保持 revision/history/compile；重开即使 manual 也执行初始编译并清历史。纯状态单测验证发布不会改写缓存模式或输入 View，nil diagnostics 的UI表示保持空数组。
+`compile_pipeline` 共享文档读取，完整输入指纹包括同包祖先、模块/配置和文件集合；导入依赖发现后仍执行相同外部输入限制并检查各依赖包。可证明完整的无导入输入才复用成功结果；导入回退仍做编译前后及导出提交前一致性检查。导出目录在编译可能重载 .dtproj 之后解析，避免混合新配置与旧输出目录。
 
-云岚测量的可重跑harness、实际组合代码SHA、基线特征测试提交、原始输出与校验值见 [验证证据](quality-evidence/README.md)。完整CUE编译是本机观测的主要成本，本轮没有跨命令缓存、增量编译或debounce改变可观察行为。旧基线日志没有自行记录运行HEAD，不能将其当作严谨的配对性能比较。
+快路径保持 Write/Sync/Close、同文件系统 rename 和历史提交先于成功响应；普通单元格历史使用可逆补丁，不截断 Undo。回滚失败时发布 sourceUncertain，阻止旧快照继续修改或导出，只有成功重新打开才能恢复权威状态。文件同步不等于多文件或掉电事务保证。
+
+重操作状态使用独立锁，报告实际阶段和行数。前端锁住冲突操作并保留到必要文档刷新完成；服务也在获得工程锁前后检查冲突。原始测量、计时边界、未测场景及回归映射见 [100k 产品化报告](../research/100k-product/REPORT_zh.md)。
