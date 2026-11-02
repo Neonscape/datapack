@@ -8,9 +8,15 @@ on:
       - "v*.*.*"
   workflow_dispatch:
 
-# The Runner is expected to provide the build toolchain and its own outbound
-# network configuration. Keep the local Gitea host out of any proxy.
+# The runner image only ships Node/npm/git; Go and Wails are installed in-job.
+# The image also bakes in http_proxy=127.0.0.1:7897, which is a dead address
+# inside the job container (its loopback is not the host), so clear it here.
+# Keep the local Gitea host out of any proxy as well.
 env:
+  http_proxy: ""
+  https_proxy: ""
+  HTTP_PROXY: ""
+  HTTPS_PROXY: ""
   NO_PROXY: "dev.projectmiraland.top,127.0.0.1,localhost"
   no_proxy: "dev.projectmiraland.top,127.0.0.1,localhost"
   # Git reads http.proxy from global/system config independently of the proxy
@@ -31,22 +37,32 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Check runner toolchain
-        run: |
-          set -euo pipefail
-          command -v go
-          command -v node
-          command -v npm
-          command -v wails
-          go version
-          node --version
-          npm --version
-          wails version
-
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install --yes build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev jq curl
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: false
+
+      - name: Install Wails
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/go/bin:$PATH"
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Check toolchain
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/go/bin:$PATH"
+          go version
+          node --version
+          npm --version
+          wails version
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
