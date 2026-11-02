@@ -1,6 +1,6 @@
 import {operationSnapshot, withProjectOperation} from "./bridge/ordered";
 import {useProjectOperation} from "./workspace/useProjectOperation";
-import {useEffect, useState} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import './App.css';
 import {AddColumn, ClearCell, Compile, CreateRow, CreateSchemaDefinition, CreateSchemaFile, CreateTable, DeleteColumn, DeleteRow, DeleteSchemaDefinition, DeleteTable, Export, GetExportFormats, GetPublicSchema, GetSettings, GetTable, MoveColumn, Navigate, NewProject, OpenPath, Paste, PrintSchema, Redo, RenameColumn, RenameRow, RenameSchemaDefinition, RenameTable, SaveProjectAs, SelectProject, SetCellComment, SetCellFormula, SetCellText, SetColumnDisplayName, SetDisplayName, SetColumnSchema, SetColumnWidth, SetCompileMode, SetLanguage, SetSchemaDefinition, SetTableExportSettings, SetTheme, Undo, UpdateCell} from "./bridge";
 import {useTranslation, type Language} from "./i18n";
@@ -42,6 +42,14 @@ function App() {
     const {t, language, setLanguage} = useTranslation();
     const {preference, setPreference} = useTheme();
     const {workspace, publishWorkspace, selectedSchema, selectSchema, tabs, activeTabId, activeTab, table, schemaDocument, activateTab, closeTab, updateTable, applyCellDelta, updateSchema, updateSchemaTabById, updateDisplayName, addTableTab, addSchemaTab, applyProjectView: resetProject, beginRequest, isCurrent, ownsRequest, refreshOpenTabs, renameTable: renameSessionTable, closeDocument, applyDefinitionResult} = useWorkspaceSession();
+    const historyFlight = useRef(false);
+    const [historyState, setHistoryState] = useState({pending:false});
+    useLayoutEffect(() => {
+        // Release only after React has committed the authoritative workspace
+        // and any full-document refresh. A fresh completion object also runs
+        // this barrier when an immediate RPC batches pending true/false.
+        if (!historyState.pending) historyFlight.current = false;
+    }, [historyState]);
     const [cellError, setCellError] = useState<CellError | null>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
@@ -183,6 +191,7 @@ function App() {
             if (operationSnapshot().busy || event.repeat || event.isComposing || projectSettingsOpen || !activeTab || !(event.ctrlKey || event.metaKey) || (event.target as Element | null)?.closest("textarea, input, select, [role=dialog]")) return;
             const redo = event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z");
             if (event.key.toLowerCase() !== "z" && !redo) return;
+            if (historyFlight.current) {event.preventDefault();return;}
             if (redo ? !workspace?.canRedo : !workspace?.canUndo) return;
             event.preventDefault();
             void applyHistory(redo);
@@ -601,6 +610,11 @@ function App() {
     }
 
     async function applyHistory(redo: boolean) {
+        // Undo and Redo share one flight; a second trigger must not allocate a
+        // new request serial and supersede a result that has already committed.
+        if (historyFlight.current) return;
+        historyFlight.current = true;
+        setHistoryState({pending:true});
         setError("");
         const request = beginRequest("history");
         try {
@@ -613,6 +627,8 @@ function App() {
         } catch (reason) {
             if (!ownsRequest(request)) return;
             setError(reason instanceof Error ? reason.message : String(reason));
+        } finally {
+            setHistoryState({pending:false});
         }
     }
 
@@ -698,8 +714,8 @@ function App() {
                     <div className="app-menu">
                         <button aria-expanded={appMenu === "edit"} onClick={() => setAppMenu(appMenu === "edit" ? null : "edit")}>{t("menu.edit")}</button>
                         {appMenu === "edit" && <div className="app-menu-popover">
-                            <button disabled={!workspace?.canUndo} onClick={() => { setAppMenu(null); applyHistory(false); }}>{t("menu.undo")} <kbd>Ctrl+Z</kbd></button>
-                            <button disabled={!workspace?.canRedo} onClick={() => { setAppMenu(null); applyHistory(true); }}>{t("menu.redo")} <kbd>Ctrl+Y</kbd></button>
+                            <button disabled={historyState.pending || !workspace?.canUndo} onClick={() => { setAppMenu(null); applyHistory(false); }}>{t("menu.undo")} <kbd>Ctrl+Z</kbd></button>
+                            <button disabled={historyState.pending || !workspace?.canRedo} onClick={() => { setAppMenu(null); applyHistory(true); }}>{t("menu.redo")} <kbd>Ctrl+Y</kbd></button>
                         </div>}
                     </div>
                 </nav>

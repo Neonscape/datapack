@@ -68,3 +68,13 @@ CPU、内存、Go 版本及保护参数见 `hardware.json`。Go 1.26.5；GOMAXPR
 - 成功 Export 返回权威 workspace。App 安装当前校验状态，必要时读取公式/变更文档；同 revision 无公式表只清理过期诊断，避免重传 100k 行。首次 manual 打开→导出、旧错误修复→导出、排队 edit→导出均有组合回归，未增加重复 Compile。
 - 目标回归、Go/race/vet、构建与类型检查通过；最终完整前端 155 项通过。一次全量中原有画布双击夹具尚未建立编辑器，发生在粘贴前；独立 7 项通过，并补充先确认单元格选中状态的步骤后取得完整 155 项通过。原失败日志保留，不将其删去或当作通过。
 - 原生 PNG 已作为独立像素证据包交付，含逐操作 JSON 和 SHA256 对应表，可供独立像素复核；producer 的 visually_verified 标记本身不是独立审查结论。截图仍来自原测量，没有为审查重跑或修改像素。
+
+## 连续 history 审查修正
+
+fdba 上真实 App 加桥 stub 故障注入回归，在同一事件循环触发双 Undo，第一条成功已把 stub 的权威值从2撤为1，第二条失败后画面仍为2；`history-flight-before.log` 保留该失败。本次只改前端 history 入口，不再逐例调整 request token：Undo/Redo 共用 single-flight，覆盖派发、delta/完整文档读取、权威结果的 React 提交。重复输入既不发第二条 RPC，也不产生淘汰首条结果的新 serial；两种菜单均禁用。锁在 layout commit 后释放，而不是仅在 RPC 返回或 finally 赋值时释放。
+
+真实 App 回归覆盖双 Undo/双 Redo（delta/full）、完整读取仍在途时的重复触发、成功后 exhausted error 保持已提交画面、失败后重试成功，以及切工程后的旧读取不能覆盖新工程。测试保留服务端过期 availability 的故障注入，以覆盖成功后返回错误的序列。原 Go/backend 与认证配置不变，原性能/PNG测量仍归属 eaf；没有重跑昂贵基准或改动像素。
+
+本次目标组合 23 项通过，完整前端 160 项通过；应用/测试 TypeScript 检查及 production build 通过。完整日志为 `history-flight-targeted-after.log`、`history-flight-all.log`、`history-flight-types.log`、`history-flight-test-types.log`、`history-flight-build.log`。Go/backend 未变，沿用 fdba 的全量/race/vet 和平台构建证据，不将前端 stub 回归称作原生磁盘或 100k 性能实测。
+
+最新认证只读检查仍未从现有 store helper 找到 canonical `https://dev.projectmiraland.top:50005` 的可用用户名/密码。遵从原有 `useHttpPath=false` 匹配规则，未修改配置、凭据或旧 API 脚本，也未因此发起网络请求。该轮推送/PR 未执行；远程合并仍待独立复审和认证恢复。
