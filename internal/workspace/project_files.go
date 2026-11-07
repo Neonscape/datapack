@@ -76,7 +76,7 @@ func (s *Service) SaveProjectAs(path string) (result View, err error) {
 		return View{}, fmt.Errorf("read save-as staging directory: %w", err)
 	}
 	for _, entry := range entries {
-		if _, err := os.Stat(filepath.Join(target.Root, entry.Name())); err == nil {
+		if _, err := os.Lstat(filepath.Join(target.Root, entry.Name())); err == nil {
 			return View{}, fmt.Errorf("save-as target already contains %q", entry.Name())
 		} else if !os.IsNotExist(err) {
 			return View{}, fmt.Errorf("inspect save-as target %q: %w", entry.Name(), err)
@@ -104,7 +104,7 @@ func newProjectAt(path string) (Project, error) {
 	if err != nil {
 		return Project{}, fmt.Errorf("resolve project path: %w", err)
 	}
-	if _, err := os.Stat(absPath); err == nil {
+	if _, err := os.Lstat(absPath); err == nil {
 		return Project{}, fmt.Errorf("project file %q already exists", absPath)
 	} else if !os.IsNotExist(err) {
 		return Project{}, fmt.Errorf("inspect project path: %w", err)
@@ -169,15 +169,17 @@ _schema: {
 	return nil
 }
 
+// Inspect destination nodes themselves: a dangling symlink still occupies a slot.
+// Lstat leaves legitimate symlinks in parent directories usable.
 func validateProjectSlots(root, projectPath string) error {
-	if _, err := os.Stat(projectPath); err == nil {
+	if _, err := os.Lstat(projectPath); err == nil {
 		return fmt.Errorf("project file %q already exists", projectPath)
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("inspect project path: %w", err)
 	}
 	for _, name := range []string{"tables", "schema", "cue.mod"} {
 		path := filepath.Join(root, name)
-		info, err := os.Stat(path)
+		info, err := os.Lstat(path)
 		if os.IsNotExist(err) {
 			continue
 		}

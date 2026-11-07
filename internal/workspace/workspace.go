@@ -2085,6 +2085,9 @@ func (s *Service) restoreHistory(undo bool) (result HistoryResult, err error) {
 	if err != nil {
 		return HistoryResult{}, err
 	}
+	if err := snapshot.checkCurrent(current); err != nil {
+		return HistoryResult{}, err
+	}
 	transaction, err := newTableRenameTransaction(current, os.Rename)
 	if err != nil {
 		return HistoryResult{}, err
@@ -2137,7 +2140,7 @@ func (s *Service) restoreHistory(undo bool) (result HistoryResult, err error) {
 	// Consume history only when both filesystem restoration and refresh have
 	// succeeded. Failure rolls back moves before restoring the previous bytes.
 	*stack = (*stack)[:len(*stack)-1]
-	*opposite = append(*opposite, historyEntry{Files: current, Moves: reverseRenameMoves(snapshot.Moves), Directory: snapshot.Directory.inverse()})
+	*opposite = append(*opposite, historyEntry{Files: current, Expected: historyFingerprints(snapshot.Files), Moves: reverseRenameMoves(snapshot.Moves), Directory: snapshot.Directory.inverse()})
 	view.CanUndo = len(s.undoStack) > 0
 	view.CanRedo = len(s.redoStack) > 0
 	s.current = &view
@@ -2153,6 +2156,16 @@ func (s *Service) recordEdit(snapshot map[string][]byte) {
 }
 
 func (s *Service) recordHistory(entry historyEntry) {
+	if entry.Cell == nil {
+		current, err := snapshotRenameFiles(snapshotPaths(entry.Files)...)
+		if err != nil {
+			// The edit has already committed. Retain its history, but fail closed
+			// if its resulting sources cannot be verified for a later restore.
+			entry.CaptureError = err.Error()
+		} else {
+			entry.Expected = historyFingerprints(current)
+		}
+	}
 	s.undoStack = append(s.undoStack, entry)
 	s.redoStack = nil
 }

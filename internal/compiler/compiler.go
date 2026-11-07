@@ -192,13 +192,21 @@ func validateRowsProgress(table document.Table, evaluated map[string]map[string]
 			}
 		}
 	}
+	formulaColumns := make(map[string]map[string]bool)
+	for _, formula := range table.Formulas {
+		if formulaColumns[formula.RowID] == nil {
+			formulaColumns[formula.RowID] = make(map[string]bool)
+		}
+		formulaColumns[formula.RowID][formula.Column] = true
+	}
 	finalRows := make(map[string]map[string]any, len(table.Rows))
 	for index, row := range table.Rows {
 		if progress != nil && index%1000 == 0 {
 			progress(index)
 		}
 		base := len(diagnostics)
-		candidate, issues := cuerows.Validate(rowSchema, primaryKey, row.ID, evaluated[row.ID])
+		values := exactValidationValues(row, evaluated[row.ID], formulaColumns[row.ID], rowSchema)
+		candidate, issues := cuerows.Validate(rowSchema, primaryKey, row.ID, values)
 		for _, issue := range issues {
 			if issue.Kind == cuerows.Identity {
 				diagnostics = append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), RowID: row.ID, Key: "compile.invalidID", Args: []string{issue.Err.Error()}, Message: "invalid ID: " + issue.Err.Error()})
@@ -209,12 +217,12 @@ func validateRowsProgress(table document.Table, evaluated map[string]map[string]
 		if len(diagnostics) > base {
 			continue
 		}
-		var decoded map[string]any
-		if err := candidate.Decode(&decoded); err != nil {
+		decoded, err := decodeExportValue(candidate)
+		if err != nil {
 			diagnostics = append(diagnostics, Diagnostic{Path: table.Path, Table: tableName(table), RowID: row.ID, Message: err.Error()})
 			continue
 		}
-		finalRows[row.ID] = decoded
+		finalRows[row.ID] = decoded.(map[string]any)
 	}
 	if progress != nil {
 		progress(len(table.Rows))

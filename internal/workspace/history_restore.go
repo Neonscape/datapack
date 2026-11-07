@@ -11,10 +11,40 @@ import (
 // positions without copying or discarding unrelated sidecars. This is process
 // local compensating history, not a crash or external-concurrency transaction.
 type historyEntry struct {
-	Cell      *cellHistory
-	Files     map[string][]byte
-	Moves     []renameMove
-	Directory *directoryHistory
+	Cell         *cellHistory
+	Files        map[string][]byte
+	Expected     map[string]string
+	CaptureError string
+	Moves        []renameMove
+	Directory    *directoryHistory
+}
+
+// An empty fingerprint means absent, distinct from an existing empty file.
+// Fingerprints avoid keeping a second full copy of each history source.
+func historyFingerprints(files map[string][]byte) map[string]string {
+	result := make(map[string]string, len(files))
+	for path, content := range files {
+		if content == nil {
+			result[path] = ""
+		} else {
+			result[path] = digest(content)
+		}
+	}
+	return result
+}
+
+func (entry historyEntry) checkCurrent(files map[string][]byte) error {
+	if entry.CaptureError != "" {
+		return fmt.Errorf("cannot verify history sources; reopen project: %s", entry.CaptureError)
+	}
+	actual := historyFingerprints(files)
+	for _, path := range snapshotPaths(files) {
+		want, ok := entry.Expected[path]
+		if !ok || actual[path] != want {
+			return fmt.Errorf("source changed outside history; refusing to overwrite %q", path)
+		}
+	}
+	return nil
 }
 
 func reverseRenameMoves(moves []renameMove) []renameMove {

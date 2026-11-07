@@ -264,7 +264,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         if (column !== 0 && ["array", "struct"].includes(effectiveSchema?.kind ?? "") && !cell?.formula) {
             return {kind: GridCellKind.Text, data: cell?.expression ?? "[]", displayData: cell?.display ?? "[]", allowOverlay: false, themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined};
         }
-        if (column !== 0 && columnDefinition.foreignKeyTable && !cell?.formula) {
+        if (column !== 0 && columnDefinition.foreignKeyTable && effectiveSchema?.kind !== "array" && !cell?.formula) {
             return {kind: GridCellKind.Text, data: cell?.expression ?? "", displayData: cell?.display ?? "", allowOverlay: false, themeOverride: error ? {bgCell: grid.errorCellBg, textDark: grid.errorCellText} : isDraft(row) ? {bgCell: grid.draftCellBg, textDark: grid.draftCellText} : undefined};
         }
         if (column !== 0 && effectiveSchema?.kind === "enum" && !cell?.formula) {
@@ -322,14 +322,20 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         const columnDefinition = table.columns[column - 1];
         const effectiveSchema = column === 0 ? undefined : effectiveSchemaFor(column);
         if (column !== 0 && effectiveSchema?.kind === "struct" && !cell?.formula) {
-            window.requestAnimationFrame(() => setStructEditor({column, row, values: structValues(cell?.expression ?? "{}", effectiveSchema.fields?.map((field) => field.name) ?? [])}));
-            return;
+            const values = structValues(cell?.expression ?? "{}", effectiveSchema.fields?.map((field) => field.name) ?? []);
+            if (values !== null) {
+                window.requestAnimationFrame(() => setStructEditor({column, row, values}));
+                return;
+            }
         }
         if (column !== 0 && effectiveSchema?.kind === "array" && !cell?.formula) {
-            window.requestAnimationFrame(() => setArrayEditor({column, row, entries: arrayEntries(cell?.expression ?? "[]"), pasted: "", options: table.columns[column - 1].foreignKeyOptions ?? []}));
-            return;
+            const entries = arrayEntries(cell?.expression ?? "[]");
+            if (entries !== null) {
+                window.requestAnimationFrame(() => setArrayEditor({column, row, entries, pasted: "", options: table.columns[column - 1].foreignKeyOptions ?? []}));
+                return;
+            }
         }
-        if (column !== 0 && columnDefinition.foreignKeyTable && !cell?.formula) {
+        if (column !== 0 && columnDefinition.foreignKeyTable && effectiveSchema?.kind !== "array" && !cell?.formula) {
             window.requestAnimationFrame(() => setForeignKeyEditor({column, row, value: cell?.expression.replace(/^"|"$/g, "") ?? "", bounds, options: columnDefinition.foreignKeyOptions ?? [], target: columnDefinition.foreignKeyTable!}));
             return;
         }
@@ -354,7 +360,7 @@ export function TableGrid({active, table, formats, onAddColumn, onSetColumnDispl
         if (!structEditor) return;
         const target = structEditor;
         const fields = effectiveSchemaFor(target.column)?.fields ?? [];
-        const entries = fields.filter((field) => target.values[field.name]?.trim()).map((field) => `${field.name}: ${target.values[field.name].trim()}`);
+        const entries = fields.filter((field) => target.values[field.name]?.trim()).map((field) => `${JSON.stringify(field.name)}: ${target.values[field.name].trim()}`);
         setStructEditor(null);
         void editCell([target.column, target.row], {kind: GridCellKind.Text, allowOverlay: true, data: `{${entries.join(", ")}}`, displayData: ""});
     };
